@@ -1,5 +1,5 @@
 import express from "express";
-import { body } from "express-validator";
+import { body, check } from "express-validator";
 import {
   registerUser,
   getUsers,
@@ -17,11 +17,21 @@ const router = express.Router();
 // 🟢 Registro público
 router.post(
   "/register",
-  [
-    body("nombre", "El nombre es obligatorio").notEmpty(),
-    body("email", "Email inválido").isEmail(),
-    body("password", "Mínimo 6 caracteres").isLength({ min: 6 }),
-    body("rol", "Rol inválido").isIn(["alumno", "profesor", "admin"]),
+ [
+    // Validación para el nombre
+    check('nombre', 'El nombre es obligatorio').not().isEmpty().trim().escape(),
+
+    // Validación para el email
+    check('email', 'Agrega un email válido').isEmail().normalizeEmail(),
+
+    // Validación para la contraseña
+    check('password', 'La contraseña debe tener al menos 8 caracteres')
+      .isLength({ min: 8 })
+      .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d]{8,}$/)
+      .withMessage('La contraseña debe contener al menos una mayúscula, una minúscula y un número.'),
+
+    // Validación estricta para el rol
+    check('rol', 'Rol no válido').isIn(['alumno', 'profesor', 'admin']),
     validateFields,
   ],
   registerUser

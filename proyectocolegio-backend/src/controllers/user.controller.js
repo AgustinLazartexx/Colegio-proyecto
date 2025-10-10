@@ -37,8 +37,14 @@ export const registerUser = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({ msg: "Error del servidor", error: error.message });
-  }
+  // Loguea el error real en tu consola o en un servicio de logging
+  console.error("Error en el registro:", error); 
+
+  // Envía una respuesta genérica al cliente
+  res.status(500).json({ msg: "Hubo un error en el servidor, intenta más tarde" });
+}
+
+  
 };
 
 export const getUsers = async (req, res) => {
@@ -75,3 +81,4 @@ export const updateUser = async (req, res) => {
     res.status(500).json({ msg: "Error al actualizar usuario", error });
   }
 };
+
