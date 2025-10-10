@@ -1,4 +1,4 @@
-import Tarea from "../models/Tarea.js";
+import Tarea from "../models/TareaModel.js";
 import Materia from "../models/materia.model.js";
 
 export const crearTarea = async (req, res) => {

@@ -1,5 +1,5 @@
 import Entrega from "../models/Entrega.js";
-import Tarea from "../models/Tarea.js";
+import Tarea from "../models/TareaModel.js";
 
 export const subirEntrega = async (req, res) => {
   const { tarea, comentario } = req.body;

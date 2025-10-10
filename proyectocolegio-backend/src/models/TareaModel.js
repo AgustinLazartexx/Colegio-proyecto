@@ -33,4 +33,4 @@ const tareaSchema = new mongoose.Schema(
   }
 );
 
-export default mongoose.model("Tarea", tareaSchema);
+export default mongoose.model("TareaModel", tareaSchema);
