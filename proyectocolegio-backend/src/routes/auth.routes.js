@@ -1,8 +1,9 @@
 // src/routes/auth.routes.js
 import express from "express";
-import { login } from "../controllers/auth.controller.js";
+import { login, verifyUser } from "../controllers/auth.controller.js"; 
 import { body } from "express-validator";
 import { validateFields } from "../middlewares/validateFields.js";
+import { checkAuth } from "../middlewares/checkAuth.js";
 
 const router = express.Router();
 
@@ -15,5 +16,6 @@ router.post(
   ],
   login
 );
+router.get("/verify", checkAuth, verifyUser);
 
 export default router;

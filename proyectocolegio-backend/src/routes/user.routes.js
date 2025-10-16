@@ -6,6 +6,7 @@ import {
   getUserById,
   deleteUser,
   updateUser,
+  
 } from "../controllers/user.controller.js";
 
 import { validateFields } from "../middlewares/validateFields.js";
@@ -37,6 +38,7 @@ router.post(
   registerUser
 );
 
+
 // 🔐 Rutas protegidas para admin
 router.get("/", checkAuth, checkRole("admin"), getUsers);
 router.get("/:id", checkAuth, checkRole("admin"), getUserById);
@@ -55,5 +57,7 @@ router.put(
   ],
   updateUser
 );
+
+
 
 export default router;

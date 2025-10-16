@@ -10,6 +10,9 @@ const userSchema = new mongoose.Schema(
       enum: ["alumno", "profesor", "admin"],
       default: "alumno",
     },
+       // 🆕 Campos nuevos
+    anio: { type: Number, min: 1, max: 6 },
+    division: { type: String, enum: ["A", "B", "C"], uppercase: true },
   },
   { timestamps: true }
 );

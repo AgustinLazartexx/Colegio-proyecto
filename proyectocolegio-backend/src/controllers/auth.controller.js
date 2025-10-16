@@ -39,3 +39,32 @@ export const login = async (req, res) => {
     res.status(500).json({ msg: "Error del servidor", error: error.message });
   }
 };
+
+// ===================================================================
+// AQUÍ VA LA NUEVA FUNCIÓN QUE NECESITÁS
+// ===================================================================
+export const verifyUser = async (req, res) => {
+  // El middleware `checkAuth` ya hizo todo el trabajo de verificar el JWT.
+  // Si llegamos a esta función, el token es válido y `req.user` contiene los datos.
+  
+  // Buscamos el usuario en la BD para asegurarnos de que todavía existe.
+  const user = await User.findById(req.user.id).select("-password");
+
+  if (!user) {
+    return res.status(404).json({ msg: "Usuario no encontrado, token no válido." });
+
+  }
+
+  res.setHeader('Cache-Control', 'no-store');
+
+  // Devolvemos la información del usuario para restaurar la sesión en el frontend.
+  return res.json({
+    msg: "Token válido.",
+    user: {
+      id: user.id,
+      nombre: user.nombre,
+      email: user.email,
+      rol: user.rol,
+    }
+  });
+};

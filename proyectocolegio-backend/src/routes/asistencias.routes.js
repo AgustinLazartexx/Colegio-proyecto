@@ -7,27 +7,25 @@ import {
   listarAsistencias,
   misAsistenciasAlumno,
   actualizarAsistencia,
-  eliminarAsistencia
+  eliminarAsistencia,
+  tomarAsistenciaPorAula,        // 🆕 nuevo
+  listarAsistenciasPorAula
 } from "../controllers/asistencia.controller.js";
 
 const router = Router();
 
-// Profesor toma asistencia en lote (múltiples alumnos a la vez)
+// === PROFESOR ===
 router.post("/tomar", [checkAuth, checkRole("profesor")], tomarAsistenciaLote);
-
-// Profesor carga asistencia individual (más confiable)
 router.post("/cargar", [checkAuth, checkRole("profesor")], cargarAsistenciaSimple);
 
-// Admin y Profesor (limitado a sus clases) listan
+// === ADMIN ===
+router.post("/aula/tomar", [checkAuth, checkRole("admin")], tomarAsistenciaPorAula);
+router.get("/aula", [checkAuth, checkRole("admin")], listarAsistenciasPorAula);
+
+// === GENERAL ===
 router.get("/", [checkAuth, checkRole(["admin", "profesor"])], listarAsistencias);
-
-// Alumno ve las suyas
 router.get("/mias", [checkAuth, checkRole("alumno")], misAsistenciasAlumno);
-
-// Editar registro (profesor de esa clase o admin)
 router.put("/:id", [checkAuth, checkRole(["admin", "profesor"])], actualizarAsistencia);
-
-// Eliminar (solo admin)
 router.delete("/:id", [checkAuth, checkRole("admin")], eliminarAsistencia);
 
 export default router;

@@ -3,35 +3,31 @@ import mongoose from "mongoose";
 const entregaSchema = new mongoose.Schema({
   tarea: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "Tarea",
+    ref: "TareaModel",
     required: true,
   },
   alumno: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "Usuario", // o "Alumno" si usás otro modelo
+    ref: "Usuario", // Asegúrate que tu modelo de usuario se llame 'Usuario'
     required: true,
   },
   archivo: {
-    type: String,
+    type: String, // Nombre del archivo entregado por el alumno
     required: true,
-  },
-  comentario: {
-    type: String,
-    trim: true,
   },
   fechaEntrega: {
     type: Date,
     default: Date.now,
   },
   nota: {
-    type: Number, // opcional para que el profe corrija después
-    min: 1,
-    max: 10,
+    type: Number,
   },
-  comentarioProfe: {
-  type: String,
-  default: "",
-},
-});
+  comentario: { // Comentario del profesor al corregir
+    type: String,
+  },
+}, { timestamps: true });
+
+// Evitar que un alumno entregue la misma tarea dos veces
+entregaSchema.index({ tarea: 1, alumno: 1 }, { unique: true });
 
 export default mongoose.model("Entrega", entregaSchema);

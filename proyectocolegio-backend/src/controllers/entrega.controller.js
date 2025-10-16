@@ -2,43 +2,40 @@ import Entrega from "../models/Entrega.js";
 import Tarea from "../models/TareaModel.js";
 
 export const subirEntrega = async (req, res) => {
-  const { tarea, comentario } = req.body;
-  const archivo = req.file?.filename;
-
-  if (!tarea || !archivo) {
-    return res.status(400).json({ msg: "Tarea y archivo son obligatorios" });
-  }
-
   try {
-    // ✔️ Validación: ¿ya entregó esta tarea?
-    const entregaExistente = await Entrega.findOne({
-      tarea,
-      alumno: req.user._id,
-    });
+    const { tareaId } = req.body;
+    const alumnoId = req.user.id;
 
-    if (entregaExistente) {
-      return res.status(400).json({
-        msg: "Ya entregaste esta tarea. Solo se permite una entrega por alumno.",
-      });
+    // Verificar que la tarea exista
+    const tarea = await Tarea.findById(tareaId);
+    if (!tarea) {
+      return res.status(404).json({ msg: "La tarea no existe." });
     }
 
-    // ✔️ Crear la entrega
+    // Verificar que haya un archivo
+    if (!req.file) {
+      return res.status(400).json({ msg: "No se ha subido ningún archivo." });
+    }
+    
+    // Crear la nueva entrega
     const nuevaEntrega = new Entrega({
-      tarea,
-      alumno: req.user._id,
-      archivo,
-      comentario,
+      tarea: tareaId,
+      alumno: alumnoId,
+      archivo: req.file.filename,
     });
 
     await nuevaEntrega.save();
+    res.status(201).json({ msg: "Tarea entregada con éxito.", entrega: nuevaEntrega });
 
-    res.status(201).json({ msg: "Entrega subida exitosamente", entrega: nuevaEntrega });
   } catch (error) {
-    console.error("Error al crear entrega:", error);
-    res.status(500).json({ msg: "Hubo un error al subir la entrega" });
+    // Manejar el error de entrega duplicada
+    if (error.code === 11000) {
+      return res.status(409).json({ msg: "Ya has entregado esta tarea." });
+    }
+    console.error("Error al subir entrega:", error);
+    res.status(500).json({ msg: "Error en el servidor al entregar la tarea." });
   }
 };
-
 
 export const obtenerEntregasPorTarea = async (req, res) => {
   try {

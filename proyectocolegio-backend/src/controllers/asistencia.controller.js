@@ -255,3 +255,82 @@ export const eliminarAsistencia = async (req, res) => {
     res.status(500).json({ msg: "Error al eliminar" });
   }
 };
+
+// 🆕 ADMIN toma asistencia por aula (año y división)
+export const tomarAsistenciaPorAula = async (req, res) => {
+  try {
+    const { anio, division, fecha, asistencias } = req.body;
+
+    if (!anio || !division || !fecha || !asistencias) {
+      return res.status(400).json({ msg: "Faltan datos obligatorios" });
+    }
+
+    // Buscar alumnos de ese año/división
+    const alumnos = await User.find({ anio, division, rol: "alumno" });
+
+    if (alumnos.length === 0) {
+      return res.status(404).json({ msg: "No se encontraron alumnos en ese aula" });
+    }
+
+    // Guardar asistencias
+    const resultados = [];
+
+    for (const registro of asistencias) {
+      const { alumno, estado } = registro;
+
+      const nuevaAsistencia = await Asistencia.findOneAndUpdate(
+        { alumno, fecha: new Date(fecha) },
+        { alumno, estado, fecha, cargadoPor: req.user._id },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+
+      resultados.push(nuevaAsistencia);
+    }
+
+    res.json({
+      msg: "Asistencia de aula registrada correctamente",
+      registros: resultados.length
+    });
+  } catch (error) {
+    console.error("Error al tomar asistencia por aula:", error);
+    res.status(500).json({ msg: "Error interno", error: error.message });
+  }
+};
+
+// 🆕 ADMIN lista asistencias por aula
+export const listarAsistenciasPorAula = async (req, res) => {
+  try {
+    const { anio, division, fecha } = req.query;
+    const filtros = {};
+
+    if (anio) filtros.anio = parseInt(anio);
+    if (division) filtros.division = division;
+
+    const query = {};
+    if (fecha) {
+      const date = new Date(fecha);
+      date.setHours(0, 0, 0, 0);
+      query.fecha = date;
+    }
+
+    const asistencias = await Asistencia.find(query)
+      .populate("alumno", "nombre email anio division")
+      .populate("materia", "nombre")
+      .populate("cargadoPor", "nombre rol")
+      .sort({ fecha: -1 });
+
+    const filtradas = asistencias.filter(a => 
+      (!anio || a.alumno.anio === parseInt(anio)) && 
+      (!division || a.alumno.division === division)
+    );
+
+    res.json({
+      msg: "Asistencias de aula obtenidas correctamente",
+      total: filtradas.length,
+      asistencias: filtradas
+    });
+  } catch (error) {
+    console.error("Error al listar asistencias de aula:", error);
+    res.status(500).json({ msg: "Error interno", error: error.message });
+  }
+};
