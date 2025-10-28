@@ -1,4 +1,4 @@
-// routes/notas.routes.js
+// src/routes/notas.routes.js
 import { Router } from "express";
 import { checkAuth } from "../middlewares/checkAuth.js";
 import { checkRole } from "../middlewares/checkRole.js";
@@ -6,37 +6,53 @@ import {
   guardarNota,
   getNotasPorMateriaTrimestre,
   misNotasAlumno,
-  getAuditoriaNotas // <-- NUEVO
+  getAuditoriaNotas
 } from "../controllers/notas.controller.js";
 
 const router = Router();
 
-// Profesor Y Admin guardan notas (con lógica de roles en el controlador)
+const logNotasRoute = (req, res, next) => {
+  console.log(`--- DEBUG Router Notas --- Accediendo a ${req.method} ${req.originalUrl}`);
+  next();
+};
+
+// Profesor Y Admin guardan notas
 router.post(
   "/guardar-una",
-  [checkAuth, checkRole(["profesor", "admin"])], // <-- Acepta ambos roles
+  logNotasRoute,
+  checkAuth,
+  // --- CAMBIO ---
+  checkRole("profesor", "admin"), // Roles como argumentos separados
+  // --- FIN CAMBIO ---
   guardarNota
 );
 
 // Profesor Y Admin ven la grilla
 router.get(
   "/materia/:id",
-  [checkAuth, checkRole(["profesor", "admin"])], // <-- Acepta ambos roles
-  getNotasPorMateriaTrimestre
+  logNotasRoute,
+  checkAuth,
+  // --- CAMBIO ---
+  checkRole("profesor", "admin"), // Roles como argumentos separados
+  // --- FIN CAMBIO ---
+  getNotasPorMateriaTrimestre 
 );
 
 // Alumno ve su boletín
 router.get(
   "/mias",
-  [checkAuth, checkRole("alumno")],
+  logNotasRoute,
+  checkAuth,
+  checkRole("alumno"), // Aquí está bien porque es un solo rol
   misNotasAlumno
 );
 
-// --- RUTA NUEVA ---
-// Admin ve el log de cambios (la "alerta")
+// Admin ve el log de cambios
 router.get(
   "/auditoria",
-  [checkAuth, checkRole("admin")],
+  logNotasRoute,
+  checkAuth,
+  checkRole("admin"), // Aquí está bien
   getAuditoriaNotas
 );
 

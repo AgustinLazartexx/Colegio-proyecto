@@ -21,6 +21,8 @@ const navItems = [
   { to: "/admin/verificacion", icon: Settings, text: "Gestionar Clases" },
    { to: "/admin/AsistenciaGestion", icon: Settings, text: "Gestionar Asistencias" },
     { to: "/admin/VerAsistencias", icon: Users, text: "Ver Asistencias" },
+    { to: "/admin/AuditoriaNotas", icon: Users, text: "Auditoría de Notas" },
+    { to: "/admin/GestionNotas", icon: Settings, text: "Gestión de Notas" },
 ];
 
 // --- No hay cambios en el resto del código, es reutilizable ---

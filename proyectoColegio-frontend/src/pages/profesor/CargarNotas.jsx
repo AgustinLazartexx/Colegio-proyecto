@@ -1,7 +1,7 @@
-// src/pages/profesor/CargarNotas.jsx
-import { useEffect, useState } from "react";
+// src/pages/profesor/CargarNotas.jsx (o ruta compartida)
+import React, { useEffect, useState } from "react";
 import axios from "axios";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/AuthContext"; // Asegúrate que la ruta sea correcta
 import { toast } from "react-toastify";
 import { 
   GraduationCap, 
@@ -12,7 +12,7 @@ import {
   X 
 } from "lucide-react";
 
-// --- Componentes Reutilizables (sin cambios) ---
+// --- Componentes Reutilizables ---
 
 const SkeletonLoader = () => (
   <div className="space-y-3 animate-pulse p-6">
@@ -36,7 +36,6 @@ const EmptyState = ({ message }) => (
   </div>
 );
 
-// --- Componente de Celda de Promedio (sin cambios) ---
 const PromedioCell = ({ valor }) => {
   const formateado = (valor === null || valor === undefined) ? "-" : Number(valor).toFixed(2);
   const esAprobado = valor !== null && Number(valor) >= 6;
@@ -49,7 +48,6 @@ const PromedioCell = ({ valor }) => {
   );
 };
 
-// --- Componente de Estado Final ---
 const EstadoFinalCell = ({ estado }) => {
   if (!estado || estado === "-") {
     return <td className="px-4 py-4 whitespace-nowrap text-center text-sm font-medium text-gray-500">-</td>;
@@ -67,31 +65,45 @@ const EstadoFinalCell = ({ estado }) => {
   );
 };
 
-// --- Componente de Celda de Nota (AHORA CON BOTÓN DE CONFIRMAR) ---
-const NotaInput = ({ alumnoId, materiaId, trimestre, tipoNota, valorInicial, token, onNotaGuardada }) => {
+// --- Componente de Celda de Nota (con Rol y Botón Confirmar) ---
+const NotaInput = ({ 
+  alumnoId, 
+  materiaId, 
+  trimestre, 
+  tipoNota, 
+  valorInicial, 
+  token, 
+  rol, 
+  onNotaGuardada 
+}) => {
   const [valorLocal, setValorLocal] = useState(valorInicial || "");
   const [isSaving, setIsSaving] = useState(false);
   
-  // Regla de Inmutabilidad
-  const camposInmutables = ["orientadora", "proceso"];
   const isSaved = valorInicial !== null && valorInicial !== undefined && valorInicial !== "";
-  const isDisabled = isSaving || (camposInmutables.includes(tipoNota) && isSaved);
   
-  // Detectar si hay cambios
-  const hayCambio = valorLocal !== (valorInicial || "");
+  // Deshabilitado si: está guardando O (es profesor Y ya está guardado)
+  const isDisabled = isSaving || (rol === 'profesor' && isSaved);
+  
+  const hayCambio = String(valorLocal) !== String(valorInicial || "");
 
   useEffect(() => {
     setValorLocal(valorInicial || "");
   }, [valorInicial]);
 
   const handleConfirmSave = async () => {
-    if (!hayCambio || isDisabled) return;
+    if (!hayCambio || isSaving) return;
+    
+    // Doble chequeo por si acaso
+    if (rol === 'profesor' && isSaved) {
+      toast.warn("Esta nota ya fue guardada y no puede modificarla.");
+      return;
+    }
 
     // Validación
     const notaNum = Number(valorLocal);
     if (valorLocal !== "" && (isNaN(notaNum) || notaNum < 0 || notaNum > 10)) {
       toast.error("La nota debe ser un número entre 0 y 10.");
-      setValorLocal(valorInicial || ""); // Revertir
+      setValorLocal(valorInicial || "");
       return;
     }
 
@@ -109,13 +121,12 @@ const NotaInput = ({ alumnoId, materiaId, trimestre, tipoNota, valorInicial, tok
         { headers: { Authorization: `Bearer ${token}` } }
       );
       
-      // Notificar al padre (CargarNotas) que se guardó
       onNotaGuardada(trimestre, alumnoId, res.data.nota);
       toast.success(`Nota de ${tipoNota} guardada.`);
 
     } catch (err) {
       toast.error(err.response?.data?.msg || "Error al guardar");
-      setValorLocal(valorInicial || ""); // Revertir si falla
+      setValorLocal(valorInicial || ""); 
     } finally {
       setIsSaving(false);
     }
@@ -165,15 +176,13 @@ const NotaInput = ({ alumnoId, materiaId, trimestre, tipoNota, valorInicial, tok
   );
 };
 
-// --- Funciones de Cálculo de Promedio Final ---
+// --- Funciones de Cálculo ---
 const calcularPromedioFinal = (n1, n2, n3) => {
   const notas = [n1, n2, n3]
     .map(n => (n === null || n === undefined) ? null : Number(n))
     .filter(n => n !== null);
   
-  // Solo calcular si están las 3 notas finales de los trimestres
   if (notas.length < 3) return null;
-
   const sum = notas.reduce((a, b) => a + b, 0);
   return sum / 3;
 };
@@ -183,40 +192,19 @@ const getEstadoFinal = (promedio) => {
   return promedio >= 6 ? "Aprobado" : "Recuperacion";
 };
 
-
 // --- Componente Principal ---
-const CargarNotas = () => {
-  const [materias, setMaterias] = useState([]);
+const CargarNotas = ({ materiaIdProp }) => { // <-- Quitamos rolUsuario de props, lo tomamos del context
+  // --- CORRECCIÓN: Obtener token Y usuario ---
+  const { token, usuario } = useAuth(); 
   const [alumnos, setAlumnos] = useState([]);
-  
-  const [materiaSeleccionada, setMateriaSeleccionada] = useState("");
   const [trimestreSeleccionado, setTrimestreSeleccionado] = useState("1");
-  
-  // --- CAMBIO DE ESTADO: Ahora guardamos todo en un solo objeto ---
   const [allNotes, setAllNotes] = useState({ 1: {}, 2: {}, 3: {} });
-  
   const [loadingAlumnos, setLoadingAlumnos] = useState(false);
-  const { token } = useAuth();
 
-  // Traer materias del profesor (solo al inicio)
-  useEffect(() => {
-    const fetchMaterias = async () => {
-      try {
-        const res = await axios.get("http://localhost:5000/api/materias/profesor/materias", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setMaterias(res.data);
-      } catch (err) {
-        toast.error("Error al cargar materias.");
-      }
-    };
-    fetchMaterias();
-  }, [token]);
-
-  // --- CAMBIO: Cargar alumnos Y TODAS las notas al cambiar la materia ---
+  // Cargar alumnos y notas (AHORA USA materiaIdProp)
   useEffect(() => {
     const fetchAlumnosYNotas = async () => {
-      if (!materiaSeleccionada) {
+      if (!materiaIdProp || !token) { // <-- Añadido check de token
         setAlumnos([]);
         setAllNotes({ 1: {}, 2: {}, 3: {} });
         return;
@@ -224,51 +212,43 @@ const CargarNotas = () => {
 
       setLoadingAlumnos(true);
       try {
-        // 1. Obtener lista de alumnos
-        const resAlumnosPromise = axios.get(`http://localhost:5000/api/materias/${materiaSeleccionada}/alumnos`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        // --- CORRECCIÓN: Añadir headers a TODAS las llamadas ---
+        const headers = { Authorization: `Bearer ${token}` };
         
-        // 2. Obtener notas de los 3 trimestres en paralelo
-        const resNotasT1Promise = axios.get(`http://localhost:5000/api/notas/materia/${materiaSeleccionada}?trimestre=1`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        const resNotasT2Promise = axios.get(`http://localhost:5000/api/notas/materia/${materiaSeleccionada}?trimestre=2`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        const resNotasT3Promise = axios.get(`http://localhost:5000/api/notas/materia/${materiaSeleccionada}?trimestre=3`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const resAlumnosPromise = axios.get(`http://localhost:5000/api/materias/${materiaIdProp}/alumnos`, { headers });
+        const resNotasT1Promise = axios.get(`http://localhost:5000/api/notas/materia/${materiaIdProp}?trimestre=1`, { headers });
+        const resNotasT2Promise = axios.get(`http://localhost:5000/api/notas/materia/${materiaIdProp}?trimestre=2`, { headers });
+        const resNotasT3Promise = axios.get(`http://localhost:5000/api/notas/materia/${materiaIdProp}?trimestre=3`, { headers });
 
-        // Esperar todas las respuestas
         const [resAlumnos, resNotasT1, resNotasT2, resNotasT3] = await Promise.all([
-          resAlumnosPromise,
-          resNotasT1Promise,
-          resNotasT2Promise,
-          resNotasT3Promise
+             resAlumnosPromise,
+             resNotasT1Promise,
+             resNotasT2Promise,
+             resNotasT3Promise
         ]);
 
-        setAlumnos(resAlumnos.data);
-        setAllNotes({
-          1: resNotasT1.data || {},
-          2: resNotasT2.data || {},
-          3: resNotasT3.data || {},
+        setAlumnos(resAlumnos.data || []); // Asegurar que sea array
+        setAllNotes({ 
+             1: resNotasT1.data || {}, // Asegurar que sea objeto
+             2: resNotasT2.data || {},
+             3: resNotasT3.data || {}
         });
 
-      } catch (err) {
-        toast.error("Error al obtener los datos de la materia.");
-        setAlumnos([]);
-        setAllNotes({ 1: {}, 2: {}, 3: {} });
-      } finally {
-        setLoadingAlumnos(false);
+      } catch (err) { 
+           console.error("Error fetching data:", err); // Log más detallado
+           toast.error("Error al obtener los datos de la materia.");
+           setAlumnos([]);
+           setAllNotes({ 1: {}, 2: {}, 3: {} });
+      } finally { 
+           setLoadingAlumnos(false); 
       }
     };
 
     fetchAlumnosYNotas();
-  }, [materiaSeleccionada, token]);
+  }, [materiaIdProp, token]); // <-- Depende de materiaIdProp y token
 
-
-  // Callback para actualizar el estado local cuando una nota se guarda
+  // Callback para actualizar estado local
+  // --- CORRECCIÓN: Eliminada definición duplicada ---
   const handleNotaGuardada = (trimestre, alumnoId, notaActualizada) => {
     setAllNotes(prev => ({
       ...prev,
@@ -279,165 +259,136 @@ const CargarNotas = () => {
     }));
   };
   
-  // Notas del trimestre seleccionado actualmente
+  // --- CORRECCIÓN: Eliminada definición duplicada ---
   const notasTrimestreActual = allNotes[trimestreSeleccionado] || {};
 
+  // --- CORRECCIÓN: Usar 'usuario' del context ---
+  if (!usuario) {
+    return (
+      <div className="flex items-center justify-center h-64 p-6">
+        <Loader2 className="w-8 h-8 animate-spin text-sky-600 mr-3" />
+        Cargando información de usuario...
+      </div>
+    );
+  }
+
+  // Obtenemos el rol del usuario actual
+  const rolUsuario = usuario.rol;
+
   return (
-    <div className="p-4 sm:p-6 lg:p-8 bg-gray-100 min-h-screen">
-      <div className="max-w-full mx-auto bg-white rounded-2xl shadow-xl overflow-hidden">
-        {/* --- Encabezado --- */}
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center gap-4">
-            <div className="bg-sky-100 p-3 rounded-full">
-              <GraduationCap className="h-8 w-8 text-sky-600" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-800">Cargar Notas</h1>
-              <p className="text-sm text-gray-500">
-                Selecciona materia y trimestre. Confirma cada nota con el tilde (✔️).
-              </p>
-            </div>
-          </div>
-        </div>
-        
-        {/* --- Selectores de Materia y Trimestre --- */}
-        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="materia-select" className="block text-sm font-medium text-gray-700 mb-2">
-              Materia
-            </label>
-            <select
-              id="materia-select"
-              value={materiaSeleccionada}
-              onChange={(e) => setMateriaSeleccionada(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition"
-            >
-              <option value="">Selecciona una materia</option>
-              {materias.map((m) => (
-                <option key={m._id} value={m._id}>
-                  {m.nombre}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
+    // Quitado div exterior y encabezado
+    <div>
+        {/* --- Selector de Trimestre --- */}
+        <div className="p-6 border-b">
             <label htmlFor="trimestre-select" className="block text-sm font-medium text-gray-700 mb-2">
-              Trimestre
+              Seleccionar Trimestre
             </label>
             <select
               id="trimestre-select"
               value={trimestreSeleccionado}
               onChange={(e) => setTrimestreSeleccionado(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition"
-              disabled={!materiaSeleccionada}
+              className="w-full max-w-xs p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition"
+              // disabled={!materiaIdProp} // Quitado: siempre habilitado si hay materia
             >
               <option value="1">Trimestre 1</option>
               <option value="2">Trimestre 2</option>
               <option value="3">Trimestre 3</option>
             </select>
-          </div>
         </div>
 
-        {/* --- Contenido Dinámico: Loader, Tabla o Mensaje --- */}
+        {/* --- Contenido Dinámico --- */}
         <div>
           {loadingAlumnos ? (
             <SkeletonLoader />
           ) : alumnos.length > 0 ? (
-            <div className="border-t border-gray-200 overflow-x-auto">
+            <div className="overflow-x-auto"> 
               <table className="min-w-full divide-y divide-gray-200">
-                {/* --- Cabecera de tabla --- */}
                 <thead className="bg-gray-50">
-                  <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider sticky left-0 bg-gray-50 z-10 min-w-[250px]">
-                      Alumno
-                    </th>
-                    <th scope="col" className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase w-28">Orientadora (15%)</th>
-                    <th scope="col" className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase w-28">Proceso (25%)</th>
-                    <th scope="col" className="px-2 py-3 text-center text-xs font-bold text-sky-700 uppercase w-28 bg-sky-50">Integradora (60%)</th>
-                    <th scope="col" className="px-2 py-3 text-center text-xs font-bold text-gray-700 uppercase w-28 bg-gray-100">Prom. Ponderado</th>
-                    <th scope="col" className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase w-28">Recuperación</th>
-                    <th scope="col" className="px-2 py-3 text-center text-xs font-bold text-blue-800 uppercase w-28 bg-blue-50">Nota Final (Trim.)</th>
-                    {/* --- NUEVAS COLUMNAS --- */}
-                    <th scope="col" className="px-2 py-3 text-center text-xs font-bold text-indigo-800 uppercase w-28 bg-indigo-50 border-l">Prom. Final (Anual)</th>
-                    <th scope="col" className="px-2 py-3 text-center text-xs font-bold text-indigo-800 uppercase w-32 bg-indigo-50">Estado Final</th>
-                  </tr>
+                   <tr>
+                     <th scope="col" className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider sticky left-0 bg-gray-50 z-10 min-w-[250px]">Alumno</th>
+                     <th scope="col" className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase w-28">Orientadora (15%)</th>
+                     <th scope="col" className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase w-28">Proceso (25%)</th>
+                     <th scope="col" className="px-2 py-3 text-center text-xs font-bold text-sky-700 uppercase w-28 bg-sky-50">Integradora (60%)</th>
+                     <th scope="col" className="px-2 py-3 text-center text-xs font-bold text-gray-700 uppercase w-28 bg-gray-100">Prom. Ponderado</th>
+                     <th scope="col" className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase w-28">Recuperación</th>
+                     <th scope="col" className="px-2 py-3 text-center text-xs font-bold text-blue-800 uppercase w-28 bg-blue-50">Nota Final (Trim.)</th>
+                     <th scope="col" className="px-2 py-3 text-center text-xs font-bold text-indigo-800 uppercase w-28 bg-indigo-50 border-l">Prom. Final (Anual)</th>
+                     <th scope="col" className="px-2 py-3 text-center text-xs font-bold text-indigo-800 uppercase w-32 bg-indigo-50">Estado Final</th>
+                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {alumnos.map((alumno) => {
-                    // Notas del trimestre actual
-                    const notasTrimestre = notasTrimestreActual[alumno._id] || {};
-                    
-                    // --- Cálculo Final (se hace para cada alumno) ---
-                    const n1 = allNotes[1][alumno._id]?.notaFinalTrimestre;
-                    const n2 = allNotes[2][alumno._id]?.notaFinalTrimestre;
-                    const n3 = allNotes[3][alumno._id]?.notaFinalTrimestre;
-                    
-                    const promFinalAnual = calcularPromedioFinal(n1, n2, n3);
-                    const estadoFinalAnual = getEstadoFinal(promFinalAnual);
-                    // --- Fin Cálculo Final ---
+                     const notasTrimestre = notasTrimestreActual[alumno._id] || {};
+                     const n1 = allNotes[1][alumno._id]?.notaFinalTrimestre;
+                     const n2 = allNotes[2][alumno._id]?.notaFinalTrimestre;
+                     const n3 = allNotes[3][alumno._id]?.notaFinalTrimestre;
+                     const promFinalAnual = calcularPromedioFinal(n1, n2, n3);
+                     const estadoFinalAnual = getEstadoFinal(promFinalAnual);
 
                     return (
                       <tr key={alumno._id} className="hover:bg-gray-50">
-                        {/* Celda del Alumno (sticky) */}
+                        {/* Celda Alumno */}
                         <td className="px-6 py-4 whitespace-nowrap sticky left-0 bg-white hover:bg-gray-50 z-10 border-r">
-                          <div className="flex items-center">
-                            <img
-                              className="h-10 w-10 rounded-full"
-                              src={`https://ui-avatars.com/api/?name=${encodeURIComponent(alumno.nombre)}&background=random`}
-                              alt="Avatar"
-                            />
-                            <div className="ml-4 min-w-0">
-                              <div className="text-sm font-medium text-gray-900 truncate">{alumno.nombre}</div>
-                              <div className="text-sm text-gray-500 truncate">{alumno.email}</div>
-                            </div>
-                          </div>
+                           <div className="flex items-center">
+                             <img
+                               className="h-10 w-10 rounded-full"
+                               src={`https://ui-avatars.com/api/?name=${encodeURIComponent(alumno.nombre)}&background=random`}
+                               alt="Avatar"
+                             />
+                             <div className="ml-4 min-w-0">
+                               <div className="text-sm font-medium text-gray-900 truncate">{alumno.nombre}</div>
+                               <div className="text-sm text-gray-500 truncate">{alumno.email}</div>
+                             </div>
+                           </div>
                         </td>
                         
-                        {/* --- Celdas de Notas Editables --- */}
+                        {/* Celdas NotaInput */}
                         <NotaInput 
                           alumnoId={alumno._id} 
-                          materiaId={materiaSeleccionada} 
+                          materiaId={materiaIdProp} 
                           trimestre={trimestreSeleccionado}
                           token={token} 
+                          rol={rolUsuario} // <-- Pasa el rol del context
                           tipoNota="orientadora" 
                           valorInicial={notasTrimestre.orientadora} 
                           onNotaGuardada={handleNotaGuardada} 
                         />
                         <NotaInput 
                           alumnoId={alumno._id} 
-                          materiaId={materiaSeleccionada} 
+                          materiaId={materiaIdProp} 
                           trimestre={trimestreSeleccionado}
                           token={token} 
+                          rol={rolUsuario}
                           tipoNota="proceso" 
                           valorInicial={notasTrimestre.proceso} 
                           onNotaGuardada={handleNotaGuardada} 
                         />
                         <NotaInput 
                           alumnoId={alumno._id} 
-                          materiaId={materiaSeleccionada} 
+                          materiaId={materiaIdProp} 
                           trimestre={trimestreSeleccionado}
                           token={token} 
+                          rol={rolUsuario}
                           tipoNota="integradora" 
                           valorInicial={notasTrimestre.integradora} 
                           onNotaGuardada={handleNotaGuardada} 
                         />
                         
-                        {/* --- Celdas Calculadas (Trimestral) --- */}
+                        {/* Celdas Calculadas (Trimestral) */}
                         <PromedioCell valor={notasTrimestre.promedioPonderado} />
-
                         <NotaInput 
                           alumnoId={alumno._id} 
-                          materiaId={materiaSeleccionada} 
+                          materiaId={materiaIdProp} 
                           trimestre={trimestreSeleccionado}
                           token={token} 
+                          rol={rolUsuario}
                           tipoNota="recuperacion" 
                           valorInicial={notasTrimestre.recuperacion} 
                           onNotaGuardada={handleNotaGuardada} 
                         />
-
                         <PromedioCell valor={notasTrimestre.notaFinalTrimestre} />
 
-                        {/* --- Celdas Calculadas (Anual) --- */}
+                        {/* Celdas Calculadas (Anual) */}
                         <PromedioCell valor={promFinalAnual} />
                         <EstadoFinalCell estado={estadoFinalAnual} />
                       </tr>
@@ -446,26 +397,14 @@ const CargarNotas = () => {
                 </tbody>
               </table>
             </div>
-          ) : materiaSeleccionada ? (
+          ) : materiaIdProp ? ( 
             <div className="p-6">
               <EmptyState message="No se encontraron alumnos para esta materia" />
             </div>
           ) : (
-            <div className="p-6">
-              <div className="text-center py-12 px-6 bg-sky-50 rounded-lg border border-dashed border-sky-200">
-                <Search className="mx-auto h-12 w-12 text-sky-400" />
-                <h3 className="mt-2 text-sm font-medium text-gray-900">
-                  Comienza seleccionando una materia
-                </h3>
-                <p className="mt-1 text-sm text-gray-500">
-                  La lista de alumnos aparecerá aquí.
-                </p>
-              </div>
-            </div>
+             null 
           )}
         </div>
-        
-      </div>
     </div>
   );
 };

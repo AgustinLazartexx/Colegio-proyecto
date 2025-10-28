@@ -44,6 +44,8 @@ import Verificacion from "./pages/admin/Verificacion";
 import DashboardAdmin from "./pages/admin/DashboardAdmin";
 import TomarAsistenciaAdmin from "./pages/admin/TomarAsistenciaAdmin";
 import VerAsistenciasAdmin from "./pages/admin/VerAsistenciasAdmin";
+import AdminAuditoriaNotas from "./pages/admin/AdminPanelNotas";
+import AdminGestionNotas from "./pages/admin/AdminGestionNotas";
 
 function App() {
   const [showLogin, setShowLogin] = useState(false);
@@ -174,6 +176,8 @@ function App() {
           <Route path="verificacion" element={<Verificacion />} />
           <Route path="AsistenciaGestion" element={<TomarAsistenciaAdmin />} />
           <Route path="VerAsistencias" element={<VerAsistenciasAdmin />} />
+          <Route path="AuditoriaNotas" element={<AdminAuditoriaNotas />} />
+          <Route path="GestionNotas" element={<AdminGestionNotas />} />
         </Route>
       </Routes>
     </>
