@@ -121,7 +121,9 @@ const Clases = () => {
   if (loading) {
     return (
       <div className="p-6">
-        <h2 className="text-2xl font-bold text-blue-600 mb-4">📘 Tus Clases</h2>
+        <h2 className="text-2xl font-semibold text-gray-900 mb-4">
+          Tus Clases
+        </h2>
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600" />
         </div>
@@ -132,7 +134,9 @@ const Clases = () => {
   if (error) {
     return (
       <div className="p-6">
-        <h2 className="text-2xl font-bold text-blue-600 mb-4">📘 Tus Clases</h2>
+        <h2 className="text-2xl font-semibold text-gray-900 mb-4">
+          Tus Clases
+        </h2>
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           <p>{error}</p>
           <button
@@ -149,7 +153,7 @@ const Clases = () => {
   return (
     <div className="p-6 space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-blue-600">📘 Tus Clases</h2>
+        <h2 className="text-2xl font-semibold text-gray-900">Tus Clases</h2>
         <div className="text-sm text-gray-600">
           Total: {clasesFiltradas.length} clase
           {clasesFiltradas.length !== 1 ? "s" : ""}
@@ -158,7 +162,7 @@ const Clases = () => {
 
       {/* Filtros */}
       <div className="bg-white rounded-lg shadow p-4">
-        <h3 className="text-lg font-semibold mb-3">🔍 Filtros</h3>
+        <h3 className="text-lg font-semibold mb-3 text-gray-800">Filtros</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -215,11 +219,10 @@ const Clases = () => {
       {/* Lista */}
       {clasesFiltradas.length === 0 ? (
         <div className="bg-white rounded-lg shadow p-6 text-center">
-          <div className="text-6xl mb-4">📅</div>
-          <h3 className="text-lg font-semibold text-gray-700 mb-2">
+          <h3 className="text-lg font-medium text-gray-800 mb-2">
             No tienes clases asignadas
           </h3>
-          <p className="text-gray-500">
+          <p className="text-gray-600">
             {filtros.diaSemana || filtros.anio
               ? "No hay clases que coincidan con los filtros aplicados."
               : "Contacta al administrador para que te asigne clases."}
@@ -228,17 +231,21 @@ const Clases = () => {
       ) : (
         <div className="space-y-6">
           {diasOrdenados.map((dia) => (
-            <div key={dia} className="bg-white rounded-lg shadow overflow-hidden">
+            <div
+              key={dia}
+              className="bg-white rounded-lg shadow overflow-hidden"
+            >
               <div
                 className={`px-6 py-4 ${
-                  esHoy(dia) ? "bg-blue-600 text-white" : "bg-gray-50"
-                }`}
+                  esHoy(dia) ? "bg-blue-50" : "bg-gray-50"
+                } border-b border-gray-200`}
               >
-                <h3 className="text-lg font-semibold flex items-center gap-2">
-                  {esHoy(dia) && <span className="animate-pulse">🔴</span>}
-                  {dia}
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center justify-between">
+                  <span>{dia}</span>
                   {esHoy(dia) && (
-                    <span className="text-sm font-normal">(Hoy)</span>
+                    <span className="text-xs font-medium bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                      Hoy
+                    </span>
                   )}
                 </h3>
               </div>
@@ -252,7 +259,6 @@ const Clases = () => {
                   .map((clase) => {
                     const hi = getHoraInicio(clase);
                     const hf = getHoraFin(clase);
-                    const turno = hi && Number(hi.split(":")[0]) >= 12 ? "TARDE" : "MAÑANA";
                     return (
                       <div
                         key={clase.id || clase._id}
@@ -260,70 +266,58 @@ const Clases = () => {
                       >
                         {/* Encabezado */}
                         <div className="mb-4">
-                          <div className="flex items-center justify-between mb-2">
-                            <h4 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                              📚 {clase.materia?.nombre || "Materia sin nombre"}
-                            </h4>
-                            <div className="text-right">
-                              <div className="text-3xl">
-                                {turno === "MAÑANA" ? "🌅" : "🌇"}
-                              </div>
-                              <div className="text-xs text-gray-500 font-medium">
-                                {turno}
-                              </div>
-                            </div>
-                          </div>
+                          <h4 className="text-xl font-bold text-gray-900 mb-2">
+                            {clase.materia?.nombre || "Materia sin nombre"}
+                          </h4>
 
-                          <div className="flex items-center gap-3">
-                            <span className="px-3 py-1 bg-blue-600 text-white text-sm font-medium rounded-full">
+                          <div className="flex items-center gap-2">
+                            <span className="px-3 py-1 bg-blue-100 text-blue-800 text-sm font-medium rounded-full">
                               {clase.anio ?? "N/A"}° año
                             </span>
                             {clase.anioCursada && (
-                              <span className="px-3 py-1 bg-gray-200 text-gray-800 text-sm font-medium rounded-full">
-                                🎓 {clase.anioCursada}
+                              <span className="px-3 py-1 bg-gray-100 text-gray-800 text-sm font-medium rounded-full">
+                                {clase.anioCursada}
                               </span>
                             )}
                           </div>
                         </div>
 
                         {/* Horario */}
-                        <div className="bg-blue-50 rounded-lg p-4 mb-1">
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
-                            <div>
-                              <div className="text-sm font-medium text-blue-600 uppercase tracking-wide mb-1">
-                                📅 Día
-                              </div>
-                              <div className="text-xl font-bold text-blue-900">
-                                {clase.diaSemana || "Sin día"}
-                              </div>
+                        <div className="mt-4 pt-4 border-t border-gray-200 grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+                            <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                              Día
                             </div>
-
-                            <div>
-                              <div className="text-sm font-medium text-blue-600 uppercase tracking-wide mb-1">
-                                🕐 Horario
-                              </div>
-                              <div className="text-xl font-bold text-blue-900">
-                                {/* si backend ya trae "horario" úsalo tal cual */}
-                                {clase.horario
-                                  ? clase.horario
-                                  : `${formatearHora(hi)} - ${formatearHora(hf)}`}
-                              </div>
-                              <div className="text-sm text-blue-700 mt-1">
-                                Duración:{" "}
-                                {clase.duracion ||
-                                  calcularDuracion(hi, hf)}
-                              </div>
+                            <div className="text-base font-semibold text-gray-800">
+                              {clase.diaSemana || "Sin día"}
                             </div>
+                          </div>
 
-                            <div>
-                              <div className="text-sm font-medium text-blue-600 uppercase tracking-wide mb-1">
-                                🗓️ Creación
-                              </div>
-                              <div className="text-base font-semibold text-blue-900">
-                                {clase.fechaCreacion
-                                  ? new Date(clase.fechaCreacion).toLocaleDateString()
-                                  : "—"}
-                              </div>
+                          <div>
+                            <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                              Horario
+                            </div>
+                            <div className="text-base font-semibold text-gray-800">
+                              {clase.horario
+                                ? clase.horario
+                                : `${formatearHora(hi)} - ${formatearHora(hf)}`}
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              Duración:{" "}
+                              {clase.duracion || calcularDuracion(hi, hf)}
+                            </div>
+                          </div>
+
+                          <div>
+                            <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                              Creación
+                            </div>
+                            <div className="text-base font-semibold text-gray-800">
+                              {clase.fechaCreacion
+                                ? new Date(
+                                    clase.fechaCreacion
+                                  ).toLocaleDateString()
+                                : "—"}
                             </div>
                           </div>
                         </div>

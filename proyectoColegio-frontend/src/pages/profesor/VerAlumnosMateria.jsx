@@ -1,4 +1,4 @@
-// src/pages/profesor/VerAlumnosMateria.jsx
+/// src/pages/profesor/VerAlumnosMateria.jsx
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { useAuth } from "../../context/AuthContext";
@@ -10,7 +10,6 @@ import {
   GraduationCap,
   Search,
   UserCheck,
-  Calendar,
   Filter
 } from "lucide-react";
 
@@ -89,50 +88,50 @@ const VerAlumnosMateria = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
-        <div className="max-w-6xl mx-auto">
-          <div className="flex items-center justify-center h-64">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-          </div>
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
-      <div className="max-w-6xl mx-auto space-y-8">
+    <div className="min-h-screen bg-gray-50 p-4 md:p-6">
+      <div className="max-w-6xl mx-auto space-y-6">
+        
         {/* Header */}
-        <div className="text-center">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <div className="p-3 bg-blue-600 rounded-full">
-              <Users className="text-white" size={28} />
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div>
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-100 text-blue-600 rounded-full flex-shrink-0">
+                <Users size={24} />
+              </div>
+              <h1 className="text-3xl font-bold text-gray-900">
+                Estudiantes
+              </h1>
             </div>
-            <h1 className="text-4xl font-bold text-gray-900">
-              Gestión de Estudiantes
-            </h1>
+            <p className="text-gray-600 text-base mt-1 ml-12 sm:ml-0 sm:mt-2">
+              Visualiza los estudiantes inscritos en tus materias.
+            </p>
           </div>
-          <p className="text-gray-600 text-lg">
-            Visualiza y gestiona los estudiantes inscritos en tus materias
-          </p>
         </div>
 
         {/* Selector de materia */}
-        <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6">
+        <div className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-200">
             <div className="flex items-center gap-3">
-              <BookOpen className="text-white" size={24} />
-              <h2 className="text-2xl font-bold text-white">Seleccionar Materia</h2>
+              <BookOpen className="text-gray-500" size={20} />
+              <h2 className="text-xl font-semibold text-gray-800">Seleccionar Materia</h2>
             </div>
-            <p className="text-blue-100 mt-2">Elige una materia para ver sus estudiantes</p>
           </div>
           
-          <div className="p-8">
+          <div className="p-6">
             <div className="relative">
               <select
                 value={materiaSeleccionada}
                 onChange={handleMateriaChange}
-                className="w-full p-4 pl-12 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all appearance-none bg-white text-gray-900 text-lg"
+                className="w-full p-3 pl-10 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all appearance-none bg-white text-gray-900 text-base"
               >
                 <option value="">Selecciona una materia...</option>
                 {materias.map((materia) => (
@@ -141,18 +140,18 @@ const VerAlumnosMateria = () => {
                   </option>
                 ))}
               </select>
-              <Filter className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+              <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
             </div>
             
             {getMateriaSeleccionadaInfo() && (
-              <div className="mt-6 bg-blue-50 border border-blue-200 rounded-xl p-4">
+              <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
                 <div className="flex items-center gap-3">
-                  <GraduationCap className="text-blue-600" size={20} />
+                  <GraduationCap className="text-blue-600" size={18} />
                   <div>
-                    <h3 className="font-bold text-blue-900">
+                    <h3 className="font-semibold text-blue-900 text-sm">
                       {getMateriaSeleccionadaInfo().nombre}
                     </h3>
-                    <p className="text-blue-700 text-sm">
+                    <p className="text-blue-700 text-xs">
                       Materia seleccionada
                     </p>
                   </div>
@@ -164,32 +163,21 @@ const VerAlumnosMateria = () => {
 
         {/* Buscador y lista de alumnos */}
         {materiaSeleccionada && (
-          <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
-            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-8 py-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <UserCheck className="text-white" size={24} />
-                  <div>
-                    <h2 className="text-2xl font-bold text-white">
-                      Estudiantes Inscritos
-                    </h2>
-                    <p className="text-indigo-100">
-                      {alumnosFiltrados.length} estudiante{alumnosFiltrados.length !== 1 ? 's' : ''} 
-                      {busqueda && ` (filtrados de ${alumnos.length})`}
-                    </p>
-                  </div>
-                </div>
-                {alumnos.length > 0 && (
-                  <div className="bg-white/20 backdrop-blur-sm rounded-lg px-4 py-2">
-                    <span className="text-white font-bold text-lg">
-                      {alumnos.length}
-                    </span>
-                  </div>
-                )}
+          <div className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <UserCheck className="text-gray-500" size={20} />
+                <h2 className="text-xl font-semibold text-gray-800">
+                  Estudiantes Inscritos
+                </h2>
               </div>
+              <span className="text-sm font-semibold bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
+                {alumnosFiltrados.length} 
+                {busqueda && ` de ${alumnos.length}`}
+              </span>
             </div>
 
-            <div className="p-8">
+            <div className="p-6">
               {loadingAlumnos ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -198,43 +186,40 @@ const VerAlumnosMateria = () => {
               ) : alumnos.length > 0 ? (
                 <>
                   {/* Buscador */}
-                  <div className="mb-6">
+                  <div className="mb-5">
                     <div className="relative">
                       <input
                         type="text"
                         placeholder="Buscar estudiante por nombre o email..."
                         value={busqueda}
                         onChange={(e) => setBusqueda(e.target.value)}
-                        className="w-full p-4 pl-12 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all"
+                        className="w-full p-3 pl-10 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
                       />
-                      <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
                     </div>
                   </div>
 
                   {/* Lista de alumnos */}
                   {alumnosFiltrados.length > 0 ? (
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                      {alumnosFiltrados.map((alumno, index) => (
+                      {alumnosFiltrados.map((alumno) => (
                         <div
                           key={alumno._id}
-                          className="bg-gradient-to-br from-gray-50 to-blue-50 border-2 border-gray-100 rounded-xl p-6 hover:shadow-lg hover:border-blue-300 transition-all duration-300"
+                          className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md hover:border-blue-400 transition-all duration-200"
                         >
-                          <div className="flex items-start gap-4">
-                            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center flex-shrink-0">
-                              <span className="text-white font-bold text-lg">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center flex-shrink-0">
+                              <span className="text-white font-semibold text-base">
                                 {alumno.nombre.charAt(0).toUpperCase()}
                               </span>
                             </div>
                             <div className="flex-1 min-w-0">
-                              <h3 className="font-bold text-gray-900 text-lg mb-2 truncate">
+                              <h3 className="font-semibold text-gray-900 text-base truncate">
                                 {alumno.nombre}
                               </h3>
-                              <div className="flex items-center gap-2 text-gray-600 mb-2">
-                                <Mail size={16} />
+                              <div className="flex items-center gap-1.5 text-gray-600">
+                                <Mail size={14} />
                                 <span className="text-sm truncate">{alumno.email}</span>
-                              </div>
-                              <div className="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-1 rounded-full inline-block">
-                                Estudiante #{index + 1}
                               </div>
                             </div>
                           </div>
@@ -243,11 +228,11 @@ const VerAlumnosMateria = () => {
                     </div>
                   ) : (
                     <div className="text-center py-12">
-                      <Search className="mx-auto text-gray-400 mb-4" size={48} />
-                      <h3 className="text-xl font-bold text-gray-900 mb-2">
+                      <Search className="mx-auto text-gray-400 mb-4" size={40} />
+                      <h3 className="text-lg font-semibold text-gray-900 mb-1">
                         No se encontraron estudiantes
                       </h3>
-                      <p className="text-gray-600">
+                      <p className="text-gray-500 text-sm">
                         Tu búsqueda "{busqueda}" no coincide con ningún estudiante.
                       </p>
                     </div>
@@ -255,11 +240,11 @@ const VerAlumnosMateria = () => {
                 </>
               ) : (
                 <div className="text-center py-12">
-                  <Users className="mx-auto text-gray-400 mb-4" size={48} />
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">
+                  <Users className="mx-auto text-gray-400 mb-4" size={40} />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">
                     No hay estudiantes inscritos
                   </h3>
-                  <p className="text-gray-600">
+                  <p className="text-gray-500 text-sm">
                     Esta materia aún no tiene estudiantes registrados.
                   </p>
                 </div>
@@ -270,14 +255,14 @@ const VerAlumnosMateria = () => {
 
         {/* Estado inicial */}
         {!materiaSeleccionada && !loading && (
-          <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-12 text-center">
-            <div className="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-6">
-              <GraduationCap size={40} className="text-gray-400" />
+          <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-8 text-center">
+            <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-5">
+              <GraduationCap size={32} className="text-gray-400" />
             </div>
-            <h3 className="text-2xl font-bold text-gray-900 mb-4">
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">
               Selecciona una Materia
             </h3>
-            <p className="text-gray-600 max-w-md mx-auto">
+            <p className="text-gray-500 text-sm max-w-md mx-auto">
               Para comenzar, selecciona una de tus materias del menú desplegable de arriba 
               y podrás ver todos los estudiantes inscritos.
             </p>

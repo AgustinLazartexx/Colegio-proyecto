@@ -21,10 +21,13 @@ const ClasesAdmin = () => {
   const [loading, setLoading] = useState(true);
   const [loadingAction, setLoadingAction] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  
+  // --- CAMBIO 1: Añadido 'anioCursada' al estado del formulario ---
   const [form, setForm] = useState({
     materia: "",
     profesor: "",
-    anio: "",
+    anio: "", // Este es 1-6
+    anioCursada: new Date().getFullYear(), // Este es 2025, etc.
     diaSemana: "",
     horaInicio: "",
     horaFin: ""
@@ -85,11 +88,13 @@ const ClasesAdmin = () => {
     setFilter({ ...filter, [e.target.name]: e.target.value });
   };
 
+  // --- CAMBIO 2: Actualizado 'resetForm' para el nuevo campo ---
   const resetForm = () => {
     setForm({
       materia: "",
       profesor: "",
       anio: "",
+      anioCursada: new Date().getFullYear(), // Resetear al año actual
       diaSemana: "",
       horaInicio: "",
       horaFin: ""
@@ -98,12 +103,14 @@ const ClasesAdmin = () => {
     setShowModal(false);
   };
 
+  // --- CAMBIO 3: Actualizado 'abrirModalEditar' para ambos años ---
   const abrirModalEditar = (clase) => {
     setEditingId(clase.id);
     setForm({
       materia: clase.materia?._id || "",
       profesor: clase.profesor?._id || "",
-      anio: clase.anio || "",
+      anio: clase.anio || "", // Año académico 1-6
+      anioCursada: clase.anioCursada || new Date().getFullYear(), // Año calendario 2025
       diaSemana: clase.diaSemana || "",
       horaInicio: clase.horario.split(' - ')[0] || "",
       horaFin: clase.horario.split(' - ')[1] || ""
@@ -119,6 +126,8 @@ const ClasesAdmin = () => {
   const handleGuardar = async (e) => {
     e.preventDefault();
     setLoadingAction(true);
+    // El 'form' state ya incluye 'anio' y 'anioCursada'
+    // Se enviarán ambos al backend.
     try {
       if (editingId) {
         await axios.put(`${API_URL}/${editingId}`, form, {
@@ -173,7 +182,8 @@ const ClasesAdmin = () => {
   };
 
   const diasSemana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
-  const aniosCursada = [1, 2, 3, 4, 5, 6];
+  // Renombrado para claridad
+  const aniosAcademicos = [1, 2, 3, 4, 5, 6]; 
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-100 p-8 font-sans">
@@ -197,7 +207,8 @@ const ClasesAdmin = () => {
               className="border p-3 rounded-lg focus:ring-2 focus:ring-indigo-500 transition-colors w-full sm:w-auto"
             >
               <option value="">Filtrar por Año</option>
-              {aniosCursada.map((anio) => (
+              {/* --- CAMBIO 4: Usar el array renombrado --- */}
+              {aniosAcademicos.map((anio) => (
                 <option key={anio} value={anio}>{anio}° Año</option>
               ))}
             </select>
@@ -226,10 +237,26 @@ const ClasesAdmin = () => {
             <div className="flex flex-col items-center justify-center p-12 text-center text-gray-500">
               <AlertCircle size={48} className="text-gray-400 mb-4" />
               <p className="text-lg font-semibold">No hay clases registradas.</p>
-              <p className="mt-2">Puedes crear una nueva con el botón de arriba.</p>
+              <button 
+                onClick={abrirModalCrear} 
+                className="mt-4 flex items-center gap-2 bg-indigo-600 text-white font-semibold px-5 py-2 rounded-xl hover:bg-indigo-700 transition-colors"
+              >
+                <Plus size={18} />
+                Crear Nueva Clase
+              </button>
             </div>
           ) : (
             <div className="overflow-x-auto">
+              {/* Botón de crear aquí si hay clases */}
+              <div className="p-4 flex justify-end">
+                <button 
+                  onClick={abrirModalCrear} 
+                  className="flex items-center gap-2 bg-indigo-600 text-white font-semibold px-5 py-2 rounded-xl hover:bg-indigo-700 transition-colors"
+                >
+                  <Plus size={18} />
+                  Crear Nueva Clase
+                </button>
+              </div>
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
@@ -262,8 +289,14 @@ const ClasesAdmin = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                         {c.profesor?.nombre || "N/A"}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                        {c.anio ? `${c.anio}° Año` : "N/A"}
+                      {/* --- CAMBIO 5: Mostrar ambos años en la tabla --- */}
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <div className="font-medium text-gray-900">
+                          {c.anio ? `${c.anio}° Año` : "N/A"}
+                        </div>
+                        <div className="text-gray-500">
+                          {c.anioCursada || ""}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                         {c.diaSemana || "N/A"}
@@ -335,18 +368,34 @@ const ClasesAdmin = () => {
                     <option key={p._id} value={p._id}>{p.nombre}</option>
                   ))}
                 </select>
-                <select
-                  name="anio"
-                  value={form.anio}
-                  onChange={handleInputChange}
-                  className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-                  required
-                >
-                  <option value="">Seleccionar Año de Cursada</option>
-                  {aniosCursada.map((anio) => (
-                    <option key={anio} value={anio}>{anio}° Año</option>
-                  ))}
-                </select>
+                
+                {/* --- CAMBIO 6: Formulario con AMBOS campos de año --- */}
+                <div className="grid grid-cols-2 gap-4">
+                  <select
+                    name="anio" // Este es el año académico 1-6
+                    value={form.anio}
+                    onChange={handleInputChange}
+                    className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                    required
+                  >
+                    <option value="">Año Académico</option>
+                    {aniosAcademicos.map((anio) => (
+                      <option key={anio} value={anio}>{anio}° Año</option>
+                    ))}
+                  </select>
+                  
+                  <input
+                    type="number"
+                    name="anioCursada" // Este es el año calendario 2025
+                    value={form.anioCursada}
+                    onChange={handleInputChange}
+                    placeholder="Año Calendario"
+                    className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                    required
+                  />
+                </div>
+                {/* --- Fin del Cambio 6 --- */}
+
                 <select
                   name="diaSemana"
                   value={form.diaSemana}
@@ -359,22 +408,24 @@ const ClasesAdmin = () => {
                     <option key={dia} value={dia}>{dia}</option>
                   ))}
                 </select>
-                <input
-                  type="time"
-                  name="horaInicio"
-                  value={form.horaInicio}
-                  onChange={handleInputChange}
-                  className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-                  required
-                />
-                <input
-                  type="time"
-                  name="horaFin"
-                  value={form.horaFin}
-                  onChange={handleInputChange}
-                  className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-                  required
-                />
+                <div className="grid grid-cols-2 gap-4">
+                  <input
+                    type="time"
+                    name="horaInicio"
+                    value={form.horaInicio}
+                    onChange={handleInputChange}
+                    className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                    required
+                  />
+                  <input
+                    type="time"
+                    name="horaFin"
+                    value={form.horaFin}
+                    onChange={handleInputChange}
+                    className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                    required
+                  />
+                </div>
 
                 <div className="flex justify-end gap-4 pt-4">
                   <button
