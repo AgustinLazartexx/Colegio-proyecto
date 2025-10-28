@@ -1,63 +1,90 @@
+// src/routes/user.routes.js
 import express from "express";
-import { body, check } from "express-validator";
+import { body, check } from "express-validator"; // Mantenemos validator si lo usas
 import {
-  registerUser,
+  login,
   getUsers,
   getUserById,
   deleteUser,
   updateUser,
-  
+  adminCrearUsuario, // <-- Nueva
+  cambiarPassword    // <-- Nueva
 } from "../controllers/user.controller.js";
 
-import { validateFields } from "../middlewares/validateFields.js";
+import { validateFields } from "../middlewares/validateFields.js"; // Si lo usas
 import { checkAuth } from "../middlewares/checkAuth.js";
 import { checkRole } from "../middlewares/checkRole.js";
 
 const router = express.Router();
 
-// 🟢 Registro público
-router.post(
-  "/register",
- [
-    // Validación para el nombre
-    check('nombre', 'El nombre es obligatorio').not().isEmpty().trim().escape(),
+// --- RUTA PÚBLICA ---
+router.post("/login", [ /* validaciones opcionales */ ], login);
 
-    // Validación para el email
-    check('email', 'Agrega un email válido').isEmail().normalizeEmail(),
+// --- RUTA DE REGISTRO PÚBLICO ELIMINADA ---
+// router.post("/register", [ ... ], registerUser); 
 
-    // Validación para la contraseña
-    check('password', 'La contraseña debe tener al menos 8 caracteres')
-      .isLength({ min: 8 })
-      .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d]{8,}$/)
-      .withMessage('La contraseña debe contener al menos una mayúscula, una minúscula y un número.'),
+// --- RUTAS PROTEGIDAS ---
 
-    // Validación estricta para el rol
-    check('rol', 'Rol no válido').isIn(['alumno', 'profesor', 'admin']),
-    validateFields,
-  ],
-  registerUser
+// Cambiar Contraseña (Cualquier usuario logueado)
+router.put(
+    "/cambiar-password",
+    [
+        checkAuth, // Solo necesita estar logueado
+        // Validaciones para las contraseñas
+        body('currentPassword', 'La contraseña actual es requerida').notEmpty(),
+        body('newPassword', 'La nueva contraseña debe tener al menos 6 caracteres').isLength({ min: 6 }),
+        validateFields // Ejecuta las validaciones
+    ],
+    cambiarPassword
 );
 
+// --- RUTAS SOLO PARA ADMIN ---
 
-// 🔐 Rutas protegidas para admin
-router.get("/", checkAuth, checkRole("admin"), getUsers);
-router.get("/:id", checkAuth, checkRole("admin"), getUserById);
-router.delete("/:id", checkAuth, checkRole("admin"), deleteUser);
+// Crear un nuevo usuario (cualquier rol)
+router.post(
+    "/admin/crear",
+    [
+        checkAuth,
+        checkRole("admin"),
+        // Añadir validaciones de express-validator aquí si prefieres
+        body('nombre').notEmpty().withMessage('Nombre requerido'),
+        body('email').isEmail().withMessage('Email inválido'),
+        body('dni').notEmpty().withMessage('DNI requerido'),
+        body('rol').isIn(['admin', 'profesor', 'alumno']).withMessage('Rol inválido'),
+        // Validaciones condicionales para alumno
+        body('anio').if(body('rol').equals('alumno')).notEmpty().isInt({min:1, max:6}).withMessage('Año inválido para alumno'),
+        body('division').if(body('rol').equals('alumno')).notEmpty().isLength({min:1, max:1}).withMessage('División inválida para alumno'),
+        validateFields
+    ],
+    adminCrearUsuario
+);
 
-// 🔄 Update protegido
+// Obtener todos los usuarios
+router.get("/", [checkAuth, checkRole("admin")], getUsers);
+
+// Obtener un usuario por ID
+router.get("/:id", [checkAuth, checkRole("admin")], getUserById);
+
+// Eliminar (o deshabilitar) un usuario
+router.delete("/:id", [checkAuth, checkRole("admin")], deleteUser);
+
+// Actualizar un usuario
 router.put(
   "/:id",
   [
     checkAuth,
     checkRole("admin"),
-    body("nombre", "El nombre es obligatorio").optional().notEmpty(),
-    body("email", "Email inválido").optional().isEmail(),
-    body("rol", "Rol inválido").optional().isIn(["alumno", "profesor", "admin"]),
+    // Validaciones opcionales para los campos que permites actualizar
+    body("nombre").optional().notEmpty(),
+    body("email").optional().isEmail(),
+    body("rol").optional().isIn(["alumno", "profesor", "admin"]),
+    body("anio").optional().isInt({min:1, max:6}),
+    body("division").optional().isLength({min:1, max:1}),
+    body("isActive").optional().isBoolean(),
+    body("dni").optional().notEmpty(),
     validateFields,
   ],
   updateUser
 );
-
-
 
 export default router;

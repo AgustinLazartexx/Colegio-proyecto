@@ -1,357 +1,273 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { useAuth } from "../../context/AuthContext";
+import { toast } from "react-toastify"; // Usaremos toast para notificaciones
+import { Loader2, PlusCircle, AlertTriangle } from "lucide-react"; // Iconos
 
 const CrearClase = () => {
-  const { token, user } = useAuth();
+  const { token, usuario } = useAuth(); // Cambiado 'user' a 'usuario' para consistencia
   const [materias, setMaterias] = useState([]);
   const [profesores, setProfesores] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false); // Para carga inicial
+  const [isSubmitting, setIsSubmitting] = useState(false); // Para el envío del form
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
+
+  // --- CAMBIO: Estado del formulario actualizado ---
   const [form, setForm] = useState({
     materia: "",
-    profesor: "",
-    anio: "", // Ahora será el año de cursada (1-6)
+    profesores: [], // Ahora es un array
+    anio: "",
+    division: "", // Nuevo campo
     diaSemana: "Lunes",
     horaInicio: "",
     horaFin: ""
   });
+  // --- FIN CAMBIO ---
 
-  // Opciones de años de cursada
   const aniosCursada = [
-    { value: 1, label: "1° Año" },
-    { value: 2, label: "2° Año" },
-    { value: 3, label: "3° Año" },
-    { value: 4, label: "4° Año" },
-    { value: 5, label: "5° Año" },
-    { value: 6, label: "6° Año" }
+    { value: 1, label: "1° Año" }, { value: 2, label: "2° Año" },
+    { value: 3, label: "3° Año" }, { value: 4, label: "4° Año" },
+    { value: 5, label: "5° Año" }, { value: 6, label: "6° Año" }
   ];
+  const diasSemanaOpts = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
 
+  // Cargar materias y profesores
   useEffect(() => {
     const cargarDatos = async () => {
+      if (!token) return;
+      setLoading(true);
+      setError("");
       try {
-        setLoading(true);
-        
-        // Obtener materias
-        const materiasRes = await axios.get("http://localhost:5000/api/materias", {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        setMaterias(materiasRes.data);
+        const headers = { Authorization: `Bearer ${token}` };
+        const [materiasRes, usuariosRes] = await Promise.all([
+          axios.get("http://localhost:5000/api/materias", { headers }),
+          axios.get("http://localhost:5000/api/usuarios", { headers }) // Asume que este endpoint devuelve todos los usuarios
+        ]);
 
-        // Obtener usuarios y filtrar profesores
-        const usuariosRes = await axios.get("http://localhost:5000/api/usuarios", {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        
-        const profesoresFiltrados = usuariosRes.data.filter((u) => u.rol === "profesor");
+        setMaterias(materiasRes.data || []);
+        const profesoresFiltrados = (usuariosRes.data || []).filter((u) => u.rol === "profesor");
         setProfesores(profesoresFiltrados);
 
       } catch (error) {
         console.error("Error al cargar datos:", error);
-        setError("Error al cargar datos iniciales");
+        setError("Error al cargar datos iniciales (materias/profesores).");
+        toast.error("Error al cargar datos iniciales.");
       } finally {
         setLoading(false);
       }
     };
-
-    if (token) {
-      cargarDatos();
-    }
+    cargarDatos();
   }, [token]);
+
+  // --- CAMBIO: Manejar input normal y select múltiple ---
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setForm(prev => ({ ...prev, [name]: value }));
+    setError(""); // Limpiar error al cambiar
+  };
+
+  const handleMultiSelectChange = (e) => {
+    const { name, options } = e.target;
+    const selectedValues = [];
+    for (let i = 0, l = options.length; i < l; i++) {
+      if (options[i].selected) {
+        selectedValues.push(options[i].value);
+      }
+    }
+    setForm(prev => ({ ...prev, [name]: selectedValues }));
+    setError("");
+  };
+  // --- FIN CAMBIO ---
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
-    setSuccess(false);
-    setLoading(true);
+    setIsSubmitting(true);
 
     // Validaciones del frontend
-    if (!form.materia || !form.profesor || !form.anio || !form.horaInicio || !form.horaFin) {
-      setError("Todos los campos son obligatorios");
-      setLoading(false);
+    if (!form.materia || form.profesores.length === 0 || !form.anio || !form.division || !form.horaInicio || !form.horaFin) {
+      setError("Todos los campos son obligatorios (al menos un profesor).");
+      setIsSubmitting(false);
       return;
     }
-
     if (form.horaInicio >= form.horaFin) {
-      setError("La hora de inicio debe ser anterior a la hora de finalización");
-      setLoading(false);
+      setError("La hora de inicio debe ser anterior a la hora de finalización.");
+      setIsSubmitting(false);
       return;
+    }
+    // Añadir validación simple para división (ej. solo una letra)
+    if (!/^[A-Z]$/i.test(form.division)) {
+       setError("La división debe ser una sola letra (A, B, C...).");
+       setIsSubmitting(false);
+       return;
     }
 
-    // Validar que el año esté en el rango correcto
-    if (form.anio < 1 || form.anio > 6) {
-      setError("El año de cursada debe estar entre 1° y 6° año");
-      setLoading(false);
-      return;
-    }
+
+    // --- CAMBIO: Enviar 'profesores' como array y añadir 'division' ---
+    const payload = {
+      ...form,
+      division: form.division.toUpperCase() // Enviar en mayúsculas
+    };
+    // --- FIN CAMBIO ---
 
     try {
-      const response = await axios.post("http://localhost:5000/api/clases", form, {
-        headers: { 
+      const response = await axios.post("http://localhost:5000/api/clases", payload, {
+        headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
 
-      // Mostrar éxito
-      setSuccess(true);
-      
+      toast.success("✅ Clase creada exitosamente");
       // Resetear formulario
-      setForm({ 
-        materia: "", 
-        profesor: "", 
-        anio: "", 
-        diaSemana: "Lunes", 
-        horaInicio: "", 
-        horaFin: "" 
+      setForm({
+        materia: "", profesores: [], anio: "", division: "",
+        diaSemana: "Lunes", horaInicio: "", horaFin: ""
       });
 
-      // Auto-ocultar mensaje de éxito después de 3 segundos
-      setTimeout(() => setSuccess(false), 3000);
-
     } catch (error) {
-      console.error("Error:", error);
-      
-      if (error.response?.data?.msg) {
-        setError(error.response.data.msg);
-      } else if (error.response?.data?.errores) {
-        setError(error.response.data.errores.join(", "));
-      } else {
-        setError("Error al crear la clase. Verifique su conexión e intente nuevamente.");
-      }
+      console.error("Error al crear clase:", error.response?.data || error.message);
+      const errorMsg = error.response?.data?.msg || "Error al crear la clase. Verifique los datos e intente nuevamente.";
+      setError(errorMsg);
+      toast.error(`❌ ${errorMsg}`);
     } finally {
-      setLoading(false);
+      setIsSubmitting(false);
     }
   };
 
-  const handleInputChange = (field, value) => {
-    setForm({ ...form, [field]: value });
-    setError("");
-    setSuccess(false);
-  };
 
-  if (loading && materias.length === 0 && profesores.length === 0) {
+  if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="bg-white p-8 rounded-lg shadow-sm border border-gray-200">
-          <div className="flex items-center space-x-3">
-            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
-            <span className="text-gray-600">Cargando datos...</span>
-          </div>
-        </div>
+      <div className="flex justify-center items-center h-40">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
       </div>
     );
   }
 
+  // Verificar si el usuario es Admin (asumiendo que viene del AuthContext)
+  if (usuario && usuario.rol !== 'admin') {
+     return (
+        <div className="p-6 bg-yellow-50 border border-yellow-300 rounded-lg text-center">
+            <AlertTriangle className="mx-auto h-8 w-8 text-yellow-500 mb-2"/>
+            <p className="font-semibold text-yellow-800">Acceso Denegado</p>
+            <p className="text-sm text-yellow-700">Solo los administradores pueden crear clases.</p>
+        </div>
+     )
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4">
-      <div className="max-w-md mx-auto">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-light text-gray-900 mb-2">Nueva Clase</h1>
-          <div className="w-12 h-px bg-blue-600 mx-auto"></div>
+    <div className="p-6 bg-white rounded-lg shadow-md border border-gray-200 max-w-lg mx-auto">
+      <h2 className="text-xl font-semibold text-gray-800 mb-6 border-b pb-3 flex items-center gap-2">
+        <PlusCircle size={20} className="text-blue-600"/>
+        Crear Nueva Clase
+      </h2>
+
+      {/* Alerta de error */}
+      {error && (
+        <div role="alert" className="mb-4 p-3 bg-red-50 border border-red-300 text-red-700 text-sm rounded-md flex items-center gap-2">
+           <AlertTriangle size={18} /> {error}
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Materia */}
+        <div>
+          <label htmlFor="materia" className="block text-sm font-medium text-gray-700 mb-1">Materia</label>
+          <select
+            id="materia" name="materia" value={form.materia}
+            onChange={handleInputChange} required
+            className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="">Seleccionar materia</option>
+            {materias.map(m => <option key={m._id} value={m._id}>{m.nombre} ({m.anio}° Año)</option>)}
+          </select>
         </div>
 
-        {/* Alerta de éxito */}
-        {success && (
-          <div className="mb-6 p-4 bg-green-50 border-l-4 border-green-400 rounded-r-md">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-green-800">
-                  Clase creada exitosamente
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* --- CAMBIO: Selector Múltiple de Profesores --- */}
+        <div>
+          <label htmlFor="profesores" className="block text-sm font-medium text-gray-700 mb-1">Profesor(es)</label>
+          <select
+            id="profesores" name="profesores" multiple // <-- Atributo 'multiple'
+            value={form.profesores} // value es un array de IDs
+            onChange={handleMultiSelectChange} // <-- Nuevo handler
+            required
+            className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 h-24" // Aumentar altura
+          >
+            {/* <option value="" disabled>Seleccionar uno o más profesores (Ctrl+Click)</option> */}
+            {profesores.map(p => <option key={p._id} value={p._id}>{p.nombre}</option>)}
+          </select>
+          <p className="text-xs text-gray-500 mt-1">Mantén presionada la tecla Ctrl (o Cmd en Mac) para seleccionar varios.</p>
+        </div>
+        {/* --- FIN CAMBIO --- */}
 
-        {/* Alerta de error */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-400 rounded-r-md">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-red-800">{error}</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Warning para usuarios no admin */}
-        {user && user.rol !== 'admin' && (
-          <div className="mb-6 p-4 bg-amber-50 border-l-4 border-amber-400 rounded-r-md">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-amber-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-amber-800">
-                  Permisos insuficientes. Solo administradores pueden crear clases.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Formulario */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-          <div className="p-6 space-y-5">
-            {/* Materia */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Materia
-              </label>
-              <select 
-                value={form.materia} 
-                onChange={(e) => handleInputChange("materia", e.target.value)} 
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
-                disabled={loading}
-              >
-                <option value="" className="text-gray-500">Seleccionar materia</option>
-                {materias.map(m => (
-                  <option key={m._id} value={m._id}>{m.nombre}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Profesor */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Profesor
-              </label>
-              <select 
-                value={form.profesor} 
-                onChange={(e) => handleInputChange("profesor", e.target.value)} 
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
-                disabled={loading}
-              >
-                <option value="" className="text-gray-500">Seleccionar profesor</option>
-                {profesores.map(p => (
-                  <option key={p._id} value={p._id}>{p.nombre}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Año de cursada */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Año de Cursada
-              </label>
-              <select 
-                value={form.anio} 
-                onChange={(e) => handleInputChange("anio", e.target.value)} 
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
-                disabled={loading}
-              >
-                <option value="" className="text-gray-500">Seleccionar año</option>
-                {aniosCursada.map(anio => (
-                  <option key={anio.value} value={anio.value}>{anio.label}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Día de la semana */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Día de la Semana
-              </label>
-              <select 
-                value={form.diaSemana} 
-                onChange={(e) => handleInputChange("diaSemana", e.target.value)} 
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
-                disabled={loading}
-              >
-                {["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"].map(dia => (
-                  <option key={dia} value={dia}>{dia}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Horarios */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Hora de Inicio
-                </label>
-                <input 
-                  type="time" 
-                  value={form.horaInicio} 
-                  onChange={(e) => handleInputChange("horaInicio", e.target.value)} 
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
-                  disabled={loading}
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Hora de Fin
-                </label>
-                <input 
-                  type="time" 
-                  value={form.horaFin} 
-                  onChange={(e) => handleInputChange("horaFin", e.target.value)} 
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
-                  disabled={loading}
-                />
-              </div>
-            </div>
-
-            {/* Vista previa de la clase (opcional) */}
-            {form.materia && form.anio && form.diaSemana && form.horaInicio && form.horaFin && (
-              <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-md">
-                <h4 className="text-sm font-medium text-blue-900 mb-2">Vista previa de la clase:</h4>
-                <div className="text-sm text-blue-800">
-                  <p><strong>Materia:</strong> {materias.find(m => m._id === form.materia)?.nombre || 'N/A'}</p>
-                  <p><strong>Profesor:</strong> {profesores.find(p => p._id === form.profesor)?.nombre || 'N/A'}</p>
-                  <p><strong>Año:</strong> {form.anio}° año</p>
-                  <p><strong>Día:</strong> {form.diaSemana}</p>
-                  <p><strong>Horario:</strong> {form.horaInicio} - {form.horaFin}</p>
-                </div>
-              </div>
-            )}
-
-            {/* Botón de envío */}
-            <button 
-              onClick={handleSubmit}
-              className="w-full mt-6 px-4 py-3 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition duration-200"
-              disabled={loading}
+        {/* Año y División en línea */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="anio" className="block text-sm font-medium text-gray-700 mb-1">Año Cursada</label>
+            <select
+              id="anio" name="anio" value={form.anio}
+              onChange={handleInputChange} required
+              className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
             >
-              {loading ? (
-                <div className="flex items-center justify-center">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Creando...
-                </div>
-              ) : (
-                "Crear Clase"
-              )}
-            </button>
+              <option value="">Seleccionar año</option>
+              {aniosCursada.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
+            </select>
+          </div>
+          {/* --- NUEVO CAMPO: División --- */}
+          <div>
+            <label htmlFor="division" className="block text-sm font-medium text-gray-700 mb-1">División</label>
+            <input
+              type="text" id="division" name="division" value={form.division}
+              onChange={handleInputChange} required maxLength={1} placeholder="Ej: A"
+              className="w-full p-2 border border-gray-300 rounded-md text-sm uppercase focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          {/* --- FIN NUEVO CAMPO --- */}
+        </div>
+
+        {/* Día y Horarios */}
+        <div>
+          <label htmlFor="diaSemana" className="block text-sm font-medium text-gray-700 mb-1">Día de la Semana</label>
+          <select
+            id="diaSemana" name="diaSemana" value={form.diaSemana}
+            onChange={handleInputChange} required
+            className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+          >
+            {diasSemanaOpts.map(dia => <option key={dia} value={dia}>{dia}</option>)}
+          </select>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="horaInicio" className="block text-sm font-medium text-gray-700 mb-1">Hora Inicio</label>
+            <input
+              type="time" id="horaInicio" name="horaInicio" value={form.horaInicio}
+              onChange={handleInputChange} required
+              className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          <div>
+            <label htmlFor="horaFin" className="block text-sm font-medium text-gray-700 mb-1">Hora Fin</label>
+            <input
+              type="time" id="horaFin" name="horaFin" value={form.horaFin}
+              onChange={handleInputChange} required
+              className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+            />
           </div>
         </div>
 
-        {/* Footer info */}
-        <div className="mt-6 text-center">
-          <p className="text-xs text-gray-500">
-            {materias.length} materias • {profesores.length} profesores disponibles
-          </p>
-          {user && (
-            <p className="text-xs text-gray-400 mt-1">
-              Conectado como {user.nombre} ({user.rol})
-            </p>
-          )}
-        </div>
-      </div>
+        {/* Botón de envío */}
+        <button
+          type="submit"
+          className="w-full mt-4 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150"
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? (
+            <span className="flex items-center justify-center">
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creando...
+            </span>
+          ) : "Crear Clase"}
+        </button>
+      </form>
     </div>
   );
 };

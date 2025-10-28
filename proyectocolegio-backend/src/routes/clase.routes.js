@@ -1,111 +1,68 @@
+// routes/clase.routes.js (Verifica que coincida con esto)
 import { Router } from "express";
 import { checkAuth } from "../middlewares/checkAuth.js";
 import { checkRole } from "../middlewares/checkRole.js";
 import { 
   crearClase, 
   obtenerTodasLasClases,
-  obtenerClasesProfesor,
+  obtenerClasesProfesor, // <- Este se usa para /misclases
   actualizarClase,
   eliminarClase,
   obtenerClasePorId
 } from "../controllers/clase.controller.js";
+// Importa Clase para las rutas adicionales si las mantienes
+import Clase from "../models/Clases.js"; 
 
 
 const router = Router();
 
-
 // Rutas para PROFESORES
-// Profesor ve sus clases asignadas
 router.get(
   "/misclases",
   [checkAuth, checkRole("profesor")],
-  obtenerClasesProfesor
+  obtenerClasesProfesor // <- Correcto
 );
 
 // Rutas para ADMIN
-// Crear clase (solo admin)
-router.post(
-  "/",
-  [checkAuth, checkRole("admin")],
-  crearClase
-);
+router.post("/", [checkAuth, checkRole("admin")], crearClase);
+router.get("/", [checkAuth, checkRole("admin")], obtenerTodasLasClases);
+router.put("/:id", [checkAuth, checkRole("admin")], actualizarClase);
+router.delete("/:id", [checkAuth, checkRole("admin")], eliminarClase);
 
-// Obtener todas las clases con filtros opcionales (solo admin)
-router.get(
-  "/",
-  [checkAuth, checkRole("admin")],
-  obtenerTodasLasClases
-);
+// Rutas para AMBOS (Admin y Profesor dueño)
+router.get("/:id", [checkAuth, checkRole("admin", "profesor")], obtenerClasePorId);
 
-// Obtener clase específica por ID (admin y profesor)
-router.get(
-  "/:id",
-  [checkAuth, checkRole(["admin", "profesor"])],
-  obtenerClasePorId
-);
+// --- RUTAS ADICIONALES (Revisar si las necesitas) ---
+// Puedes mantenerlas, pero asegúrate de que la lógica dentro de ellas
+// y los .populate() usen 'profesores' en lugar de 'profesor'.
 
-// Actualizar clase (solo admin)
-router.put(
-  "/:id",
-  [checkAuth, checkRole("admin")],
-  actualizarClase
-);
-
-// Eliminar clase (solo admin)
-router.delete(
-  "/:id",
-  [checkAuth, checkRole("admin")],
-  eliminarClase
-);
-
-
-// Rutas adicionales que podrías necesitar
-
-// Obtener clases por materia (admin y profesor)
-router.get(
-  "/materia/:materiaId",
-  [checkAuth, checkRole(["admin", "profesor"])],
+// Ejemplo: Obtener clases por materia (necesita .populate('profesores'))
+router.get("/materia/:materiaId", [checkAuth, checkRole("admin", "profesor")],
   async (req, res) => {
     try {
       const { materiaId } = req.params;
       const clases = await Clase.find({ materia: materiaId })
         .populate("materia", "nombre")
-        .populate("profesor", "nombre email")
-        .sort({ diaSemana: 1, horaInicio: 1 });
-
-      res.json({
-        msg: "Clases de la materia obtenidas",
-        clases,
-        total: clases.length
-      });
-    } catch (error) {
-      res.status(500).json({ msg: "Error al obtener clases", error: error.message });
-    }
+        .populate("profesores", "nombre email") // <-- Corregido
+        .sort({ division: 1, diaSemana: 1, horaInicio: 1 });
+      res.json({ msg: "Clases obtenidas", clases });
+    } catch (error) { res.status(500).json({ msg: "Error", error: error.message }); }
   }
 );
 
-// Obtener clases por año escolar (admin)
-router.get(
-  "/anio/:anio",
-  [checkAuth, checkRole("admin")],
+// Ejemplo: Obtener clases por año (necesita .populate('profesores'))
+router.get("/anio/:anio", [checkAuth, checkRole("admin")],
   async (req, res) => {
     try {
       const { anio } = req.params;
       const clases = await Clase.find({ anio: parseInt(anio) })
         .populate("materia", "nombre")
-        .populate("profesor", "nombre email")
-        .sort({ diaSemana: 1, horaInicio: 1 });
-
-      res.json({
-        msg: `Clases del año ${anio} obtenidas`,
-        clases,
-        total: clases.length,
-        anio: parseInt(anio)
-      });
-    } catch (error) {
-      res.status(500).json({ msg: "Error al obtener clases", error: error.message });
-    }
+        .populate("profesores", "nombre email") // <-- Corregido
+        .sort({ division: 1, diaSemana: 1, horaInicio: 1 });
+      res.json({ msg: `Clases del año ${anio}`, clases });
+    } catch (error) { res.status(500).json({ msg: "Error", error: error.message }); }
   }
 );
+
 
 export default router;
