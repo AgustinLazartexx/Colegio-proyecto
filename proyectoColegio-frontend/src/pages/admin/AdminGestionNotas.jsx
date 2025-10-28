@@ -111,7 +111,7 @@ const AdminGestionNotas = () => {
                           className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition"
                           disabled={!selectedAnio && allMaterias.length > 20} // Deshabilitar si hay muchas y no se filtró año
                       >
-                          <option value="">-- Selecciona una materia --</option>
+                          <option value=""> Selecciona una materia </option>
                           {filteredMaterias.map((m) => (
                               <option key={m._id} value={m._id}>
                                   {m.nombre} ({m.anio}° Año)

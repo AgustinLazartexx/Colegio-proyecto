@@ -12,8 +12,9 @@ export const checkRole = (...rolesPermitidos) => {
       }
 
       
+      next(); // Pasa al siguiente middleware o controlador
     } catch (err) {
-      
+     
       return res.status(500).json({ msg: "Error al verificar rol" });
     }
   };
