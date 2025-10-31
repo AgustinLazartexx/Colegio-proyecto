@@ -334,3 +334,23 @@ export const listarAsistenciasPorAula = async (req, res) => {
     res.status(500).json({ msg: "Error interno", error: error.message });
   }
 };
+
+export const getUsers = async (req, res) => {
+  try {
+    // --- Lógica de Filtros ---
+    const { rol, anio, division } = req.query;
+    const query = {};
+
+    if (rol) query.rol = rol;
+    if (anio) query.anio = anio;
+    if (division) query.division = division;
+    // --- Fin Lógica de Filtros ---
+
+    // Solo el admin puede ver todos, pero si filtra, se aplica
+    const usuarios = await User.find(query).select("-password");
+    res.json(usuarios);
+
+  } catch(error){
+       res.status(500).json({ msg: "Error al obtener usuarios." });
+  }
+};
