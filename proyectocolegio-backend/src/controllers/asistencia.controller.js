@@ -1,6 +1,7 @@
 // controllers/asistencia.controller.js
 
 import Asistencia from "../models/asistencia.model.js";
+import User from "../models/user.model.js";
 import Materia from "../models/materia.model.js"; // Asegúrate de importar el modelo Materia
 import mongoose from "mongoose";
 
@@ -255,46 +256,66 @@ export const eliminarAsistencia = async (req, res) => {
     res.status(500).json({ msg: "Error al eliminar" });
   }
 };
+ const ID_MATERIA_GENERAL = "690967a599f1cb7aca6ecd6c";
 
-// 🆕 ADMIN toma asistencia por aula (año y división)
 export const tomarAsistenciaPorAula = async (req, res) => {
-  try {
-    const { anio, division, fecha, asistencias } = req.body;
+  try {
+    const { anio, division, fecha, asistencias } = req.body;
 
-    if (!anio || !division || !fecha || !asistencias) {
-      return res.status(400).json({ msg: "Faltan datos obligatorios" });
-    }
+    if (!anio || !division || !fecha || !asistencias) {
+      return res.status(400).json({ msg: "Faltan datos obligatorios" });
+    }
 
-    // Buscar alumnos de ese año/división
-    const alumnos = await User.find({ anio, division, rol: "alumno" });
+    // --- PRUEBA FINAL: Usar SÓLO STRING ---
+    // Basado en que tu ruta GET /api/usuarios SÍ funciona.
+    
+  	// const anioNumero = parseInt(anio, 10); // LÍNEA ELIMINADA
 
-    if (alumnos.length === 0) {
-      return res.status(404).json({ msg: "No se encontraron alumnos en ese aula" });
-    }
+  	// Usamos 'anio' (el String) directamente en la consulta
+  	const alumnos = await User.find({ anio, division, rol: "alumno" });
 
-    // Guardar asistencias
-    const resultados = [];
+    if (alumnos.length === 0) {
+      console.warn(`Búsqueda (como String) SIN resultados para: { anio: '${anio}', division: '${division}', rol: 'alumno' }`);
+      return res.status(404).json({ msg: "No se encontraron alumnos en ese aula" });
+    }
+    
+    console.log(`Encontrados ${alumnos.length} alumnos. Guardando asistencias...`);
 
-    for (const registro of asistencias) {
-      const { alumno, estado } = registro;
+    // --- El resto del código (que ya estaba bien) ---
+    const fechaNormalizada = new Date(fecha);
+    fechaNormalizada.setHours(0, 0, 0, 0);
 
-      const nuevaAsistencia = await Asistencia.findOneAndUpdate(
-        { alumno, fecha: new Date(fecha) },
-        { alumno, estado, fecha, cargadoPor: req.user._id },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
-      );
+    const ops = asistencias.map(a => ({
+      updateOne: {
+        filter: {
+          materia: new mongoose.Types.ObjectId(ID_MATERIA_GENERAL), 
+          alumno: new mongoose.Types.ObjectId(a.alumno),
+          fecha: fechaNormalizada
+        },
+        update: {
+          $set: {
+            materia: new mongoose.Types.ObjectId(ID_MATERIA_GENERAL),
+            alumno: new mongoose.Types.ObjectId(a.alumno),
+            fecha: fechaNormalizada,
+            estado: a.estado,
+            cargadoPor: new mongoose.Types.ObjectId(req.user.id)
+          }
+        },
+        upsert: true
+      }
+    }));
 
-      resultados.push(nuevaAsistencia);
-    }
+    const result = await Asistencia.bulkWrite(ops);
 
-    res.json({
-      msg: "Asistencia de aula registrada correctamente",
-      registros: resultados.length
-    });
-  } catch (error) {
-    console.error("Error al tomar asistencia por aula:", error);
-    res.status(500).json({ msg: "Error interno", error: error.message });
-  }
+    res.status(200).json({
+      msg: "Asistencia de aula registrada correctamente",
+      result
+    });
+
+  } catch (error) {
+    console.error("Error al tomar asistencia por aula:", error);
+    res.status(500).json({ msg: "Error interno", error: error.message });
+  }
 };
 
 // 🆕 ADMIN lista asistencias por aula

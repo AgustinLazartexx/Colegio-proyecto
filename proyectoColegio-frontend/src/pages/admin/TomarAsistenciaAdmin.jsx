@@ -108,7 +108,7 @@ const TomarAsistenciaAdmin = () => {
 
       // --- CORRECCIÓN DE ENDPOINT ---
       // Llama a la ruta de Admin que creamos en el backend
-      await api.post("/asistencias/aula/tomar", payload);
+      await api.post("asistencias/aula/tomar", payload);
       // --- FIN CORRECCIÓN ---
 
       toast.success("Asistencia registrada correctamente 🎯");

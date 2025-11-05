@@ -28,7 +28,7 @@ router.post(
     checkAuth,
     checkRole("admin"),
     body("nombre", "Nombre obligatorio").notEmpty(),
-    body("anio", "Año inválido").isInt({ min: 1, max: 6 }),
+    body("anio", "Año inválido").isInt({ min: 0, max: 6 }),
     validateFields,
   ],
   crearMateria

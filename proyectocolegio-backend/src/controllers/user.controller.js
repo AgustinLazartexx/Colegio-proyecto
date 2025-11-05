@@ -38,7 +38,7 @@ export const adminCrearUsuario = async (req, res) => {
     };
 
     if (rol === "alumno") {
-      nuevoUsuarioData.anio = anio;
+      nuevoUsuarioData.anio = parseInt(anio, 10);
       nuevoUsuarioData.division = division.toUpperCase();
       try {
            nuevoUsuarioData.codigoAlumno = await User.generarCodigoAlumno(anio, division.toUpperCase());
@@ -161,12 +161,30 @@ export const cambiarPassword = async (req, res) => {
 
 // --- CRUD BÁSICO (Mantenemos los que tenías) ---
 export const getUsers = async (req, res) => {
-  try {
-      const usuarios = await User.find().select("-password"); // Excluir password
-      res.json(usuarios);
-  } catch(error){
-       res.status(500).json({ msg: "Error al obtener usuarios." });
-  }
+  try {
+    // 1. Lee los filtros desde req.query
+    const { rol, anio, division } = req.query;
+    const query = {}; // Crea un objeto de consulta vacío
+
+    // 2. Construye la consulta dinámicamente
+    if (rol) {
+      query.rol = rol; // Añade filtro de rol
+    }
+    if (anio) {
+      query.anio = anio; // Añade filtro de año
+    }
+    if (division) {
+      query.division = division; // Añade filtro de división
+    }
+
+    // 3. Usa el objeto 'query' en la búsqueda de Mongoose
+    const usuarios = await User.find(query).select("-password");
+    
+    res.json(usuarios);
+
+  } catch(error){
+       res.status(500).json({ msg: "Error al obtener usuarios." });
+  }
 };
 
 export const getUserById = async (req, res) => {
