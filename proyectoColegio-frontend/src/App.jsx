@@ -29,6 +29,7 @@ import VerEntregas from "./pages/profesor/VerEntregas";
 import CrudAnunciosProfesor from "./pages/profesor/CrudAnunciosProfesor";
 import CargarNotas from "./pages/profesor/CargarNotas";
 import TomarAsistencia from "./pages/profesor/TomarAsistencia";
+import PaginaSubirNotas from "./pages/profesor/PaginaSubirNotas"; 
 // Páginas del alumno
 import InicioAlumno from "./pages/alumno/InicioAlumno";
 import InscripcionMaterias from "./pages/alumno/InscripcionMaterias";
@@ -155,7 +156,7 @@ function App() {
           <Route path="profesor/ver-alumnos" element={<PrivateRoute allowedRoles={["profesor"]}><VerAlumnosMateria /></PrivateRoute>} />
           <Route path="verEntregas" element={<VerEntregas />} />
           <Route path="crud-anuncios" element={<CrudAnunciosProfesor />} />
-          <Route path="cargar-notas" element={<CargarNotas />} />
+          <Route path="cargar-notas" element={<PaginaSubirNotas />} />
           <Route path="tomar-asistencia" element={<TomarAsistencia />} />
         </Route>
 
