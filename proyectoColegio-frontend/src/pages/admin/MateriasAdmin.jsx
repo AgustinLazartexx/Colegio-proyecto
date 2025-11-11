@@ -11,6 +11,7 @@ import {
   LayoutGrid,
   Loader2,
   AlertCircle,
+  Hash,
 } from "lucide-react";
 import Swal from "sweetalert2";
 import { toast } from "react-toastify";
@@ -21,7 +22,7 @@ const MateriasAdmin = () => {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [modoEdicion, setModoEdicion] = useState(false);
-  const [form, setForm] = useState({ nombre: "", anio: "", profesor: "" });
+  const [form, setForm] = useState({ nombre: "", anio: "", division: "", profesor: "" });
   const [editandoId, setEditandoId] = useState(null);
   const [loadingAction, setLoadingAction] = useState(false);
 
@@ -77,25 +78,47 @@ const MateriasAdmin = () => {
   };
 
   const handleGuardar = async () => {
+    // Validar año
+    const anioNum = parseInt(form.anio, 10);
+    if (isNaN(anioNum) || form.anio === "") {
+      toast.error("Por favor, selecciona un año.");
+      return;
+    }
+    
+    // Si el año es 1-6, la división es obligatoria
+    if (anioNum > 0 && !["A", "B", "C"].includes(form.division)) {
+      toast.error(`Por favor, selecciona una división (A, B, o C) para ${anioNum}° Año.`);
+      return;
+    }
+
     setLoadingAction(true);
     const url = modoEdicion
       ? `http://localhost:5000/api/materias/${editandoId}`
       : "http://localhost:5000/api/materias";
     const method = modoEdicion ? "put" : "post";
 
+    // Preparar payload
+    const payload = {
+      nombre: form.nombre,
+      anio: anioNum,
+      profesor: form.profesor || null,
+      // Si el año es 0 (General), forzamos la división a null
+      division: anioNum === 0 ? null : form.division
+    };
+
     try {
-      await axios[method](url, form, {
+      await axios[method](url, payload, {
         headers: { Authorization: `Bearer ${token}` },
       });
       toast.success(modoEdicion ? "Materia actualizada" : "Materia creada");
       setShowModal(false);
-      setForm({ nombre: "", anio: "", profesor: "" });
+      setForm({ nombre: "", anio: "", division: "", profesor: "" });
       setModoEdicion(false);
       setEditandoId(null);
       fetchMaterias();
     } catch (error) {
       const errorMessage =
-        error.response?.data?.error || "Error al guardar materia";
+        error.response?.data?.msg || error.response?.data?.error || "Error al guardar materia";
       toast.error(errorMessage);
     } finally {
       setLoadingAction(false);
@@ -108,6 +131,7 @@ const MateriasAdmin = () => {
     setForm({
       nombre: materia.nombre,
       anio: materia.anio,
+      division: materia.division || "",
       profesor: materia.profesor?._id || "",
     });
     setShowModal(true);
@@ -115,7 +139,7 @@ const MateriasAdmin = () => {
 
   const abrirModalNuevo = () => {
     setModoEdicion(false);
-    setForm({ nombre: "", anio: "", profesor: "" });
+    setForm({ nombre: "", anio: "", division: "", profesor: "" });
     setShowModal(true);
   };
 
@@ -155,7 +179,7 @@ const MateriasAdmin = () => {
         <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-200">
           {loading ? (
             <div className="flex flex-col items-center justify-center p-12">
-              <Loader2 className="animate-spin text-4xl text-blue-500 mb-4" />
+              <Loader2 size={48} className="animate-spin text-blue-500 mb-4" />
               <p className="text-lg text-gray-700">Cargando materias...</p>
             </div>
           ) : materias.length === 0 ? (
@@ -176,6 +200,9 @@ const MateriasAdmin = () => {
                       <div className="flex items-center gap-2"><Calendar size={16} /> Año</div>
                     </th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                      <div className="flex items-center gap-2"><Hash size={16} /> División</div>
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
                       <div className="flex items-center gap-2"><User size={16} /> Profesor</div>
                     </th>
                     <th className="px-6 py-4 text-center text-xs font-bold text-gray-600 uppercase tracking-wider">
@@ -190,7 +217,10 @@ const MateriasAdmin = () => {
                         {materia.nombre}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                        {materia.anio}
+                        {materia.anio === 0 ? "General" : `${materia.anio}°`}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        {materia.division || "-"}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                         {materia.profesor?.nombre || "Sin asignar"} {materia.profesor?.apellido || ""}
@@ -249,29 +279,61 @@ const MateriasAdmin = () => {
                     required
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Año
-                  </label>
-                  <input
-                    type="number"
-                    value={form.anio}
-                    onChange={(e) => setForm({ ...form, anio: e.target.value })}
-                    className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                    required
-                  />
+
+                {/* Campos de Año y División */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Año
+                    </label>
+                    <select
+                      value={form.anio}
+                      onChange={(e) => setForm({ ...form, anio: e.target.value, division: "" })}
+                      className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white"
+                      required
+                    >
+                      <option value="">Seleccionar...</option>
+                      <option value="0">General (Asistencias)</option>
+                      <option value="1">1° Año</option>
+                      <option value="2">2° Año</option>
+                      <option value="3">3° Año</option>
+                      <option value="4">4° Año</option>
+                      <option value="5">5° Año</option>
+                      <option value="6">6° Año</option>
+                    </select>
+                  </div>
+
+                  {/* El selector de División SÓLO aparece si el año es 1-6 */}
+                  {!!form.anio && parseInt(form.anio, 10) > 0 && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        División
+                      </label>
+                      <select
+                        value={form.division}
+                        onChange={(e) => setForm({ ...form, division: e.target.value })}
+                        className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white"
+                        required
+                      >
+                        <option value="">Seleccionar...</option>
+                        <option value="A">A</option>
+                        <option value="B">B</option>
+                        <option value="C">C</option>
+                      </select>
+                    </div>
+                  )}
                 </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Profesor asignado
+                    Profesor asignado (opcional)
                   </label>
                   <select
                     value={form.profesor}
                     onChange={(e) => setForm({ ...form, profesor: e.target.value })}
-                    className="w-full border border-gray-300 p-3 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none transition-colors"
-                    required
+                    className="w-full border border-gray-300 p-3 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   >
-                    <option value="">-- Selecciona un profesor --</option>
+                    <option value="">-- Sin asignar --</option>
                     {profesores.map((prof) => (
                       <option key={prof._id} value={prof._id}>
                         {prof.nombre} {prof.apellido}

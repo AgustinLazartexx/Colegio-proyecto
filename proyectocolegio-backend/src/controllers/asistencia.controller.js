@@ -1,377 +1,245 @@
-// controllers/asistencia.controller.js
-
-import Asistencia from "../models/asistencia.model.js";
+import Materia from "../models/materia.model.js";
 import User from "../models/user.model.js";
-import Materia from "../models/materia.model.js"; // Asegúrate de importar el modelo Materia
-import mongoose from "mongoose";
 
-// Helper: valida que el usuario (profesor) sea dueño de la materia
-const assertProfesorDeLaMateria = async (materiaId, profesorId) => {
-  const materia = await Materia.findById(materiaId).select("profesor");
-  if (!materia) throw new Error("Materia no encontrada");
-  if (String(materia.profesor) !== String(profesorId)) {
-    const e = new Error("No autorizado para esta materia");
-    e.status = 403;
-    throw e;
-  }
-};
-
-// POST /api/asistencias/tomar  (profesor)
-// body: { materia: materiaId, fecha?, asistencias: [{ alumno, estado }] }
-export const tomarAsistenciaLote = async (req, res) => {
-  try {
-    // ----- LÍNEA CORREGIDA -----
-    // Cambiamos "clase: materiaId" por "materia: materiaId" para que coincida con el frontend
-    const { materia: materiaId, fecha, asistencias } = req.body;
-
-    // Validaciones mejoradas
-    if (!materiaId || !mongoose.Types.ObjectId.isValid(materiaId)) {
-      return res.status(400).json({ msg: "ID de materia inválido" });
-    }
-
-    if (!Array.isArray(asistencias) || asistencias.length === 0) {
-      return res.status(400).json({ msg: "Asistencias debe ser un array no vacío" });
-    }
-
-    // Validar que todos los elementos del array tengan la estructura correcta
-    for (const asist of asistencias) {
-      if (!asist.alumno || !mongoose.Types.ObjectId.isValid(asist.alumno)) {
-        return res.status(400).json({ msg: `ID de alumno inválido: ${asist.alumno}` });
-      }
-      if (!asist.estado || !["presente", "ausente", "tarde", "justificado"].includes(asist.estado)) {
-        return res.status(400).json({ msg: `Estado inválido: ${asist.estado}` });
-      }
-    }
-
-    // Verificar que el profesor sea dueño de la materia
-    await assertProfesorDeLaMateria(materiaId, req.user.id);
-
-    const fechaNormalizada = fecha ? new Date(fecha) : new Date();
-    fechaNormalizada.setHours(0, 0, 0, 0);
-
-    const ops = asistencias.map(a => ({
-      updateOne: {
-        filter: {
-          materia: new mongoose.Types.ObjectId(materiaId),
-          alumno: new mongoose.Types.ObjectId(a.alumno),
-          fecha: fechaNormalizada
-        },
-        update: {
-          $set: {
-            materia: new mongoose.Types.ObjectId(materiaId),
-            alumno: new mongoose.Types.ObjectId(a.alumno),
-            fecha: fechaNormalizada,
-            estado: a.estado,
-            cargadoPor: new mongoose.Types.ObjectId(req.user.id)
-          }
-        },
-        upsert: true
-      }
-    }));
-
-    const result = await Asistencia.bulkWrite(ops);
-    res.status(200).json({
-      msg: "Asistencia registrada",
-      result: {
-        matchedCount: result.matchedCount,
-        modifiedCount: result.modifiedCount,
-        upsertedCount: result.upsertedCount
-      }
-    });
-  } catch (err) {
-    console.error("Error en tomarAsistenciaLote:", err);
-    res.status(err.status || 500).json({ msg: err.message || "Error al tomar asistencia" });
-  }
-};
-
-// ... (el resto de tus funciones no necesitan cambios para este error)
-
-// Función simplificada para cargar asistencias individuales
-export const cargarAsistenciaSimple = async (req, res) => {
-  try {
-    const { clase: materiaId, alumno, estado, fecha } = req.body; // clase contiene materiaId
-    
-    // Validaciones
-    if (!materiaId || !mongoose.Types.ObjectId.isValid(materiaId)) {
-      return res.status(400).json({ msg: "ID de materia requerido y válido" });
-    }
-    if (!alumno || !mongoose.Types.ObjectId.isValid(alumno)) {
-      return res.status(400).json({ msg: "ID de alumno requerido y válido" });
-    }
-    if (!estado || !["presente", "ausente", "tarde", "justificado"].includes(estado)) {
-      return res.status(400).json({ msg: "Estado inválido" });
-    }
-
-    await assertProfesorDeLaMateria(materiaId, req.user.id);
-
-    const fechaNormalizada = fecha ? new Date(fecha) : new Date();
-    fechaNormalizada.setHours(0, 0, 0, 0);
-
-    // Buscar si ya existe
-    let asistencia = await Asistencia.findOne({
-      materia: materiaId, // Cambiado de clase a materia
-      alumno: alumno,
-      fecha: fechaNormalizada
-    });
-
-    if (asistencia) {
-      // Actualizar existente
-      asistencia.estado = estado;
-      asistencia.cargadoPor = req.user.id;
-      await asistencia.save();
-    } else {
-      // Crear nuevo
-      asistencia = new Asistencia({
-        materia: materiaId, // Cambiado de clase a materia
-        alumno: alumno,
-        fecha: fechaNormalizada,
-        estado: estado,
-        cargadoPor: req.user.id
-      });
-      await asistencia.save();
-    }
-
-    res.status(201).json({ 
-      msg: "Asistencia guardada correctamente", 
-      asistencia 
-    });
-  } catch (err) {
-    console.error("Error en cargarAsistenciaSimple:", err);
-    res.status(err.status || 500).json({ msg: err.message || "Error al cargar asistencia" });
-  }
-};
-
-// GET /api/asistencias  (admin)  filtros: materia, alumno, desde, hasta
-export const listarAsistencias = async (req, res) => {
-  try {
-    const { materia, alumno, desde, hasta } = req.query;
-
-    const query = {};
-    if (materia && mongoose.Types.ObjectId.isValid(materia)) {
-      query.materia = materia; // Cambiado de clase a materia
-    }
-    if (alumno && mongoose.Types.ObjectId.isValid(alumno)) {
-      query.alumno = alumno;
-    }
-    if (desde || hasta) {
-      query.fecha = {};
-      if (desde) query.fecha.$gte = new Date(desde);
-      if (hasta) {
-        const h = new Date(hasta);
-        h.setHours(23, 59, 59, 999);
-        query.fecha.$lte = h;
-      }
-    }
-
-    // Si es profesor, limitar a sus materias
-    if (req.user.rol === "profesor") {
-      const materiasDoc = await Materia.find({ profesor: req.user.id }).select("_id");
-      const ids = materiasDoc.map(m => m._id);
-      if (query.materia) {
-        // Verificar que la materia solicitada esté en sus materias
-        if (!ids.some(id => String(id) === String(query.materia))) {
-          return res.status(403).json({ msg: "No autorizado para ver esta materia" });
-        }
-      } else {
-        query.materia = { $in: ids };
-      }
-    }
-
-    const data = await Asistencia.find(query)
-      .populate("materia", "nombre codigo profesor") // Cambiado de clase a materia
-      .populate("alumno", "nombre email")
-      .populate("cargadoPor", "nombre")
-      .sort({ fecha: -1 });
-
-    res.json({ total: data.length, asistencias: data });
-  } catch (err) {
-    console.error("Error en listarAsistencias:", err);
-    res.status(500).json({ msg: "Error al listar asistencias" });
-  }
-};
-
-// GET /api/asistencias/mias  (alumno)
-export const misAsistenciasAlumno = async (req, res) => {
-  try {
-    const data = await Asistencia.find({ alumno: req.user.id })
-      .populate("materia", "nombre codigo profesor") // Cambiado de clase a materia
-      .sort({ fecha: -1 });
-
-    res.json({ total: data.length, asistencias: data });
-  } catch (err) {
-    console.error("Error en misAsistenciasAlumno:", err);
-    res.status(500).json({ msg: "Error al obtener asistencias" });
-  }
-};
-
-// PUT /api/asistencias/:id  (profesor de esa materia o admin)
-export const actualizarAsistencia = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { estado } = req.body;
-    
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ msg: "ID inválido" });
-    }
-    
-    if (estado && !["presente", "ausente", "tarde", "justificado"].includes(estado)) {
-      return res.status(400).json({ msg: "Estado inválido" });
-    }
-
-    const doc = await Asistencia.findById(id);
-    if (!doc) return res.status(404).json({ msg: "Registro no encontrado" });
-
-    if (req.user.rol === "profesor") {
-      await assertProfesorDeLaMateria(doc.materia, req.user.id); // Cambiado de clase a materia
-    }
-
-    doc.estado = estado ?? doc.estado;
-    doc.cargadoPor = req.user.id;
-    await doc.save();
-
-    res.json({ msg: "Actualizado", asistencia: doc });
-  } catch (err) {
-    console.error("Error en actualizarAsistencia:", err);
-    res.status(err.status || 500).json({ msg: err.message || "Error al actualizar" });
-  }
-};
-
-// DELETE /api/asistencias/:id  (admin)
-export const eliminarAsistencia = async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ msg: "ID inválido" });
-    }
-    
-    const deleted = await Asistencia.findByIdAndDelete(id);
-    if (!deleted) {
-      return res.status(404).json({ msg: "Registro no encontrado" });
-    }
-    
-    res.json({ msg: "Eliminado" });
-  } catch (err) {
-    console.error("Error en eliminarAsistencia:", err);
-    res.status(500).json({ msg: "Error al eliminar" });
-  }
-};
- const ID_MATERIA_GENERAL = "690967a599f1cb7aca6ecd6c";
-
-export const tomarAsistenciaPorAula = async (req, res) => {
+// Crear nueva materia (solo admin)
+export const crearMateria = async (req, res) => {
   try {
-    const { anio, division, fecha, asistencias } = req.body;
+    // 1. Obtenemos la división del body
+    const { nombre, anio, profesor } = req.body;
+    let { division } = req.body; // 'A', 'B', 'C' o undefined
 
-    if (!anio || !division || !fecha || !asistencias) {
-      return res.status(400).json({ msg: "Faltan datos obligatorios" });
-    }
+    let divisionFinal = null;
+    const anioNum = parseInt(anio, 10);
 
-    // --- PRUEBA FINAL: Usar SÓLO STRING ---
-    // Basado en que tu ruta GET /api/usuarios SÍ funciona.
-    
-  	// const anioNumero = parseInt(anio, 10); // LÍNEA ELIMINADA
+    // 2. Lógica de división
+    if (anioNum > 0) {
+      // Si es un año (1-6), la división es obligatoria
+      if (!division || !["A", "B", "C"].includes(division.toUpperCase())) {
+        return res.status(400).json({ msg: "La División ('A', 'B', o 'C') es requerida para este año" });
+      }
+      divisionFinal = division.toUpperCase();
+    }
+    // Si anioNum es 0 (Asistencia General), divisionFinal se queda como null
 
-  	// Usamos 'anio' (el String) directamente en la consulta
-  	const alumnos = await User.find({ anio, division, rol: "alumno" });
+    // 3. Comprobar unicidad (ahora incluye la división)
+    const existe = await Materia.findOne({ nombre, anio: anioNum, division: divisionFinal });
+    if (existe) return res.status(400).json({ msg: "La materia ya existe para ese año y división" });
 
-    if (alumnos.length === 0) {
-      console.warn(`Búsqueda (como String) SIN resultados para: { anio: '${anio}', division: '${division}', rol: 'alumno' }`);
-      return res.status(404).json({ msg: "No se encontraron alumnos en ese aula" });
-    }
-    
-    console.log(`Encontrados ${alumnos.length} alumnos. Guardando asistencias...`);
+    // 4. Crear materia
+    const nueva = new Materia({ nombre, anio: anioNum, division: divisionFinal, profesor });
+    await nueva.save();
 
-    // --- El resto del código (que ya estaba bien) ---
-    const fechaNormalizada = new Date(fecha);
-    fechaNormalizada.setHours(0, 0, 0, 0);
-
-    const ops = asistencias.map(a => ({
-      updateOne: {
-        filter: {
-          materia: new mongoose.Types.ObjectId(ID_MATERIA_GENERAL), 
-          alumno: new mongoose.Types.ObjectId(a.alumno),
-          fecha: fechaNormalizada
-        },
-        update: {
-          $set: {
-            materia: new mongoose.Types.ObjectId(ID_MATERIA_GENERAL),
-            alumno: new mongoose.Types.ObjectId(a.alumno),
-            fecha: fechaNormalizada,
-            estado: a.estado,
-            cargadoPor: new mongoose.Types.ObjectId(req.user.id)
-          }
-        },
-        upsert: true
-      }
-    }));
-
-    const result = await Asistencia.bulkWrite(ops);
-
-    res.status(200).json({
-      msg: "Asistencia de aula registrada correctamente",
-      result
-    });
-
+    res.status(201).json(nueva);
   } catch (error) {
-    console.error("Error al tomar asistencia por aula:", error);
-    res.status(500).json({ msg: "Error interno", error: error.message });
+    if (error.code === 11000) {
+        return res.status(400).json({ msg: "Error: La materia ya existe (Índice duplicado)." });
+    }
+    res.status(500).json({ msg: "Error al crear materia", error });
   }
 };
 
-// 🆕 ADMIN lista asistencias por aula
-export const listarAsistenciasPorAula = async (req, res) => {
-  try {
-    const { anio, division, fecha } = req.query;
-    const filtros = {};
+// --- FUNCIÓN UNIFICADA ---
+// Obtener todas las materias (admin y profesores)
+// Ahora también maneja los filtros de (GET /?anio=1&profesor=...)
+export const obtenerMaterias = async (req, res) => {
+  try {
+    const { anio, profesor } = req.query; // Revisamos si hay filtros
+    const filtro = {};
 
-    if (anio) filtros.anio = parseInt(anio);
-    if (division) filtros.division = division;
+    if (anio) filtro.anio = anio;
+    if (profesor) filtro.profesor = profesor;
 
-    const query = {};
-    if (fecha) {
-      const date = new Date(fecha);
-      date.setHours(0, 0, 0, 0);
-      query.fecha = date;
-    }
+    const materias = await Materia.find(filtro).populate("profesor", "nombre");
+    res.json(materias);
+  } catch (error) {
+    res.status(500).json({ msg: "Error al obtener las materias", error });
+  }
+};
+// --- FIN FUNCIÓN UNIFICADA ---
 
-    const asistencias = await Asistencia.find(query)
-      .populate("alumno", "nombre email anio division")
-      .populate("materia", "nombre")
-      .populate("cargadoPor", "nombre rol")
-      .sort({ fecha: -1 });
 
-    const filtradas = asistencias.filter(a => 
-      (!anio || a.alumno.anio === parseInt(anio)) && 
-      (!division || a.alumno.division === division)
-    );
+// Obtener una materia por ID
+export const obtenerMateria = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const materia = await Materia.findById(id).populate("profesor alumnos", "nombre email");
 
-    res.json({
-      msg: "Asistencias de aula obtenidas correctamente",
-      total: filtradas.length,
-      asistencias: filtradas
-    });
-  } catch (error) {
-    console.error("Error al listar asistencias de aula:", error);
-    res.status(500).json({ msg: "Error interno", error: error.message });
-  }
+    if (!materia) {
+      return res.status(404).json({ msg: "Materia no encontrada" });
+    }
+
+    res.json(materia);
+  } catch (error) {
+    res.status(500).json({ msg: "Error al obtener la materia", error });
+  }
 };
 
-export const getUsers = async (req, res) => {
-  try {
-    // --- Lógica de Filtros ---
-    const { rol, anio, division } = req.query;
-    const query = {};
+// Actualizar una materia
+export const actualizarMateria = async (req, res) => {
+  try {
+    const { id } = req.params;
+    // 1. Obtenemos división
+    const { nombre, anio, profesor, division } = req.body;
 
-    if (rol) query.rol = rol;
-    if (anio) query.anio = anio;
-    if (division) query.division = division;
-    // --- Fin Lógica de Filtros ---
+    const materia = await Materia.findById(id);
+    if (!materia) return res.status(404).json({ msg: "Materia no encontrada" });
 
-    // Solo el admin puede ver todos, pero si filtra, se aplica
-    const usuarios = await User.find(query).select("-password");
-    res.json(usuarios);
+    // 2. Actualizamos campos
+    if (nombre) materia.nombre = nombre;
+    if (anio !== undefined) materia.anio = anio;
+    if (profesor) materia.profesor = profesor;
 
-  } catch(error){
-       res.status(500).json({ msg: "Error al obtener usuarios." });
-  }
+    // 3. Lógica de división
+    // Si 'anio' se cambia a 0, forzamos división a null
+    if (anio && parseInt(anio, 10) === 0) {
+        materia.division = null;
+    } 
+    // Si se especifica una división (A, B, C, o null)
+    else if (division !== undefined) {
+        materia.division = division ? division.toUpperCase() : null;
+    }
+
+    await materia.save();
+
+    res.json({ msg: "Materia actualizada", materia });
+  } catch (error) {
+    res.status(500).json({ msg: "Error al actualizar materia", error });
+  }
+};
+
+// Eliminar una materia
+export const eliminarMateria = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const materia = await Materia.findById(id);
+
+    if (!materia) return res.status(404).json({ msg: "Materia no encontrada" });
+
+    await materia.deleteOne();
+
+    res.json({ msg: "Materia eliminada con éxito" });
+  } catch (error) {
+    res.status(500).json({ msg: "Error al eliminar materia", error });
+  }
+};
+
+// Obtener materias por año (para alumnos)
+// NOTA: Esto debería ser más inteligente y filtrar por la división del alumno
+// pero por ahora sigue la lógica original.
+export const obtenerMateriasPorAnio = async (req, res) => {
+  try {
+    const { anio } = req.params;
+    const materias = await Materia.find({ anio }).populate("profesor", "nombre");
+    res.json(materias);
+  } catch (error) {
+    res.status(500).json({ msg: "Error al filtrar por año" });
+  }
+};
+
+// Inscribir alumno a materia (solo alumno)
+export const inscribirseAMateria = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const alumnoId = req.user.id; // ID del alumno desde el token (checkAuth)
+
+    const materia = await Materia.findById(id);
+    if (!materia) return res.status(404).json({ msg: "Materia no encontrada" });
+
+    // Validar que el alumno sea del mismo año y división que la materia
+    const alumno = await User.findById(alumnoId).select("anio division");
+    if (materia.anio !== 0) { // No validar para materias generales (anio 0)
+        if (materia.anio !== alumno.anio || materia.division !== alumno.division) {
+            return res.status(403).json({ msg: "No puedes inscribirte a una materia de otro curso." });
+        }
+    }
+
+    if (materia.alumnos.includes(alumnoId)) {
+      return res.status(400).json({ msg: "Ya estás inscripto en esta materia" });
+    }
+
+    materia.alumnos.push(alumnoId);
+    await materia.save();
+
+    res.json({ msg: "Inscripción exitosa", materia });
+  } catch (error) {
+    console.error("Error en inscripción:", error);
+    res.status(500).json({ msg: "Error al inscribirse" });
+  }
+};
+
+
+// Ver alumnos inscriptos en una materia (profesor asignado o admin)
+export const verAlumnosMateria = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const materia = await Materia.findById(id).populate("alumnos", "nombre email anio division");
+    if (!materia) return res.status(404).json({ msg: "Materia no encontrada" });
+
+    // Solo admin o el profesor asignado puede ver esto
+    if (req.user.rol !== "admin" && req.user.id !== materia.profesor.toString()) {
+      return res.status(403).json({ msg: "Acceso denegado" });
+    }
+
+    res.json(materia.alumnos);
+  } catch (error) {
+    res.status(500).json({ msg: "Error al obtener inscriptos" });
+  }
+};
+
+// Obtener materias del profesor logueado
+export const obtenerMateriasDelProfesor = async (req, res) => {
+  try {
+    const profesorId = req.user.id; // viene del token
+    const materias = await Materia.find({ profesor: profesorId }).populate("alumnos", "nombre email");
+    
+    res.json(materias);
+  } catch (error) {
+    console.error("Error al obtener materias del profesor:", error);
+    res.status(500).json({ msg: "Error al obtener materias del profesor" });
+  }
+};
+
+// Obtener alumnos de las materias del profesor autenticado
+export const verAlumnosPorProfesor = async (req, res) => {
+  try {
+    const profesorId = req.user.id;
+    console.log("ID del profesor autenticado:", profesorId);
+
+    const materias = await Materia.find({ profesor: profesorId })
+      .populate("alumnos", "nombre email anio division")
+      .select("nombre anio division alumnos");
+
+    if (materias.length === 0) {
+      return res.status(404).json({ msg: "No se encontraron materias asignadas al profesor" });
+    }
+
+    res.json(materias);
+  } catch (error) {
+    console.error("Error exacto:", error);
+    res.status(500).json({ msg: "Error al obtener los alumnos del profesor" });
+  }
+};
+
+// Obtener todos los profesores (para el admin al asignar materias)
+export const obtenerProfesores = async (req, res) => {
+  try {
+    const profesores = await User.find({ rol: "profesor" }).select("nombre email");
+    res.json(profesores);
+  } catch (error) {
+    res.status(500).json({ msg: "Error al obtener los profesores", error });
+  }
+};
+
+// ELIMINADA: obtenerMateriasFiltradas (se unificó con obtenerMaterias)
+
+export const getMateriasPorAlumno = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const materias = await Materia.find({ alumnos: id }).populate("profesor", "nombre email");
+
+    res.status(200).json(materias);
+  } catch (error) {
+    res.status(500).json({ message: "Error al obtener materias del alumno", error });
+  }
 };
