@@ -13,15 +13,11 @@ const materiaSchema = new mongoose.Schema(
       min: 0, // 0 se usa para "Asistencia General"
       max: 6,
     },
-    // --- CAMPO NUEVO ---
-    division: {
-      type: String,
-      uppercase: true,
-      trim: true,
-      enum: ["A", "B", "C", null], // A, B, C, o null (para anio 0)
-      default: null
-    },
-    // --- FIN CAMPO NUEVO ---
+division: {
+        type: String,
+        trim: true,
+        default: null
+    },
     profesor: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

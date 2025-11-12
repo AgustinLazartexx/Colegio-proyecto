@@ -17,12 +17,12 @@ const navItems = [
   { to: "/admin/Inicio", icon: Home, text: "Inicio" },
   { to: "/admin/usuarios", icon: Users, text: "Usuarios" },
   { to: "/admin/materias", icon: Layers, text: "Materias" },
-  { to: "/admin/comunicados", icon: PlusSquare, text: "Crear Clases" },
   { to: "/admin/verificacion", icon: Settings, text: "Gestionar Clases" },
    { to: "/admin/AsistenciaGestion", icon: Settings, text: "Gestionar Asistencias" },
+    { to: "/admin/GestionNotas", icon: Settings, text: "Gestión de Notas" },
     { to: "/admin/VerAsistencias", icon: Users, text: "Ver Asistencias" },
     { to: "/admin/AuditoriaNotas", icon: Users, text: "Auditoría de Notas" },
-    { to: "/admin/GestionNotas", icon: Settings, text: "Gestión de Notas" },
+   
 ];
 
 // --- No hay cambios en el resto del código, es reutilizable ---

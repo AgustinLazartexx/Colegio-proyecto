@@ -1,371 +1,668 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
-import { useAuth } from "../../context/AuthContext";
+// Asumimos que la ruta a AuthContext es correcta para tu proyecto
+import { useAuth } from "../../context/AuthContext"; 
 import {
-  Edit3, Trash2, X, Loader2, AlertCircle, Save, GraduationCap, Plus, Users // Import Users icon
+  Edit3, Trash2, X, Loader2, AlertCircle, Save, GraduationCap, Plus, Users, Clock, Calendar, BookOpen, Filter
 } from "lucide-react";
-import Swal from "sweetalert2";
+// Asumimos que sweetalert2 está instalado
+import Swal from "sweetalert2"; 
 
-// --- NUEVO: Helper para manejar select múltiple ---
+// Helper para manejar select múltiple
 const getSelectedOptions = (options) => {
-  const selectedValues = [];
-  for (let i = 0, l = options.length; i < l; i++) {
-    if (options[i].selected) {
-      selectedValues.push(options[i].value);
-    }
-  }
-  return selectedValues;
+  const selectedValues = [];
+  for (let i = 0, l = options.length; i < l; i++) {
+    if (options[i].selected) {
+      selectedValues.push(options[i].value);
+    }
+  }
+  return selectedValues;
 };
 
 const ClasesAdmin = () => {
-  const { token } = useAuth();
-  const [clases, setClases] = useState([]);
-  const [materias, setMaterias] = useState([]);
-  const [profesoresList, setProfesoresList] = useState([]); // Renombrado para evitar confusión con el form state
-  const [loading, setLoading] = useState(true);
-  const [loadingAction, setLoadingAction] = useState(false);
-  const [editingId, setEditingId] = useState(null);
+  const { token } = useAuth();
+  const [clases, setClases] = useState([]);
+  const [materias, setMaterias] = useState([]);
+  const [profesoresList, setProfesoresList] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingAction, setLoadingAction] = useState(false);
+  const [editingId, setEditingId] = useState(null); // ID para editar, null para crear
 
-  // --- CAMBIO: Estado del formulario actualizado ---
-  const [form, setForm] = useState({
-    materia: "",
-    profesores: [], // Ahora es un array
-    anio: "",
-    division: "",   // Nuevo campo
-    diaSemana: "",
-    horaInicio: "",
-    horaFin: ""
-    // Eliminado anioCursada si ya no lo usas en el backend
-  });
-  // --- FIN CAMBIO ---
+  // El formulario solo necesita materia, profesores y horario
+  const [form, setForm] = useState({
+    materia: "",
+    profesores: [],
+    diaSemana: "Lunes",
+    horaInicio: "",
+    horaFin: ""
+  });
 
-  const [showModal, setShowModal] = useState(false);
-  // --- CAMBIO: Añadir filtro de división ---
-  const [filter, setFilter] = useState({ anio: "", diaSemana: "", division: "" });
-  // --- FIN CAMBIO ---
+  const [showModal, setShowModal] = useState(false);
+  const [filter, setFilter] = useState({ anio: "", diaSemana: "", division: "" });
+  const [showFilters, setShowFilters] = useState(false);
 
-  const API_URL = "http://localhost:5000/api/clases";
-  const AUX_DATA_URLS = {
-    materias: "http://localhost:5000/api/materias",
-    usuarios: "http://localhost:5000/api/usuarios"
-  };
+  const API_URL = "http://localhost:5000/api/clases";
+  const AUX_DATA_URLS = {
+    materias: "http://localhost:5000/api/materias",
+    usuarios: "http://localhost:5000/api/usuarios"
+  };
 
-  useEffect(() => {
-    fetchClases();
-    fetchAuxiliaryData();
-  }, [filter, token]); // filter ahora incluye division
+  useEffect(() => {
+    fetchClases();
+    fetchAuxiliaryData();
+  }, [filter, token]);
 
-  const fetchClases = async () => {
-    setLoading(true);
-    try {
-      const res = await axios.get(API_URL, {
-        headers: { Authorization: `Bearer ${token}` },
-        params: filter, // filter ahora incluye division
-      });
-      // Asegurarse de que la respuesta del backend tenga 'clases'
-      setClases(res.data.clases || []);
-    } catch (err) {
-      console.error("Error al cargar las clases:", err);
-      Swal.fire("Error", "No se pudieron cargar las clases.", "error");
-    } finally {
-      setLoading(false);
+  const fetchClases = async () => {
+    setLoading(true);
+    try {
+      const res = await axios.get(API_URL, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: filter,
+      });
+      // El backend envía 'clases' con 'id' (no '_id')
+      setClases(res.data.clases || []); 
+    } catch (err) {
+      console.error("Error al cargar las clases:", err);
+      Swal.fire("Error", "No se pudieron cargar las clases.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchAuxiliaryData = async () => {
+    try {
+      const [resMaterias, resUsuarios] = await Promise.all([
+        axios.get(AUX_DATA_URLS.materias, { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get(AUX_DATA_URLS.usuarios, { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      setMaterias(resMaterias.data || []);
+      const soloProfesores = (resUsuarios.data || []).filter(u => u.rol === "profesor");
+      setProfesoresList(soloProfesores);
+    } catch (err) {
+      console.error("Error al cargar datos auxiliares:", err);
+    }
+  };
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    
+    if (name === 'materia') {
+        const selectedMateria = materias.find(m => m._id === value);
+        
+        setForm(prev => ({
+            ...prev,
+            materia: value,
+            anio: selectedMateria?.anio || "", 
+            division: selectedMateria?.division || "",
+        }));
+    } else {
+        setForm({ ...form, [name]: value });
     }
-  };
+  };
 
-  const fetchAuxiliaryData = async () => {
-    try {
-      const [resMaterias, resUsuarios] = await Promise.all([
-        axios.get(AUX_DATA_URLS.materias, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(AUX_DATA_URLS.usuarios, { headers: { Authorization: `Bearer ${token}` } }),
-      ]);
-      setMaterias(resMaterias.data || []);
-      const soloProfesores = (resUsuarios.data || []).filter(u => u.rol === "profesor");
-      setProfesoresList(soloProfesores); // Guardar en profesoresList
-    } catch (err) {
-      console.error("Error al cargar datos auxiliares:", err);
-    }
-  };
+  const handleMultiSelectChange = (e) => {
+    const selectedValues = getSelectedOptions(e.target.options);
+    setForm(prev => ({ ...prev, profesores: selectedValues }));
+  };
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setForm({ ...form, [name]: value });
-  };
+  const handleFilterChange = (e) => {
+    setFilter({ ...filter, [e.target.name]: e.target.value });
+  };
 
-  // --- NUEVO: Handler para select múltiple ---
-  const handleMultiSelectChange = (e) => {
-    const selectedValues = getSelectedOptions(e.target.options);
-    setForm(prev => ({ ...prev, profesores: selectedValues }));
-  };
-  // --- FIN NUEVO ---
+  const resetForm = () => {
+    setForm({
+      materia: "",
+      profesores: [],
+      diaSemana: "Lunes",
+      horaInicio: "",
+      horaFin: ""
+    });
+    setEditingId(null);
+    setShowModal(false);
+  };
 
-  const handleFilterChange = (e) => {
-    setFilter({ ...filter, [e.target.name]: e.target.value });
-  };
+  // --- CORRECCIÓN 1: Usar clase.id (porque el backend lo renombra) ---
+  const abrirModalEditar = (clase) => {
+    const materiaId = clase.materia?._id || clase.materia || "";
+    const selectedMateria = materias.find(m => m._id === materiaId);
 
-  // --- CAMBIO: Actualizado 'resetForm' ---
-  const resetForm = () => {
-    setForm({
-      materia: "",
-      profesores: [], // Array vacío
-      anio: "",
-      division: "",   // Campo nuevo
-      diaSemana: "Lunes", // Resetear a Lunes o ""
-      horaInicio: "",
-      horaFin: ""
-    });
-    setEditingId(null);
-    setShowModal(false);
-  };
-  // --- FIN CAMBIO ---
+    setEditingId(clase.id); // <-- Usar .id, no ._id
 
-  // --- CAMBIO: Actualizado 'abrirModalEditar' ---
-  const abrirModalEditar = (clase) => {
-    setEditingId(clase.id); // Asegúrate que 'id' venga del backend
-    setForm({
-      materia: clase.materia?._id || clase.materia || "", // Manejar si viene populado o solo ID
-      // Mapear el array de profesores populados a un array de IDs
-      profesores: (clase.profesores || []).map(p => p._id || p),
-      anio: clase.anio || "",
-      division: clase.division || "", // Campo nuevo
-      diaSemana: clase.diaSemana || "",
-      // Asumiendo que 'horario' sigue viniendo como "HH:MM - HH:MM"
-      horaInicio: clase.horario ? clase.horario.split(' - ')[0] : (clase.horaInicio || ""),
-      horaFin: clase.horario ? clase.horario.split(' - ')[1] : (clase.horaFin || "")
-    });
-    setShowModal(true);
-  };
-  // --- FIN CAMBIO ---
+    setForm({
+      materia: materiaId,
+      profesores: (clase.profesores || []).map(p => p._id || p),
+      anio: selectedMateria?.anio || clase.anio || "", 
+      division: selectedMateria?.division || clase.division || "",
+      diaSemana: clase.diaSemana || "Lunes",
+      horaInicio: clase.horario ? clase.horario.split(' - ')[0] : (clase.horaInicio || ""),
+      horaFin: clase.horario ? clase.horario.split(' - ')[1] : (clase.horaFin || "")
+    });
+    setShowModal(true);
+  };
 
-  const abrirModalCrear = () => {
-    resetForm();
-    setShowModal(true);
-  };
+  const abrirModalCrear = () => {
+    resetForm();
+    setShowModal(true);
+  };
 
-  // --- CAMBIO: 'handleGuardar' envía 'profesores' y 'division' ---
-  const handleGuardar = async (e) => {
-    e.preventDefault();
-    // Validar que se haya seleccionado al menos un profesor
-     if (form.profesores.length === 0) {
-       Swal.fire("Error", "Debe seleccionar al menos un profesor.", "error");
-       return;
-     }
-     if (!form.division) {
-        Swal.fire("Error", "Debe ingresar la división.", "error");
+  const handleGuardar = async (e) => {
+    e.preventDefault();
+
+    const selectedMateria = materias.find(m => m._id === form.materia);
+    
+    if (!selectedMateria) {
+        Swal.fire({ title: "Error", text: "Debe seleccionar una materia válida.", icon: "error", confirmButtonColor: "#EF4444" });
         return;
-     }
-
-    setLoadingAction(true);
-    // El 'form' state ya incluye 'profesores' (array) y 'division'
-    try {
-      if (editingId) {
-        await axios.put(`${API_URL}/${editingId}`, form, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        Swal.fire("¡Actualizado!", "La clase ha sido modificada.", "success");
-      } else {
-        await axios.post(API_URL, form, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        Swal.fire("¡Creado!", "La nueva clase ha sido registrada.", "success");
-      }
-      resetForm();
-      fetchClases(); // Refrescar la lista
-    } catch (err) {
-      const msg = err.response?.data?.msg || "Hubo un error al guardar la clase.";
-      console.error("Error al guardar clase:", err.response?.data);
-      Swal.fire("Error", msg, "error");
-    } finally {
-      setLoadingAction(false);
     }
-  };
-  // --- FIN CAMBIO ---
+    
+    const payload = {
+        materia: form.materia,
+        profesores: form.profesores,
+        anio: selectedMateria.anio, 
+        division: selectedMateria.division, 
+        diaSemana: form.diaSemana,
+        horaInicio: form.horaInicio,
+        horaFin: form.horaFin,
+    };
 
-  const handleEliminar = async (id) => {
-    // ... (sin cambios)
-  };
+    if (payload.profesores.length === 0) {
+      Swal.fire({ title: "Error", text: "Debe seleccionar al menos un profesor.", icon: "error", confirmButtonColor: "#EF4444" });
+      return;
+    }
 
-  const diasSemana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
-  const aniosAcademicos = [1, 2, 3, 4, 5, 6];
-  const divisionesEjemplo = ["A", "B", "C"]; // O podrías cargarlas desde el backend
+    setLoadingAction(true);
+    try {
+      if (editingId) {
+        await axios.put(`${API_URL}/${editingId}`, payload, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        await Swal.fire({
+          title: "¡Actualizado!",
+          text: "La clase ha sido modificada correctamente.",
+          icon: "success",
+          confirmButtonColor: "#4F46E5",
+        });
+      } else {
+        await axios.post(API_URL, payload, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        await Swal.fire({
+          title: "¡Creado!",
+          text: "La nueva clase ha sido registrada exitosamente.",
+          icon: "success",
+          confirmButtonColor: "#4F46E5",
+        });
+      }
+      resetForm();
+      fetchClases();
+    } catch (err) {
+      const msg = err.response?.data?.msg || "Hubo un error al guardar la clase.";
+      console.error("Error al guardar clase:", err.response?.data);
+      Swal.fire({
+        title: "Error",
+        text: msg,
+        icon: "error",
+        confirmButtonColor: "#EF4444",
+      });
+    } finally {
+      setLoadingAction(false);
+    }
+  };
 
-  return (
-    <div className="min-h-screen bg-gray-50 p-6 font-sans">
-      <div className="max-w-7xl mx-auto space-y-6"> {/* Aumentado max-w */}
-        {/* Encabezado */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-           {/* ... (sin cambios en el título) ... */}
-           <div>
-              <h1 className="text-3xl font-bold text-gray-900">Gestión de Clases</h1>
-              <p className="text-lg text-gray-600">Administra los horarios y asignaciones</p>
-           </div>
-        </div>
+  const handleEliminar = async (id) => {
+    const confirm = await Swal.fire({
+      title: "¿Estás seguro?",
+      text: "Esta acción no se puede deshacer.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#EF4444",
+      cancelButtonColor: "#6B7280",
+      confirmButtonText: "Sí, eliminar",
+      cancelButtonText: "Cancelar",
+    });
+    if (!confirm.isConfirmed) return;
 
-        {/* Filtros */}
-        <div className="bg-white p-4 rounded-lg shadow border flex flex-wrap items-center gap-4">
-            <h3 className="text-md font-semibold text-gray-700 mr-2">Filtrar por:</h3>
-            {/* Filtro Año */}
-            <select name="anio" value={filter.anio} onChange={handleFilterChange} className="border p-2 rounded-md text-sm">
-                <option value="">Año</option>
-                {aniosAcademicos.map((a) => <option key={a} value={a}>{a}° Año</option>)}
-            </select>
-            {/* Filtro División */}
-            <select name="division" value={filter.division} onChange={handleFilterChange} className="border p-2 rounded-md text-sm">
-                 <option value="">División</option>
-                 {divisionesEjemplo.map((d) => <option key={d} value={d}>{d}</option>)}
-            </select>
-            {/* Filtro Día */}
-            <select name="diaSemana" value={filter.diaSemana} onChange={handleFilterChange} className="border p-2 rounded-md text-sm">
-                 <option value="">Día</option>
-                 {diasSemana.map((d) => <option key={d} value={d}>{d}</option>)}
-            </select>
-            {/* Botón Limpiar Filtros */}
-            {(filter.anio || filter.division || filter.diaSemana) && (
-                <button onClick={() => setFilter({ anio: "", diaSemana: "", division: "" })}
-                        className="text-sm text-blue-600 hover:underline ml-auto">
-                    Limpiar filtros
-                </button>
-            )}
-        </div>
+    try {
+      await axios.delete(`${API_URL}/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      await Swal.fire({
+        title: "¡Eliminado!",
+        text: "La clase ha sido eliminada correctamente.",
+        icon: "success",
+        confirmButtonColor: "#4F46E5",
+      });
+      fetchClases();
+  	 } catch (err) {
+  	   const msg = err.response?.data?.msg || "No se pudo eliminar la clase.";
+  	   Swal.fire({
+  	   	 title: "Error",
+  	   	 text: msg,
+  	   	 icon: "error",
+  	   	 confirmButtonColor: "#EF4444",
+  	   });
+  	 }
+  };
 
+  const diasSemana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+  const aniosAcademicos = [1, 2, 3, 4, 5, 6];
+  const divisionesEjemplo = ["A", "B", "C"];
 
-        {/* Tabla de Clases */}
-        <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200">
-          {loading ? (
-             <div className="flex justify-center items-center p-12"> <Loader2 className="animate-spin text-3xl text-blue-500" /> </div>
-          ) : clases.length === 0 ? (
-             <div className="text-center p-12 text-gray-500">
-                <AlertCircle size={40} className="mx-auto text-gray-400 mb-3" />
-                <p className="font-semibold">No hay clases registradas {filter.anio || filter.division || filter.diaSemana ? 'con los filtros aplicados' : ''}.</p>
-                <button onClick={abrirModalCrear} className="mt-4 inline-flex items-center gap-2 bg-indigo-600 text-white font-semibold px-4 py-2 rounded-lg text-sm hover:bg-indigo-700">
-                   <Plus size={16} /> Crear Nueva Clase
-                </button>
-             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <div className="p-4 flex justify-end">
-                <button onClick={abrirModalCrear} className="inline-flex items-center gap-2 bg-indigo-600 text-white font-semibold px-4 py-2 rounded-lg text-sm hover:bg-indigo-700">
-                  <Plus size={16} /> Crear Nueva Clase
-                </button>
-              </div>
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-5 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Materia</th>
-                    {/* --- CAMBIO: Columna Profesores --- */}
-                    <th className="px-5 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Profesor(es)</th>
-                    {/* --- FIN CAMBIO --- */}
-                    {/* --- CAMBIO: Año y División combinados --- */}
-                    <th className="px-5 py-3 text-center text-xs font-bold text-gray-600 uppercase tracking-wider">Curso</th>
-                    {/* --- FIN CAMBIO --- */}
-                    <th className="px-5 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Día</th>
-                    <th className="px-5 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Horario</th>
-                    <th className="px-5 py-3 text-center text-xs font-bold text-gray-600 uppercase tracking-wider">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {clases.map((c) => (
-                    <tr key={c.id} className="hover:bg-gray-50">
-                      <td className="px-5 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{c.materia?.nombre || "N/A"}</td>
-                      {/* --- CAMBIO: Mostrar lista de profesores --- */}
-                      <td className="px-5 py-4 whitespace-nowrap text-sm text-gray-600">
-                         {(c.profesores || []).map(p => p.nombre).join(', ') || "N/A"}
-                      </td>
-                      {/* --- FIN CAMBIO --- */}
-                      {/* --- CAMBIO: Mostrar Año y División --- */}
-                      <td className="px-5 py-4 whitespace-nowrap text-sm text-gray-600 text-center">{c.anio ? `${c.anio}° ${c.division || ''}` : "N/A"}</td>
-                      {/* --- FIN CAMBIO --- */}
-                      <td className="px-5 py-4 whitespace-nowrap text-sm text-gray-600">{c.diaSemana || "N/A"}</td>
-                      <td className="px-5 py-4 whitespace-nowrap text-sm text-gray-600">{c.horario || `${c.horaInicio || '?'} - ${c.horaFin || '?'}`}</td>
-                      <td className="px-5 py-4 whitespace-nowrap text-sm font-medium text-center">
-                        <div className="flex items-center justify-center gap-3">
-                          <button onClick={() => abrirModalEditar(c)} className="text-indigo-600 hover:text-indigo-800" title="Editar"><Edit3 size={16} /></button>
-                          <button onClick={() => handleEliminar(c.id)} className="text-red-600 hover:text-red-800" title="Eliminar"><Trash2 size={16} /></button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+  const hasActiveFilters = filter.anio || filter.division || filter.diaSemana;
 
-        {/* MODAL DE EDICIÓN / CREACIÓN */}
-        {showModal && (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl p-6 w-full max-w-lg shadow-xl relative animate-fade-in-down"> {/* Animación simple */}
-              <button onClick={resetForm} className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"><X size={20} /></button>
-              <h3 className="text-xl font-semibold text-gray-900 mb-5 border-b pb-3">
-                {editingId ? "Editar Clase" : "Crear Nueva Clase"}
-              </h3>
-              <form onSubmit={handleGuardar} className="grid gap-4">
-                {/* Materia */}
-                <select name="materia" value={form.materia} onChange={handleInputChange} required className="input-style">
-                   <option value="">Seleccionar Materia</option>
-                   {materias.map((m) => <option key={m._id} value={m._id}>{m.nombre} ({m.anio}° Año)</option>)}
-                </select>
+  return (
+  	 <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 p-8">
+  	 	 <div className="max-w-7xl mx-auto space-y-6">
+  	 	 	 
+  	 	 	 {/* Header Premium */}
+  	 	 	 <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+  	 	 	 	 <div className="flex items-center gap-4">
+  	 	 	 	 	 <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-600 text-white flex items-center justify-center shadow-xl">
+  	 	 	 	 	 	 <GraduationCap size={32} />
+  	 	 	 	 	 </div>
+  	 	 	 	 	 <div>
+  	 	 	 	 	 	 <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">
+  	 	 	 	 	 	 	 Gestión de Clases
+  	 	 	 	 	 	 </h1>
+  	 	 	 	 	 	 <p className="text-lg text-gray-600 mt-1">
+  	 	 	 	 	 	 	 Administra horarios, profesores y asignaciones
+  	 	 	 	 	 	 </p>
+  	 	 	 	 	 </div>
+  	 	 	 	 </div>
+  	 	 	 	 
+  	 	 	 	 <button
+  	 	 	 	 	 onClick={abrirModalCrear}
+  	 	 	 	 	 className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-all transform hover:scale-105 flex items-center gap-2"
+  	 	 	 	 >
+  	 	 	 	 	 <Plus size={20} />
+  	 	 	 	 	 Nueva Clase
+  	 	 	 	 </button>
+  	 	 	 </div>
 
-                {/* --- CAMBIO: Select Múltiple Profesores --- */}
-                <div>
-                   <label className="block text-xs font-medium text-gray-600 mb-1">Profesor(es)</label>
-                   <select name="profesores" multiple value={form.profesores} onChange={handleMultiSelectChange} required className="input-style h-28">
-                     {profesoresList.map((p) => <option key={p._id} value={p._id}>{p.nombre}</option>)}
-                   </select>
-                   <p className="text-xs text-gray-500 mt-1">Ctrl+Click para seleccionar varios.</p>
-                </div>
-                {/* --- FIN CAMBIO --- */}
+  	 	 	 {/* Sección de Filtros Mejorada */}
+  	 	 	 <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+  	 	 	 	 <button
+  	 	 	 	 	 onClick={() => setShowFilters(!showFilters)}
+  	 	 	 	 	 className="w-full flex items-center justify-between p-5 hover:bg-gray-50 transition-colors"
+  	 	 	 	 >
+  	 	 	 	 	 <div className="flex items-center gap-3">
+  	 	 	 	 	 	 <Filter size={20} className="text-indigo-600" />
+  	 	 	 	 	 	 <h3 className="text-lg font-bold text-gray-900">Filtros</h3>
+  	 	 	 	 	 	 {hasActiveFilters && (
+  	 	 	 	 	 	 	 <span className="bg-indigo-100 text-indigo-700 text-xs font-semibold px-3 py-1 rounded-full">
+  	 	 	 	 	 	 	 	 Activos
+  	 	 	 	 	 	 	 </span>
+  	 	 	 	 	 	 )}
+  	 	 	 	 	 </div>
+  	 	 	 	 	 <X size={20} className={`text-gray-400 transform transition-transform ${showFilters ? 'rotate-45' : ''}`} />
+  	 	 	 	 </button>
+  	 	 	 	 
+  	 	 	 	 {showFilters && (
+  	 	 	 	 	 <div className="p-5 border-t border-gray-100 bg-gray-50">
+  	 	 	 	 	 	 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+  	 	 	 	 	 	 	 <div>
+  	 	 	 	 	 	 	 	 <label className="block text-sm font-semibold text-gray-700 mb-2">Año Académico</label>
+  	 	 	 	 	 	 	 	 <select
+  	 	 	 	 	 	 	 	 	 name="anio"
+  	 	 	 	 	 	 	 	 	 value={filter.anio}
+  	 	 	 	 	 	 	 	 	 onChange={handleFilterChange}
+  	 	 	 	 	 	 	 	 	 className="w-full border-2 border-gray-200 p-3 rounded-lg text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all bg-white"
+  	 	 	 	 	 	 	 	 >
+  	 	 	 	 	 	 	 	 	 <option value="">Todos los años</option>
+  	 	 	 	 	 	 	 	 	 {aniosAcademicos.map((a) => (
+  	 	 	 	 	 	 	 	 	 	 <option key={a} value={a}>{a}° Año</option>
+  	 	 	 	 	 	 	 	 	 ))}
+  	 	 	 	 	 	 	 	 </select>
+  	 	 	 	 	 	 	 </div>
 
-                {/* Año y División */}
-                <div className="grid grid-cols-2 gap-4">
-                   <select name="anio" value={form.anio} onChange={handleInputChange} required className="input-style">
-                     <option value="">Año Académico</option>
-                     {aniosAcademicos.map((a) => <option key={a} value={a}>{a}° Año</option>)}
-                   </select>
-                   {/* --- CAMBIO: Input División --- */}
-                   <input type="text" name="division" value={form.division} onChange={handleInputChange} placeholder="División (Ej: A)" required maxLength={1} className="input-style uppercase"/>
-                   {/* --- FIN CAMBIO --- */}
-                </div>
+  	 	 	 	 	 	 	 <div>
+  	 	 	 	 	 	 	 	 <label className="block text-sm font-semibold text-gray-700 mb-2">División</label>
+  	 	 	 	 	 	 	 	 <select
+  	 	 	 	 	 	 	 	 	 name="division"
+  	 	 	 	 	 	 	 	 	 value={filter.division}
+  	 	 	 	 	 	 	 	 	 onChange={handleFilterChange}
+  	 	 	 	 	 	 	 	 	 className="w-full border-2 border-gray-200 p-3 rounded-lg text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all bg-white"
+  	 	 	 	 	 	 	 	 >
+  	 	 	 	 	 	 	 	 	 <option value="">Todas las divisiones</option>
+  	 	 	 	 	 	 	 	 	 {divisionesEjemplo.map((d) => (
+  	 	 	 	 	 	 	 	 	 	 <option key={d} value={d}>{d}</option>
+  	 	 	 	 	 	 	 	 	 ))}
+  	 	 	 	 	 	 	 	 </select>
+  	 	 	 	 	 	 	 </div>
 
-                {/* Día */}
-                <select name="diaSemana" value={form.diaSemana} onChange={handleInputChange} required className="input-style">
-                  {diasSemana.map((dia) => <option key={dia} value={dia}>{dia}</option>)}
-                </select>
+  	 	 	 	 	 	 	 <div>
+  	 	 	 	 	 	 	 	 <label className="block text-sm font-semibold text-gray-700 mb-2">Día de la Semana</label>
+  	 	 	 	 	 	 	 	 <select
+  	 	 	 	 	 	 	 	 	 name="diaSemana"
+  	 	 	 	 	 	 	 	 	 value={filter.diaSemana}
+  	 	 	 	 	 	 	 	 	 onChange={handleFilterChange}
+  	 	 	 	 	 	 	 	 	 className="w-full border-2 border-gray-200 p-3 rounded-lg text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all bg-white"
+  	 	 	 	 	 	 	 	 >
+  	 	 	 	 	 	 	 	 	 <option value="">Todos los días</option>
+  	 	 	 	 	 	 	 	 	 {diasSemana.map((d) => (
+  	 	 	 	 	 	 	 	 	 	 <option key={d} value={d}>{d}</option>
+  	 	 	 	 	 	 	 	 	 ))}
+  	 	 	 	 	 	 	 	 </select>
+  	 	 	 	 	 	 	 </div>
+  	 	 	 	 	 	 </div>
 
-                {/* Horarios */}
-                <div className="grid grid-cols-2 gap-4">
-                   <input type="time" name="horaInicio" value={form.horaInicio} onChange={handleInputChange} required className="input-style"/>
-                   <input type="time" name="horaFin" value={form.horaFin} onChange={handleInputChange} required className="input-style"/>
-                </div>
+  	 	 	 	 	 	 {hasActiveFilters && (
+  	 	 	 	 	 	 	 <button
+  	 	 	 	 	 	 	 	 onClick={() => setFilter({ anio: "", diaSemana: "", division: "" })}
+  	 	 	 	 	 	 	 	 className="mt-4 text-sm text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-2"
+  	 	 	 	 	 	 	 >
+  	 	 	 	 	 	 	 	 <X size={16} />
+  	 	 	 	 	 	 	 	 Limpiar todos los filtros
+  	 	 	 	 	 	 	 </button>
+  	 	 	 	 	 	 )}
+  	 	 	 	 	 </div>
+  	 	 	 	 )}
+  	 	 	 </div>
 
-                {/* Botones */}
-                <div className="flex justify-end gap-3 pt-4 border-t mt-2">
-                  <button type="button" onClick={resetForm} className="btn-secondary" disabled={loadingAction}>Cancelar</button>
-                  <button type="submit" className="btn-primary" disabled={loadingAction}>
-                    {loadingAction ? <Loader2 size={18} className="animate-spin mr-2"/> : <Save size={18} className="mr-2"/>}
-                    {loadingAction ? "Guardando..." : "Guardar Cambios"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-      </div>
-       {/* --- Estilos CSS reutilizables --- */}
-       <style jsx global>{`
-         .input-style {
-           @apply w-full border border-gray-300 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors bg-white;
-         }
-         .btn-primary {
-           @apply inline-flex items-center bg-indigo-600 text-white font-semibold px-4 py-2 rounded-lg text-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors;
-         }
-         .btn-secondary {
-            @apply inline-flex items-center bg-gray-200 text-gray-700 font-semibold px-4 py-2 rounded-lg text-sm hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors;
-         }
-         @keyframes fade-in-down { 0% { opacity: 0; transform: translateY(-10px); } 100% { opacity: 1; transform: translateY(0); } }
-         .animate-fade-in-down { animation: fade-in-down 0.3s ease-out forwards; }
-       `}</style>
-    </div>
-  );
+  	 	 	 {/* Tabla Premium */}
+  	 	 	 <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
+  	 	 	 	 {loading ? (
+  	 	 	 	 	 <div className="flex flex-col items-center justify-center p-16">
+  	 	 	 	 	 	 <Loader2 size={48} className="animate-spin text-indigo-600 mb-4" />
+  	 	 	 	 	 	 <p className="text-lg text-gray-700 font-semibold">Cargando clases...</p>
+  	 	 	 	 	 </div>
+  	 	 	 	 ) : clases.length === 0 ? (
+  	 	 	 	 	 <div className="text-center p-16">
+  	 	 	 	 	 	 <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+  	 	 	 	 	 	 	 <AlertCircle size={40} className="text-gray-400" />
+  	 	 	 	 	 	 </div>
+  	 	 	 	 	 	 <p className="text-xl font-bold text-gray-900 mb-2">
+  	 	 	 	 	 	 	 No hay clases registradas
+  	 	 	 	 	 	 </p>
+  	 	 	 	 	 	 <p className="text-gray-600 mb-6">
+  	 	 	 	 	 	 	 {hasActiveFilters ? 'con los filtros aplicados.' : 'Comienza creando tu primera clase.'}
+  	 	 	 	 	 	 </p>
+  	 	 	 	 	 	 <button
+  	 	 	 	 	 	 	 onClick={abrirModalCrear}
+  	 	 	 	 	 	 	 className="inline-flex items-center gap-2 bg-indigo-600 text-white font-semibold px-6 py-3 rounded-xl text-sm hover:bg-indigo-700 shadow-lg transition-all"
+  	 	 	 	 	 	 >
+  	 	 	 	 	 	 	 <Plus size={18} />
+  	 	 	 	 	 	 	 Crear Primera Clase
+  	 	 	 	 	 	 </button>
+  	 	 	 	 	 </div>
+  	 	 	 	 ) : (
+  	 	 	 	 	 <div className="overflow-x-auto">
+  	 	 	 	 	 	 <table className="min-w-full divide-y divide-gray-200">
+  	 	 	 	 	 	 	 <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
+  	 	 	 	 	 	 	 	 <tr>
+  	 	 	 	 	 	 	 	 	 <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+  	 	 	 	 	 	 	 	 	 	 <div className="flex items-center gap-2">
+  	 	 	 	 	 	 	 	 	 	 	 <BookOpen size={16} className="text-indigo-600" />
+  	 	 	 	 	 	 	 	 	 	 	 Materia
+  	 	 	 	 	 	 	 	 	 	 </div>
+  	 	 	 	 	 	 	 	 	 </th>
+  	 	 	 	 	 	 	 	 	 <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+  	 	 	 	 	 	 	 	 	 	 <div className="flex items-center gap-2">
+  	 	 	 	 	 	 	 	 	 	 	 <Users size={16} className="text-indigo-600" />
+  	 	 	 	 	 	 	 	 	 	 	 Profesor(es)
+  	 	 	 	 	 	 	 	 	 	 </div>
+  	 	 	 	 	 	 	 	 	 </th>
+  	 	 	 	 	 	 	 	 	 <th className="px-6 py-4 text-center text-xs font-bold text-gray-700 uppercase tracking-wider">
+  	 	 	 	 	 	 	 	 	 	 <div className="flex items-center justify-center gap-2">
+  	 	 	 	 	 	 	 	 	 	 	 <GraduationCap size={16} className="text-indigo-600" />
+  	 	 	 	 	 	 	 	 	 	 	 Curso
+  	 	 	 	 	 	 	 	 	 	 </div>
+  	 	 	 	 	 	 	 	 	 </th>
+  	 	 	 	 	 	 	 	 	 <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+  	 	 	 	 	 	 	 	 	 	 <div className="flex items-center gap-2">
+  	 	 	 	 	 	 	 	 	 	 	 <Calendar size={16} className="text-indigo-600" />
+  	 	 	 	 	 	 	 	 	 	 	 Día
+  	 	 	 	 	 	 	 	 	 	 </div>
+  	 	 	 	 	 	 	 	 	 </th>
+  	 	 	 	 	 	 	 	 	 <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+  	 	 	 	 	 	 	 	 	 	 <div className="flex items-center gap-2">
+  	 	 	 	 	 	 	 	 	 	 	 <Clock size={16} className="text-indigo-600" />
+  	 	 	 	 	 	 	 	 	 	 	 Horario
+  	 	 	 	 	 	 	 	 	 	 </div>
+  	 	 	 	 	 	 	 	 	 </th>
+  	 	 	 	 	 	 	 	 	 <th className="px-6 py-4 text-center text-xs font-bold text-gray-700 uppercase tracking-wider">
+  	 	 	 	 	 	 	 	 	 	 Acciones
+  	 	 	 	 	 	 	 	 	 </th>
+  	 	 	 	 	 	 	 	 </tr>
+  	 	 	 	 	 	 	 </thead>
+  	 	 	 	 	 	 	 <tbody className="bg-white divide-y divide-gray-100">
+  	 	 	 	 	 	 	 	 {clases.map((c) => (
+  	 	 	 	 	 	 	 	 	 // --- CORRECCIÓN 2: Usar c.id (porque el backend lo renombra) ---
+  	 	 	 	 	 	 	 	 	 <tr key={c.id} className="hover:bg-indigo-50 transition-colors">
+  	 	 	 	 	 	 	 	 	 	 <td className="px-6 py-4 whitespace-nowrap">
+  	 	 	 	 	 	 	 	 	 	 	 <div className="text-sm font-bold text-gray-900">{c.materia?.nombre || "N/A"}</div>
+  	 	 	 	 	 	 	 	 	 	 </td>
+  	 	 	 	 	 	 	 	 	 	 <td className="px-6 py-4">
+  	 	 	 	 	 	 	 	 	 	 	 <div className="text-sm text-gray-700">
+  	 	 	 	 	 	 	 	 	 	 	 	 {(c.profesores || []).map(p => `${p.nombre} ${p.apellido || ''}`).join(', ') || "N/A"}
+  	 	 	 	 	 	 	 	 	 	 	 </div>
+  	 	 	 	 	 	 	 	 	 	 </td>
+  	 	 	 	 	 	 	 	 	 	 <td className="px-6 py-4 whitespace-nowrap text-center">
+  	 	 	 	 	 	 	 	 	 	 	 <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800">
+  	 	 	 	 	 	 	 	 	 	 	 	 {c.anio ? `${c.anio}° ${c.division || ''}` : "N/A"}
+  	 	 	 	 	 	 	 	 	 	 	 </span>
+  	 	 	 	 	 	 	 	 	 	 </td>
+  	 	 	 	 	 	 	 	 	 	 <td className="px-6 py-4 whitespace-nowrap">
+  	 	 	 	 	 	 	 	 	 	 	 <div className="text-sm text-gray-700">{c.diaSemana || "N/A"}</div>
+  	 	 	 	 	 	 	 	 	 	 </td>
+  	 	 	 	 	 	 	 	 	 	 <td className="px-6 py-4 whitespace-nowrap">
+  	 	 	 	 	 	 	 	 	 	 	 <div className="text-sm font-medium text-gray-900">
+  	 	 	 	 	 	 	 	 	 	 	 	 {c.horario || `${c.horaInicio || '?'} - ${c.horaFin || '?'}`}
+  	 	 	 	 	 	 	 	 	 	 	 </div>
+  	 	 	 	 	 	 	 	 	 	 </td>
+  	 	 	 	 	 	 	 	 	 	 <td className="px-6 py-4 whitespace-nowrap text-center">
+  	 	 	 	 	 	 	 	 	 	 	 <div className="flex items-center justify-center gap-3">
+  	 	 	 	 	 	 	 	 	 	 	 	 <button
+  	 	 	 	 	 	 	 	 	 	 	 	 	 onClick={() => abrirModalEditar(c)}
+  	 	 	 	 	 	 	 	 	 	 	 	 	 className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-all"
+  	 	 	 	 	 	 	 	 	 	 	 	 	 title="Editar"
+  	 	 	 	 	 	 	 	 	 	 	 	 >
+  	 	 	 	 	 	 	 	 	 	 	 	 	 <Edit3 size={18} />
+  	 	 	 	 	 	 	 	 	 	 	 	 </button>
+  	 	 	 	 	 	 	 	 	 	 	 	 <button
+  	 	 	 	 	 	 	 	 	 	 	 	 	 // --- CORRECCIÓN 3: Usar c.id (porque el backend lo renombra) ---
+  	 	 	 	 	 	 	 	 	 	 	 	 	 onClick={() => handleEliminar(c.id)}
+  	 	 	 	 	 	 	 	 	 	 	 	 	 className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-all"
+  	 	 	 	 	 	 	 	 	 	 	 	 	 title="Eliminar"
+  	 	 	 	 	 	 	 	 	 	 	 	 >
+  	 	 	 	 	 	 	 	 	 	 	 	 	 <Trash2 size={18} />
+  	 	 	 	 	 	 	 	 	 	 	 	 </button>
+  	 	 	 	 	 	 	 	 	 	 	 </div>
+  	 	 	 	 	 	 	 	 	 	 </td>
+  	 	 	 	 	 	 	 	 	 </tr>
+  	 	 	 	 	 	 	 	 ))}
+  	 	 	 	 	 	 	 </tbody>
+  	 	 	 	 	 	 </table>
+  	 	 	 	 	 </div>
+  	 	 	 	 )}
+  	 	 	 </div>
+
+  	 	 	 {/* MODAL PREMIUM */}
+  	 	 	 {showModal && (
+  	 	 	 	 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+  	 	 	 	 	 <div className="bg-white rounded-3xl p-6 md:p-8 w-full max-w-xl my-8 shadow-2xl relative animate-scale-in">
+  	 	 	 	 	 	 <button
+  	 	 	 	 	 	 	 onClick={resetForm}
+  	 	 	 	 	 	 	 className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
+  	 	 	 	 	 	 >
+  	 	 	 	 	 	 	 <X size={24} />
+  	 	 	 	 	 	 </button>
+  	 	 	 	 	 	 
+  	 	 	 	 	 	 <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-200">
+  	 	 	 	 	 	 	 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 text-white flex items-center justify-center flex-shrink-0">
+  	 	 	 	 	 	 	 	 <GraduationCap size={20} />
+  	 	 	 	 	 	 	 </div>
+  	 	 	 	 	 	 	 <div>
+  	 	 	 	 	 	 	 	 <h3 className="text-xl font-bold text-gray-900">
+  	 	 	 	 	 	 	 	 	 {editingId ? "Editar Clase" : "Crear Nueva Clase"}
+  	 	 	 	 	 	 	 	 </h3>
+  	 	 	 	 	 	 	 	 <p className="text-xs text-gray-600 mt-0.5">
+  	 	 	 	 	 	 	 	 	 {editingId ? "Modifica los datos de la clase" : "Completa la información para crear una clase"}
+  	 	 	 	 	 	 	 	 </p>
+  	 	 	 	 	 	 	 </div>
+  	 	 	 	 	 	 </div>
+
+  	 	 	 	 	 	 <form onSubmit={handleGuardar} className="space-y-4">
+  	 	 	 	 	 	 	 {/* Materia */}
+  	 	 	 	 	 	 	 <div>
+  	 	 	 	 	 	 	 	 <label className="block text-xs font-bold text-gray-700 mb-1.5">
+  	 	 	 	 	 	 	 	 	 Materia *
+  	 	 	 	 	 	 	 	 </label>
+  	 	 	 	 	 	 	 	 <select
+  	 	 	 	 	 	 	 	 	 name="materia"
+  	 	 	 	 	 	 	 	 	 value={form.materia}
+  	 	 	 	 	 	 	 	 	 onChange={handleInputChange}
+  	 	 	 	 	 	 	 	 	 required
+  	 	 	 	 	 	 	 	 	 className="w-full border-2 border-gray-200 p-2.5 rounded-xl text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all bg-white"
+  	 	 	 	 	 	 	 	 >
+  	 	 	 	 	 	 	 	 	 <option value="">Seleccionar Materia</option>
+  	 	 	 	 	 	 	 	 	 {materias.map((m) => (
+  	 	 	 	 	 	 	 	 	 	 <option key={m._id} value={m._id}>
+  	 	 	 	 	 	 	 	 	 	 	 {m.nombre} ({m.anio}° Año - Div. {m.division})
+  	 	 	 	 	 	 	 	 	 	 </option>
+  	 	 	 	 	 	 	 	 	 ))}
+  	 	 	 	 	 	 	 	 </select>
+  	 	 	 	 	 	 	 </div>
+  	 	 	 	 	 	 	 
+  	 	 	 	 	 	 	 {/* Visualización de Curso Automático (Solo informativo) */}
+  	 	 	 	 	 	 	 {form.materia && materias.find(m => m._id === form.materia) && (
+  	 	 	 	 	 	 	 	 <div className="bg-indigo-50 p-3 rounded-lg text-sm text-indigo-800 font-medium">
+  	 	 	 	 	 	 	 	 	 <p>Curso: **{materias.find(m => m._id === form.materia).anio}° {materias.find(m => m._id === form.materia).division}**</p>
+  	 	 	 	 	 	 	 	 	 <p className="text-xs text-indigo-600 mt-1">El Año y División se toman automáticamente de la materia.</p>
+  	 	 	 	 	 	 	 	 </div>
+  	 	 	 	 	 	 	 )}
+
+  	 	 	 	 	 	 	 {/* Profesores */}
+  	 	 	 	 	 	 	 <div>
+  	 	 	 	 	 	 	 	 <label className="block text-xs font-bold text-gray-700 mb-1.5">
+  	 	 	 	 	 	 	 	 	 Profesor(es) *
+  	 	 	 	 	 	 	 	 </label>
+  	 	 	 	 	 	 	 	 <select
+  	 	 	 	 	 	 	 	 	 name="profesores"
+  	 	 	 	 	 	 	 	 	 multiple
+  	 	 	 	 	 	 	 	 	 value={form.profesores}
+  	 	 	 	 	 	 	 	 	 onChange={handleMultiSelectChange}
+  	 	 	 	 	 	 	 	 	 required
+  	 	 	 	 	 	 	 	 	 className="w-full border-2 border-gray-200 p-2.5 rounded-xl text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all bg-white h-24"
+  	 	 	 	 	 	 	 	 >
+  	 	 	 	 	 	 	 	 	 {profesoresList.map((p) => (
+  	 	 	 	 	 	 	 	 	 	 <option key={p._id} value={p._id}>
+  	 	 	 	 	 	 	 	 	 	 	 {p.nombre} {p.apellido || ''}
+  	 	 	 	 	 	 	 	 	 	 </option>
+  	 	 	 	 	 	 	 	 	 ))}
+  	 	 	 	 	 	 	 	 </select>
+  	 	 	 	 	 	 	 	 <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+  	 	 	 	 	 	 	 	 	 <AlertCircle size={10} />
+  	 	 	 	 	 	 	 	 	 Mantén Ctrl/Cmd para seleccionar varios
+  	 	 	 	 	 	 	 	 </p>
+  	 	 	 	 	 	 	 </div>
+
+  	 	 	 	 	 	 	 {/* Día y Horarios */}
+  	 	 	 	 	 	 	 <div className="grid grid-cols-2 gap-3">
+  	 	 	 	 	 	 	 	 {/* Día de la Semana */}
+  	 	 	 	 	 	 	 	 <div>
+  	 	 	 	 	 	 	 	 	 <label className="block text-xs font-bold text-gray-700 mb-1.5">
+  	 	 	 	 	 	 	 	 	 	 Día de la Semana *
+  	 	 	 	 	 	 	 	 	 </label>
+  	 	 	 	 	 	 	 	 	 <select
+  	 	 	 	 	 	 	 	 	 	 name="diaSemana"
+  	 	 	 	 	 	 	 	 	 	 value={form.diaSemana}
+  	 	 	 	 	 	 	 	 	 	 onChange={handleInputChange}
+  	 	 	 	 	 	 	 	 	 	 required
+  	 	 	 	 	 	 	 	 	 	 className="w-full border-2 border-gray-200 p-2.5 rounded-xl text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all bg-white"
+  	 	 	 	 	 	 	 	 	 >
+  	 	 	 	 	 	 	 	 	 	 {diasSemana.map((dia) => (
+  	 	 	 	 	 	 	 	 	 	 	 <option key={dia} value={dia}>{dia}</option>
+  	 	 	 	 	 	 	 	 	 	 ))}
+  	 	 	 	 	 	 	 	 	 </select>
+  	 	 	 	 	 	 	 	 </div>
+  	 	 	 	 	 	 	 	 <div />
+  	 	 	 	 	 	 	 </div>
+  	 	 	 	 	 	 	 
+  	 	 	 	 	 	 	 <div className="grid grid-cols-2 gap-3">
+  	 	 	 	 	 	 	 	 {/* Hora Inicio */}
+  	 	 	 	 	 	 	 	 <div>
+  	 	 	 	 	 	 	 	 	 <label className="block text-xs font-bold text-gray-700 mb-1.5">
+  	 	 	 	 	 	 	 	 	 	 Hora Inicio *
+  	 	 	 	 	 	 	 	 	 </label>
+  	 	 	 	 	 	 	 	 	 <input
+  	 	 	 	 	 	 	 	 	 	 type="time"
+  	 	 	 	 	 	 	 	 	 	 name="horaInicio"
+  	 	 	 	 	 	 	 	 	 	 value={form.horaInicio}
+  	 	 	 	 	 	 	 	 	 	 onChange={handleInputChange}
+  	 	 	 	 	 	 	 	 	 	 required
+  	 	 	 	 	 	 	 	 	 	 className="w-full border-2 border-gray-200 p-2.5 rounded-xl text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
+  	 	 	 	 	 	 	 	 	 />
+  	 	 	 	 	 	 	 	 </div>
+
+  	 	 	 	 	 	 	 	 {/* Hora Fin */}
+  	 	 	 	 	 	 	 	 <div>
+  	 	 	 	 	 	 	 	 	 <label className="block text-xs font-bold text-gray-700 mb-1.5">
+  	 	 	 	 	 	 	 	 	 	 Hora Fin *
+  	 	 	 	 	 	 	 	 	 </label>
+  	 	 	 	 	 	 	 	 	 <input
+  	 	 	 	 	 	 	 	 	 	 type="time"
+  	 	 	 	 	 	 	 	 	 	 name="horaFin"
+  	 	 	 	 	 	 	 	 	 	 value={form.horaFin}
+  	 	 	 	 	 	 	 	 	 	 onChange={handleInputChange}
+  	 	 	 	 	 	 	 	 	 	 required
+  	 	 	 	 	 	 	 	 	 	 className="w-full border-2 border-gray-200 p-2.5 rounded-xl text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
+  	 	 	 	 	 	 	 	 	 />
+  	 	 	 	 	 	 	 	 </div>
+  	 	 	 	 	 	 	 </div>
+
+  	 	 	 	 	 	 	 {/* Botones */}
+  	 	 	 	 	 	 	 <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+  	 	 	 	 	 	 	 	 <button
+  	 	 	 	 	 	 	 	 	 type="button"
+  	 	 	 	 	 	 	 	 	 onClick={resetForm}
+  	 	 	 	 	 	 	 	 	 className="bg-gray-200 text-gray-700 font-bold px-5 py-2.5 rounded-xl hover:bg-gray-300 transition-colors disabled:opacity-50 text-sm"
+  	 	 	 	 	 	 	 	 	 disabled={loadingAction}
+  	 	 	 	 	 	 	 	 >
+  	 	 	 	 	 	 	 	 	 Cancelar
+  	 	 	 	 	 	 	 	 </button>
+  	 	 	 	 	 	 	 	 <button
+  	 	 	 	 	 	 	 	 	 type="submit"
+  	 	 	 	 	 	 	 	 	 className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold px-5 py-2.5 rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all disabled:opacity-50 flex items-center gap-2 shadow-lg text-sm"
+  	 	 	 	 	 	 	 	 	 disabled={loadingAction}
+  	 	 	 	 	 	 	 	 >
+  	 	 	 	 	 	 	 	 	 {loadingAction ? (
+  	 	 	 	 	 	 	 	 	 	 <>
+  	 	 	 	 	 	 	 	 	 	 	 <Loader2 size={16} className="animate-spin" />
+  	 	 	 	 	 	 	 	 	 	 	 Guardando...
+  	 	 	 	 	 	 	 	 	 	 </>
+  	 	 	 	 	 	 	 	 	 ) : (
+  	 	 	 	 	 	 	 	 	 	 <>
+  	 	   	 	 	 	 	 	 	 	 <Save size={16} />
+                                          {/* CORRECCIÓN 4: Usar editingId para cambiar el texto del botón */}
+  	 	   	 	 	 	 	 	 	 	 {editingId ? "Guardar Cambios" : "Crear"} 
+  	 	   	 	 	 	 	 	 	 </>
+          	   	 	 	 	 	 )}
+    	     	 	 	 	 	 </button>
+      	   	 	 	 	 </div>
+        	 	 	 	 </form>
+      	 	 	 	 </div>
+      	 	 	 </div>
+      	 	 )}
+    	 </div>
+
+    	 <style jsx global>{`
+      	 @keyframes scale-in {
+      	 	 0% {
+  	 	   	 	 opacity: 0;
+  	 	   	 	 transform: scale(0.95);
+  	 	   	 }
+  	 	   	 100% {
+  	 	 	 	 	 opacity: 1;
+  	 	 	 	 	 transform: scale(1);
+  	 	 	 	 }
+  	 	   }
+  	 	   .animate-scale-in {
+  	 	 	 	 animation: scale-in 0.2s ease-out forwards;
+  	 	   }
+    	 `}</style>
+    </div>
+  );
 };
 
 export default ClasesAdmin;

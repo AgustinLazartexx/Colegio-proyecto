@@ -22,7 +22,7 @@ const MateriasAdmin = () => {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [modoEdicion, setModoEdicion] = useState(false);
-  const [form, setForm] = useState({ nombre: "", anio: "", division: "", profesor: "" });
+  const [form, setForm] = useState({ nombre: "", anio: "", profesor: "", division: "" });
   const [editandoId, setEditandoId] = useState(null);
   const [loadingAction, setLoadingAction] = useState(false);
 
@@ -112,7 +112,7 @@ const MateriasAdmin = () => {
       });
       toast.success(modoEdicion ? "Materia actualizada" : "Materia creada");
       setShowModal(false);
-      setForm({ nombre: "", anio: "", division: "", profesor: "" });
+      setForm({ nombre: "", anio: "", profesor: "", division: "" });
       setModoEdicion(false);
       setEditandoId(null);
       fetchMaterias();
@@ -131,15 +131,15 @@ const MateriasAdmin = () => {
     setForm({
       nombre: materia.nombre,
       anio: materia.anio,
-      division: materia.division || "",
       profesor: materia.profesor?._id || "",
+      division: materia.division || "", // Añadir esta línea
     });
     setShowModal(true);
   };
 
   const abrirModalNuevo = () => {
     setModoEdicion(false);
-    setForm({ nombre: "", anio: "", division: "", profesor: "" });
+    setForm({ nombre: "", anio: "", profesor: "", division: "" });
     setShowModal(true);
   };
 
@@ -219,9 +219,9 @@ const MateriasAdmin = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                         {materia.anio === 0 ? "General" : `${materia.anio}°`}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                        {materia.division || "-"}
-                      </td>
+                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+  {materia.division || "Sin asignar"}
+</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                         {materia.profesor?.nombre || "Sin asignar"} {materia.profesor?.apellido || ""}
                       </td>
@@ -306,21 +306,17 @@ const MateriasAdmin = () => {
                   {/* El selector de División SÓLO aparece si el año es 1-6 */}
                   {!!form.anio && parseInt(form.anio, 10) > 0 && (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                     <label className="block text-sm font-medium text-gray-700 mb-1">
                         División
-                      </label>
-                      <select
-                        value={form.division}
-                        onChange={(e) => setForm({ ...form, division: e.target.value })}
-                        className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white"
-                        required
-                      >
-                        <option value="">Seleccionar...</option>
-                        <option value="A">A</option>
-                        <option value="B">B</option>
-                        <option value="C">C</option>
-                      </select>
-                    </div>
+                     </label>
+                     <input
+                          type="text"
+                          value={form.division}
+                          onChange={(e) => setForm({ ...form, division: e.target.value })}
+                          className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                          placeholder="Ej: A, B, C..."
+                        />
+                     </div>
                   )}
                 </div>
 
