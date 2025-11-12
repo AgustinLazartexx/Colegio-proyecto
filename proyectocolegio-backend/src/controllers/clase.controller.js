@@ -143,89 +143,112 @@ export const obtenerClasesProfesor = async (req, res) => {
     res.status(500).json({ msg: "Error interno del servidor", error: error.message });
 	}
 };
-
-// Actualizar clase (solo admin)
+// Actualizar clase (solo admin) - VERSIÓN LIMITADA
 export const actualizarClase = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const datosActualizacion = req.body;
-    const { materia } = req.body;
+  try {
+    const { id } = req.params;
+    // 1. Extraemos EXCLUSIVAMENTE los campos que permitiremos editar
+    const { diaSemana, horaInicio, horaFin, profesores } = req.body;
 
-    if (!mongoose.Types.ObjectId.isValid(id)) { 
-        return handleInvalidIdError(res, "clase", id); 
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return handleInvalidIdError(res, "clase", id);
     }
 
-    const claseExistente = await Clase.findById(id).populate("materia", "anio division");
-    if (!claseExistente) { 
-        return handleNotFoundError(res, "Clase"); 
+    // 2. Construimos el payload de actualización solo con los datos que llegaron
+    const updatePayload = {};
+
+    if (diaSemana) {
+      updatePayload.diaSemana = diaSemana;
     }
-
-    let anioClase = claseExistente.materia?.anio;
-    let divisionClase = claseExistente.materia?.division;
-    let materiaIdToUse = claseExistente.materia._id;
-
-    if (materia && materia.toString() !== claseExistente.materia._id.toString()) {
-        if (!mongoose.Types.ObjectId.isValid(materia)) {
-            return handleInvalidIdError(res, "materia", materia);
+    if (horaInicio) {
+      updatePayload.horaInicio = horaInicio;
+    }
+    if (horaFin) {
+      updatePayload.horaFin = horaFin;
+    }
+    if (profesores && Array.isArray(profesores)) {
+      // Validamos los IDs de profesores si se están actualizando
+      for (const profId of profesores) {
+        if (!mongoose.Types.ObjectId.isValid(profId)) {
+          return handleInvalidIdError(res, "profesor", profId);
         }
-        const nuevaMateria = await Materia.findById(materia);
-        if (!nuevaMateria) {
-            return handleNotFoundError(res, "Materia");
-        }
-        
-        anioClase = nuevaMateria.anio;
-        divisionClase = nuevaMateria.division;
-        materiaIdToUse = nuevaMateria._id;
+      }
+      updatePayload.profesores = profesores;
     }
-    
-    const updatePayload = {
-        ...datosActualizacion,
-        materia: materiaIdToUse,
-        anio: anioClase, 
-        division: divisionClase 
-    };
 
-    // Verificar conflictos
+    // Si no se envió ningún dato válido, devolvemos un error
+    if (Object.keys(updatePayload).length === 0) {
+      return res.status(400).json({
+        msg: "No se proporcionaron datos válidos para actualizar (solo se permite diaSemana, horaInicio, horaFin, profesores).",
+      });
+    }
+
+    // 3. Buscamos la clase existente para la validación de conflictos
+    const claseExistente = await Clase.findById(id);
+    if (!claseExistente) {
+      return handleNotFoundError(res, "Clase");
+    }
+
+    // 4. Preparamos los datos para la verificación de conflicto
+    // Usamos los datos nuevos si existen, o los existentes si no
     const profesoresIds = updatePayload.profesores || claseExistente.profesores;
-    const diaSemana = updatePayload.diaSemana || claseExistente.diaSemana;
-    const horaInicio = updatePayload.horaInicio || claseExistente.horaInicio;
-    const horaFin = updatePayload.horaFin || claseExistente.horaFin;
+    const diaSemanaCheck = updatePayload.diaSemana || claseExistente.diaSemana;
+    
+    // Importante: Si se actualiza solo una hora, debemos usar la otra existente
+    // para la validación de rango y para el hook pre-validate del modelo.
+    const horaInicioCheck = updatePayload.horaInicio || claseExistente.horaInicio;
+    const horaFinCheck = updatePayload.horaFin || claseExistente.horaFin;
 
-  	 if (updatePayload.profesores || updatePayload.diaSemana || 
-  	 	 	 updatePayload.horaInicio || updatePayload.horaFin || updatePayload.materia) 
-  	 {
-  	 	 const conflicto = await Clase.verificarConflictoHorario(
-  	 	 	 profesoresIds, 
-  	 	 	 diaSemana,
-  	 	 	 horaInicio,
-  	 	 	 horaFin,
-  	 	 	 id // Excluir la clase actual
-  	 	 );
+    // Asignamos ambas horas al payload si una de ellas cambió,
+    // para que el hook pre('validate') del modelo pueda calcular la duración
+    if (updatePayload.horaInicio || updatePayload.horaFin) {
+        updatePayload.horaInicio = horaInicioCheck;
+        updatePayload.horaFin = horaFinCheck;
+    }
 
-  	 	 if (conflicto) {
-  	 	 	  const nombresProfesoresConflicto = (conflicto.profesores || []).map(p => p.nombre).join(', ');
-  	 	 	    return res.status(400).json({ msg: `Conflicto de horario encontrado. Al menos uno de los profesores (${nombresProfesoresConflicto}) ya tiene una clase en ese horario.` });
-  	 	 }
-  	 }
+    // 5. Verificar conflictos de horario
+    const conflicto = await Clase.verificarConflictoHorario(
+      profesoresIds,
+      diaSemanaCheck,
+      horaInicioCheck,
+      horaFinCheck,
+      id // Excluir la clase actual de la verificación
+    );
 
-  	 const claseActualizada = await Clase.findByIdAndUpdate(id, updatePayload, { new: true, runValidators: true })
-  	 	 .populate([
-  	 	 	 { path: "materia", select: "nombre codigo anio division" },
-  	 	 	 { path: "profesores", select: "nombre apellido email" }
-  	 	 ]);
+    if (conflicto) {
+      const nombresProfesoresConflicto = (conflicto.profesores || [])
+        .map((p) => p.nombre)
+        .join(", ");
+      return res.status(400).json({
+        msg: `Conflicto de horario encontrado. Al menos uno de los profesores (${nombresProfesoresConflicto}) ya tiene una clase en ese horario.`,
+      });
+    }
 
-  	 res.json({
-  	 	 msg: "Clase actualizada correctamente",
-  	 	 clase: claseActualizada.obtenerInfoCompleta()
-  	 });
+    // 6. Actualizar la clase
+    // Solo se actualizarán los campos presentes en updatePayload
+    const claseActualizada = await Clase.findByIdAndUpdate(id, updatePayload, {
+      new: true,
+      runValidators: true, // Corremos validadores (ej. horaInicio < horaFin)
+    }).populate([
+      { path: "materia", select: "nombre codigo anio division" },
+      { path: "profesores", select: "nombre apellido email" },
+    ]);
 
-  } catch (error) {
-       console.error("=== ERROR AL ACTUALIZAR CLASE ===", error);
-       if (error.name === 'ValidationError') {
-           return res.status(400).json({ msg: 'Error de validación: ' + error.message });
-       }
-       res.status(500).json({ msg: "Error interno del servidor", error: error.message });
-  }
+    res.json({
+      msg: "Clase actualizada correctamente",
+      clase: claseActualizada.obtenerInfoCompleta(),
+    });
+  } catch (error) {
+    console.error("=== ERROR AL ACTUALIZAR CLASE ===", error);
+    if (error.name === "ValidationError") {
+      return res
+        .status(400)
+        .json({ msg: "Error de validación: " + error.message });
+    }
+    res
+      .status(500)
+      .json({ msg: "Error interno del servidor", error: error.message });
+  }
 };
 
 // --- CORRECCIÓN CRÍTICA: Implementar eliminarClase ---

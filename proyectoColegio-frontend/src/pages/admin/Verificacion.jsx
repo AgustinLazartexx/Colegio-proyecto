@@ -476,174 +476,222 @@ const ClasesAdmin = () => {
   	 	 	 	 	 </div>
   	 	 	 	 )}
   	 	 	 </div>
+      {/* MODAL PREMIUM */}
+{showModal && (
+  <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+    <div className="bg-white rounded-3xl p-6 md:p-8 w-full max-w-xl my-8 shadow-2xl relative animate-scale-in">
+      <button
+        onClick={resetForm}
+        className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
+      >
+        <X size={24} />
+      </button>
 
-  	 	 	 {/* MODAL PREMIUM */}
-  	 	 	 {showModal && (
-  	 	 	 	 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
-  	 	 	 	 	 <div className="bg-white rounded-3xl p-6 md:p-8 w-full max-w-xl my-8 shadow-2xl relative animate-scale-in">
-  	 	 	 	 	 	 <button
-  	 	 	 	 	 	 	 onClick={resetForm}
-  	 	 	 	 	 	 	 className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
-  	 	 	 	 	 	 >
-  	 	 	 	 	 	 	 <X size={24} />
-  	 	 	 	 	 	 </button>
-  	 	 	 	 	 	 
-  	 	 	 	 	 	 <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-200">
-  	 	 	 	 	 	 	 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 text-white flex items-center justify-center flex-shrink-0">
-  	 	 	 	 	 	 	 	 <GraduationCap size={20} />
-  	 	 	 	 	 	 	 </div>
-  	 	 	 	 	 	 	 <div>
-  	 	 	 	 	 	 	 	 <h3 className="text-xl font-bold text-gray-900">
-  	 	 	 	 	 	 	 	 	 {editingId ? "Editar Clase" : "Crear Nueva Clase"}
-  	 	 	 	 	 	 	 	 </h3>
-  	 	 	 	 	 	 	 	 <p className="text-xs text-gray-600 mt-0.5">
-  	 	 	 	 	 	 	 	 	 {editingId ? "Modifica los datos de la clase" : "Completa la información para crear una clase"}
-  	 	 	 	 	 	 	 	 </p>
-  	 	 	 	 	 	 	 </div>
-  	 	 	 	 	 	 </div>
+      <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-200">
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 text-white flex items-center justify-center flex-shrink-0">
+          <GraduationCap size={20} />
+        </div>
+        <div>
+          <h3 className="text-xl font-bold text-gray-900">
+            {editingId ? "Editar Clase" : "Crear Nueva Clase"}
+          </h3>
+          <p className="text-xs text-gray-600 mt-0.5">
+            {editingId
+              ? "Modifica los datos de la clase"
+              : "Completa la información para crear una clase"}
+          </p>
+        </div>
+      </div>
 
-  	 	 	 	 	 	 <form onSubmit={handleGuardar} className="space-y-4">
-  	 	 	 	 	 	 	 {/* Materia */}
-  	 	 	 	 	 	 	 <div>
-  	 	 	 	 	 	 	 	 <label className="block text-xs font-bold text-gray-700 mb-1.5">
-  	 	 	 	 	 	 	 	 	 Materia *
-  	 	 	 	 	 	 	 	 </label>
-  	 	 	 	 	 	 	 	 <select
-  	 	 	 	 	 	 	 	 	 name="materia"
-  	 	 	 	 	 	 	 	 	 value={form.materia}
-  	 	 	 	 	 	 	 	 	 onChange={handleInputChange}
-  	 	 	 	 	 	 	 	 	 required
-  	 	 	 	 	 	 	 	 	 className="w-full border-2 border-gray-200 p-2.5 rounded-xl text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all bg-white"
-  	 	 	 	 	 	 	 	 >
-  	 	 	 	 	 	 	 	 	 <option value="">Seleccionar Materia</option>
-  	 	 	 	 	 	 	 	 	 {materias.map((m) => (
-  	 	 	 	 	 	 	 	 	 	 <option key={m._id} value={m._id}>
-  	 	 	 	 	 	 	 	 	 	 	 {m.nombre} ({m.anio}° Año - Div. {m.division})
-  	 	 	 	 	 	 	 	 	 	 </option>
-  	 	 	 	 	 	 	 	 	 ))}
-  	 	 	 	 	 	 	 	 </select>
-  	 	 	 	 	 	 	 </div>
-  	 	 	 	 	 	 	 
-  	 	 	 	 	 	 	 {/* Visualización de Curso Automático (Solo informativo) */}
-  	 	 	 	 	 	 	 {form.materia && materias.find(m => m._id === form.materia) && (
-  	 	 	 	 	 	 	 	 <div className="bg-indigo-50 p-3 rounded-lg text-sm text-indigo-800 font-medium">
-  	 	 	 	 	 	 	 	 	 <p>Curso: **{materias.find(m => m._id === form.materia).anio}° {materias.find(m => m._id === form.materia).division}**</p>
-  	 	 	 	 	 	 	 	 	 <p className="text-xs text-indigo-600 mt-1">El Año y División se toman automáticamente de la materia.</p>
-  	 	 	 	 	 	 	 	 </div>
-  	 	 	 	 	 	 	 )}
+      <form onSubmit={handleGuardar} className="space-y-4">
+        {/* Materia */}
+        <div>
+          <label className="block text-xs font-bold text-gray-700 mb-1.5">
+            Materia *
+          </label>
+          <select
+            name="materia"
+            value={form.materia}
+            onChange={handleInputChange}
+            required
+            className="w-full border-2 border-gray-200 p-2.5 rounded-xl text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all bg-white"
+          >
+            <option value="">Seleccionar Materia</option>
+            {materias.map((m) => (
+              <option key={m._id} value={m._id}>
+                {m.nombre} ({m.anio}° Año - Div. {m.division})
+              </option>
+            ))}
+          </select>
+        </div>
 
-  	 	 	 	 	 	 	 {/* Profesores */}
-  	 	 	 	 	 	 	 <div>
-  	 	 	 	 	 	 	 	 <label className="block text-xs font-bold text-gray-700 mb-1.5">
-  	 	 	 	 	 	 	 	 	 Profesor(es) *
-  	 	 	 	 	 	 	 	 </label>
-  	 	 	 	 	 	 	 	 <select
-  	 	 	 	 	 	 	 	 	 name="profesores"
-  	 	 	 	 	 	 	 	 	 multiple
-  	 	 	 	 	 	 	 	 	 value={form.profesores}
-  	 	 	 	 	 	 	 	 	 onChange={handleMultiSelectChange}
-  	 	 	 	 	 	 	 	 	 required
-  	 	 	 	 	 	 	 	 	 className="w-full border-2 border-gray-200 p-2.5 rounded-xl text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all bg-white h-24"
-  	 	 	 	 	 	 	 	 >
-  	 	 	 	 	 	 	 	 	 {profesoresList.map((p) => (
-  	 	 	 	 	 	 	 	 	 	 <option key={p._id} value={p._id}>
-  	 	 	 	 	 	 	 	 	 	 	 {p.nombre} {p.apellido || ''}
-  	 	 	 	 	 	 	 	 	 	 </option>
-  	 	 	 	 	 	 	 	 	 ))}
-  	 	 	 	 	 	 	 	 </select>
-  	 	 	 	 	 	 	 	 <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
-  	 	 	 	 	 	 	 	 	 <AlertCircle size={10} />
-  	 	 	 	 	 	 	 	 	 Mantén Ctrl/Cmd para seleccionar varios
-  	 	 	 	 	 	 	 	 </p>
-  	 	 	 	 	 	 	 </div>
+        {/* Visualización de Curso Automático (Solo informativo) */}
+        {form.materia && materias.find((m) => m._id === form.materia) && (
+          <div className="bg-indigo-50 p-3 rounded-lg text-sm text-indigo-800 font-medium">
+            <p>
+              Curso: **
+              {materias.find((m) => m._id === form.materia).anio}°{" "}
+              {materias.find((m) => m._id === form.materia).division}**
+            </p>
+            <p className="text-xs text-indigo-600 mt-1">
+              El Año y División se toman automáticamente de la materia.
+            </p>
+          </div>
+        )}
 
-  	 	 	 	 	 	 	 {/* Día y Horarios */}
-  	 	 	 	 	 	 	 <div className="grid grid-cols-2 gap-3">
-  	 	 	 	 	 	 	 	 {/* Día de la Semana */}
-  	 	 	 	 	 	 	 	 <div>
-  	 	 	 	 	 	 	 	 	 <label className="block text-xs font-bold text-gray-700 mb-1.5">
-  	 	 	 	 	 	 	 	 	 	 Día de la Semana *
-  	 	 	 	 	 	 	 	 	 </label>
-  	 	 	 	 	 	 	 	 	 <select
-  	 	 	 	 	 	 	 	 	 	 name="diaSemana"
-  	 	 	 	 	 	 	 	 	 	 value={form.diaSemana}
-  	 	 	 	 	 	 	 	 	 	 onChange={handleInputChange}
-  	 	 	 	 	 	 	 	 	 	 required
-  	 	 	 	 	 	 	 	 	 	 className="w-full border-2 border-gray-200 p-2.5 rounded-xl text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all bg-white"
-  	 	 	 	 	 	 	 	 	 >
-  	 	 	 	 	 	 	 	 	 	 {diasSemana.map((dia) => (
-  	 	 	 	 	 	 	 	 	 	 	 <option key={dia} value={dia}>{dia}</option>
-  	 	 	 	 	 	 	 	 	 	 ))}
-  	 	 	 	 	 	 	 	 	 </select>
-  	 	 	 	 	 	 	 	 </div>
-  	 	 	 	 	 	 	 	 <div />
-  	 	 	 	 	 	 	 </div>
-  	 	 	 	 	 	 	 
-  	 	 	 	 	 	 	 <div className="grid grid-cols-2 gap-3">
-  	 	 	 	 	 	 	 	 {/* Hora Inicio */}
-  	 	 	 	 	 	 	 	 <div>
-  	 	 	 	 	 	 	 	 	 <label className="block text-xs font-bold text-gray-700 mb-1.5">
-  	 	 	 	 	 	 	 	 	 	 Hora Inicio *
-  	 	 	 	 	 	 	 	 	 </label>
-  	 	 	 	 	 	 	 	 	 <input
-  	 	 	 	 	 	 	 	 	 	 type="time"
-  	 	 	 	 	 	 	 	 	 	 name="horaInicio"
-  	 	 	 	 	 	 	 	 	 	 value={form.horaInicio}
-  	 	 	 	 	 	 	 	 	 	 onChange={handleInputChange}
-  	 	 	 	 	 	 	 	 	 	 required
-  	 	 	 	 	 	 	 	 	 	 className="w-full border-2 border-gray-200 p-2.5 rounded-xl text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
-  	 	 	 	 	 	 	 	 	 />
-  	 	 	 	 	 	 	 	 </div>
+        {/* Profesores */}
+        <div>
+          <label className="block text-xs font-bold text-gray-700 mb-1.5">
+            Profesor(es) *
+          </label>
+          <select
+            name="profesores"
+            multiple
+            value={form.profesores}
+            onChange={handleMultiSelectChange}
+            required
+            className="w-full border-2 border-gray-200 p-2.5 rounded-xl text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all bg-white h-24"
+          >
+            {profesoresList.map((p) => (
+              <option key={p._id} value={p._id}>
+                {p.nombre} {p.apellido || ""}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+            <AlertCircle size={10} />
+            Mantén Ctrl/Cmd para seleccionar varios
+          </p>
+        </div>
 
-  	 	 	 	 	 	 	 	 {/* Hora Fin */}
-  	 	 	 	 	 	 	 	 <div>
-  	 	 	 	 	 	 	 	 	 <label className="block text-xs font-bold text-gray-700 mb-1.5">
-  	 	 	 	 	 	 	 	 	 	 Hora Fin *
-  	 	 	 	 	 	 	 	 	 </label>
-  	 	 	 	 	 	 	 	 	 <input
-  	 	 	 	 	 	 	 	 	 	 type="time"
-  	 	 	 	 	 	 	 	 	 	 name="horaFin"
-  	 	 	 	 	 	 	 	 	 	 value={form.horaFin}
-  	 	 	 	 	 	 	 	 	 	 onChange={handleInputChange}
-  	 	 	 	 	 	 	 	 	 	 required
-  	 	 	 	 	 	 	 	 	 	 className="w-full border-2 border-gray-200 p-2.5 rounded-xl text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
-  	 	 	 	 	 	 	 	 	 />
-  	 	 	 	 	 	 	 	 </div>
-  	 	 	 	 	 	 	 </div>
+        {/* Día y Horarios */}
+        <div className="grid grid-cols-2 gap-3">
+          {/* Día de la Semana */}
+          <div>
+            <label className="block text-xs font-bold text-gray-700 mb-1.5">
+              Día de la Semana *
+            </label>
+            <select
+              name="diaSemana"
+              value={form.diaSemana}
+              onChange={handleInputChange}
+              required
+              className="w-full border-2 border-gray-200 p-2.5 rounded-xl text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all bg-white"
+            >
+              {diasSemana.map((dia) => (
+                <option key={dia} value={dia}>
+                  {dia}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div />
+        </div>
+        {/* Año y División */}
+        {form.materia && materias.find((m) => m._id === form.materia) && (
+          <div className="grid grid-cols-2 gap-3">
+            {/* Año (Solo lectura) */}
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                Año
+              </label>
+              <input
+                type="text"
+                value={`${
+                  materias.find((m) => m._id === form.materia).anio
+                }° Año`}
+                readOnly
+                className="w-full border-2 border-gray-200 bg-gray-50 p-2.5 rounded-xl text-sm text-gray-700"
+              />
+            </div>
 
-  	 	 	 	 	 	 	 {/* Botones */}
-  	 	 	 	 	 	 	 <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-  	 	 	 	 	 	 	 	 <button
-  	 	 	 	 	 	 	 	 	 type="button"
-  	 	 	 	 	 	 	 	 	 onClick={resetForm}
-  	 	 	 	 	 	 	 	 	 className="bg-gray-200 text-gray-700 font-bold px-5 py-2.5 rounded-xl hover:bg-gray-300 transition-colors disabled:opacity-50 text-sm"
-  	 	 	 	 	 	 	 	 	 disabled={loadingAction}
-  	 	 	 	 	 	 	 	 >
-  	 	 	 	 	 	 	 	 	 Cancelar
-  	 	 	 	 	 	 	 	 </button>
-  	 	 	 	 	 	 	 	 <button
-  	 	 	 	 	 	 	 	 	 type="submit"
-  	 	 	 	 	 	 	 	 	 className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold px-5 py-2.5 rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all disabled:opacity-50 flex items-center gap-2 shadow-lg text-sm"
-  	 	 	 	 	 	 	 	 	 disabled={loadingAction}
-  	 	 	 	 	 	 	 	 >
-  	 	 	 	 	 	 	 	 	 {loadingAction ? (
-  	 	 	 	 	 	 	 	 	 	 <>
-  	 	 	 	 	 	 	 	 	 	 	 <Loader2 size={16} className="animate-spin" />
-  	 	 	 	 	 	 	 	 	 	 	 Guardando...
-  	 	 	 	 	 	 	 	 	 	 </>
-  	 	 	 	 	 	 	 	 	 ) : (
-  	 	 	 	 	 	 	 	 	 	 <>
-  	 	   	 	 	 	 	 	 	 	 <Save size={16} />
-                                          {/* CORRECCIÓN 4: Usar editingId para cambiar el texto del botón */}
-  	 	   	 	 	 	 	 	 	 	 {editingId ? "Guardar Cambios" : "Crear"} 
-  	 	   	 	 	 	 	 	 	 </>
-          	   	 	 	 	 	 )}
-    	     	 	 	 	 	 </button>
-      	   	 	 	 	 </div>
-        	 	 	 	 </form>
-      	 	 	 	 </div>
-      	 	 	 </div>
-      	 	 )}
+            {/* División (Editable) */}
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                División *
+              </label>
+              <select
+                name="division"
+                value={form.division}
+                onChange={handleInputChange}
+                required
+                className="w-full border-2 border-gray-200 p-2.5 rounded-xl text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all bg-white"
+              >
+                <option value="">Seleccionar</option>
+                {divisionesEjemplo.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+        <div className="grid grid-cols-2 gap-3">
+          {/* Hora Inicio */}
+          <div>
+            <label className="block text-xs font-bold text-gray-700 mb-1.5">
+              Hora Inicio *
+            </label>
+            <input
+              type="time"
+              name="horaInicio"
+              value={form.horaInicio}
+              onChange={handleInputChange}
+              required
+              className="w-full border-2 border-gray-200 p-2.5 rounded-xl text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
+            />
+          </div>
+
+          {/* Hora Fin */}
+          <div>
+            <label className="block text-xs font-bold text-gray-700 mb-1.5">
+              Hora Fin *
+            </label>
+            <input
+              type="time"
+              name="horaFin"
+              value={form.horaFin}
+              onChange={handleInputChange}
+              required
+              className="w-full border-2 border-gray-200 p-2.5 rounded-xl text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
+            />
+          </div>
+        </div>
+
+        {/* Botones */}
+        <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+          <button
+            type="button"
+            onClick={resetForm}
+            className="bg-gray-200 text-gray-700 font-bold px-5 py-2.5 rounded-xl hover:bg-gray-300 transition-colors disabled:opacity-50 text-sm"
+            disabled={loadingAction}
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold px-5 py-2.5 rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all disabled:opacity-50 flex items-center gap-2 shadow-lg text-sm"
+            disabled={loadingAction}
+          >
+            {loadingAction ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                Guardando...
+              </>
+            ) : (
+              <>
+                <Save size={16} />
+                {editingId ? "Guardar Cambios" : "Crear"}
+              </>
+            )}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+)}
+  	 	 	
     	 </div>
 
     	 <style jsx global>{`
