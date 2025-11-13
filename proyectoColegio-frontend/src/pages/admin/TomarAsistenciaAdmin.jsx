@@ -1,75 +1,129 @@
-import { useState, useEffect } from "react";
-import axios from "axios"; // Usaremos 'api' si lo tienes configurado
-import { useAuth } from "../../context/AuthContext";
-import { toast } from "react-toastify";
-import { CalendarCheck, UserCheck, Save, School, Loader2, Users } from "lucide-react";
-// Importa tu instancia de api configurada
-import api from "../../api/api"; // Ajusta esta ruta si es necesario
+import { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
+import { CalendarCheck, UserCheck, Save, School, Loader2, Users } from 'lucide-react';
+import api from '../../api/api';
+
+// Importamos las funciones específicas de api.js
+import {
+  obtenerAlumnosPorCurso,
+  obtenerAsistenciasPorClaseYFecha,
+  registrarAsistencias,
+} from '../../api/api';
 
 const TomarAsistenciaAdmin = () => {
-  const { token } = useAuth(); // api debería usar el token automáticamente
-  const [anio, setAnio] = useState("");
-  const [division, setDivision] = useState("");
-  // Añadimos estado para la fecha, default a hoy
-  const [fecha, setFecha] = useState(new Date().toISOString().split("T")[0]); 
+  const [anio, setAnio] = useState('');
+  const [division, setDivision] = useState('');
+  const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
   const [alumnos, setAlumnos] = useState([]);
   const [asistencias, setAsistencias] = useState({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [allClases, setAllClases] = useState([]);
 
-  // Opciones para los selectores
-  const aniosDisponibles = ["1", "2", "3", "4", "5", "6"];
-  const divisionesDisponibles = ["A", "B", "C"]; // O las que necesites
+  const aniosDisponibles = ['1', '2', '3', '4', '5', '6'];
+  const divisionesDisponibles = ['A', 'B', 'C'];
 
-  // 🔹 Cargar alumnos por año y división
-  const fetchAlumnos = async () => {
-    if (!anio || !division) {
-      toast.info("Selecciona año y división para cargar la lista.");
+  // 1. Cargar la lista de TODAS las clases una vez al montar
+  useEffect(() => {
+    const loadClases = async () => {
+      try {
+        const res = await api.get('/clases'); // Llama a obtenerTodasLasClases
+        setAllClases(res.data.clases || []);
+        
+        // --- DEBUGGING ---
+        console.log("CLASES CARGADAS DESDE LA API:", res.data.clases);
+        // --- FIN DEBUGGING ---
+
+      } catch (e) {
+        toast.error('Error: No se pudo cargar la lista de clases.');
+        console.error("Error cargando clases:", e);
+      }
+    };
+    loadClases();
+  }, []);
+
+  // 2. 🔹 CORRECCIÓN: Función para encontrar el ID de la clase "General"
+  const findGeneralClaseId = () => {
+    if (!anio || !division) return null;
+
+    console.log(`Buscando clase con Año: "${anio}" y División: "${division}"`);
+
+    const generalClass = allClases.find((c) => {
+      // Comprobaciones de depuración
+      // console.log(`Comparando con: Año=${c.anio} (tipo ${typeof c.anio}), Div=${c.division} (tipo ${typeof c.division}), Materia=${c.materia?.nombre}`);
+
+      const anioMatch = String(c.anio) === String(anio);
+      const divisionMatch = String(c.division).toUpperCase() === String(division).toUpperCase();
+      const materiaMatch = c.materia && c.materia.nombre.toLowerCase().includes('asistencia general');
+
+      return anioMatch && divisionMatch && materiaMatch;
+    });
+
+    // --- DEBUGGING ---
+    console.log('Clase "General" encontrada:', generalClass);
+    // --- FIN DEBUGGING ---
+
+    return generalClass ? generalClass.id : null; 
+  };
+
+  // 3. 🔹 Cargar alumnos y asistencias previas
+  const fetchAlumnosYAsistencia = async () => {
+    if (!anio || !division || !fecha) {
+      toast.info('Selecciona año, división y fecha para cargar la lista.');
       return;
     }
 
     setLoading(true);
-    setAlumnos([]); // Limpiar lista anterior
-    setAsistencias({}); // Limpiar asistencias anteriores
-    try {
-      // --- CORRECCIÓN DE ENDPOINT ---
-      // 1. Llama a /api/usuarios (el endpoint que me mostraste)
-      // 2. Envía los filtros como 'params'
-      // 3. Añade el filtro rol: "alumno"
-      const res = await api.get("/usuarios", {
-        params: {
-          anio: anio,
-          division: division,
-          rol: "alumno" // <-- ¡Este es el filtro clave que faltaba!
-        }
-        // No necesitas 'headers' si tu 'api' ya está configurada con interceptors
-      });
-      // --- FIN CORRECCIÓN ---
+    setAlumnos([]);
+    setAsistencias({});
 
-      const alumnosEncontrados = res.data || [];
+    // 3a. Encontrar el claseId de "Asistencia General"
+    const claseId = findGeneralClaseId(); // Esta función ahora tiene los console.log
+
+    if (!claseId) {
+      toast.error(
+        `No se encontró una clase de "Asistencia General" para ${anio}° ${division}.`
+      );
+      toast.info('Asegúrate de crearla en el panel "Gestionar Clases".');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      // 3b. Cargar alumnos
+      const resAlumnos = await obtenerAlumnosPorCurso(anio, division);
+      const alumnosEncontrados = resAlumnos.usuarios || []; 
       setAlumnos(alumnosEncontrados);
 
       if (alumnosEncontrados.length === 0) {
-           toast.warn(`No se encontraron alumnos para ${anio}° ${division}.`);
-           return;
+        toast.warn(`No se encontraron alumnos para ${anio}° ${division}.`);
+        setLoading(false);
+        return;
       }
 
-      // Inicializar todas las asistencias como "presente"
+      // 3c. Cargar asistencias existentes
+      const asistenciasGuardadas = await obtenerAsistenciasPorClaseYFecha(
+        claseId,
+        fecha
+      );
+
+      // 3d. Mezclar
       const inicial = {};
       alumnosEncontrados.forEach((a) => {
-        inicial[a._id] = "presente"; // Cambiado a "presente" por defecto
+        inicial[a._id] = asistenciasGuardadas[a._id] || 'presente';
       });
       setAsistencias(inicial);
-
     } catch (err) {
       console.error(err);
-      toast.error("Error al cargar alumnos. Verifica los permisos.");
+      toast.error('Error al cargar alumnos o asistencias.');
     } finally {
       setLoading(false);
     }
   };
 
-  // 🔹 Cambiar estado de asistencia
+  // (El resto de las funciones no necesitan cambios)
+
+  // 🔹 Cambiar estado de asistencia (sin cambios)
   const cambiarEstadoAsistencia = (alumnoId, estado) => {
     setAsistencias((prev) => ({
       ...prev,
@@ -77,72 +131,76 @@ const TomarAsistenciaAdmin = () => {
     }));
   };
 
-  // 🔹 Marcar todos como...
+  // 🔹 Marcar todos como... (sin cambios)
   const marcarTodos = (estado) => {
-     if(alumnos.length === 0) return;
-     const nuevoEstado = {};
-     alumnos.forEach(a => {
-         nuevoEstado[a._id] = estado;
-     });
-     setAsistencias(nuevoEstado);
+    if (alumnos.length === 0) return;
+    const nuevoEstado = {};
+    alumnos.forEach((a) => {
+      nuevoEstado[a._id] = estado;
+    });
+    setAsistencias(nuevoEstado);
   };
 
-  // 🔹 Guardar asistencia
+  // 4. 🔹 Guardar asistencia (LÓGICA Y RUTA CORREGIDAS)
   const guardarAsistencia = async () => {
     if (alumnos.length === 0) {
-      toast.error("No hay alumnos en la lista para guardar.");
+      toast.error('No hay alumnos en la lista para guardar.');
+      return;
+    }
+
+    const claseId = findGeneralClaseId();
+    if (!claseId) {
+      toast.error(
+        `Error: No se pudo encontrar la clase "Asistencia General" para ${anio}° ${division}.`
+      );
       return;
     }
 
     setSaving(true);
     try {
       const payload = {
-        anio,
-        division,
-        fecha: fecha, // Usar la fecha del estado
+        claseId: claseId, 
+        fecha: fecha,
         asistencias: Object.entries(asistencias).map(([alumno, estado]) => ({
           alumno,
           estado,
         })),
       };
 
-      // --- CORRECCIÓN DE ENDPOINT ---
-      // Llama a la ruta de Admin que creamos en el backend
-      await api.post("/asistencias/aula/tomar", payload);
-      // --- FIN CORRECCIÓN ---
+      await registrarAsistencias(payload); 
 
-      toast.success("Asistencia registrada correctamente 🎯");
+      toast.success('Asistencia registrada correctamente 🎯');
     } catch (err) {
       console.error(err);
-      toast.error(err.response?.data?.msg || "Error al guardar asistencia");
+      toast.error(err.response?.data?.msg || 'Error al guardar asistencia');
     } finally {
       setSaving(false);
     }
   };
 
-  // --- Constantes de Estilo Tailwind (para legibilidad) ---
-  const inputStyle = "w-full border border-gray-300 p-3 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white shadow-sm disabled:bg-gray-50";
-  const btnPrimaryStyle = "inline-flex items-center justify-center bg-blue-600 text-white font-bold px-4 py-3 rounded-lg text-sm shadow hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150";
+  // --- Constantes de Estilo (sin cambios) ---
+  const inputStyle = 'w-full border border-gray-300 p-3 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white shadow-sm disabled:bg-gray-50';
+  const btnPrimaryStyle = 'inline-flex items-center justify-center bg-blue-600 text-white font-bold px-4 py-3 rounded-lg text-sm shadow hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6 md:p-8">
       <div className="max-w-4xl mx-auto space-y-6">
-        {/* Header */}
+        {/* Header (sin cambios) */}
         <div className="text-center mb-6">
-           <div className="flex items-center justify-center gap-3 mb-4">
-             <div className="p-3 bg-blue-600 rounded-full shadow-md">
-               <CalendarCheck className="text-white" size={28} />
-             </div>
-             <h1 className="text-3xl font-bold text-gray-900">
-               Tomar Asistencia (Admin)
-             </h1>
-           </div>
-           <p className="text-gray-600 text-lg">
-             Registra la asistencia general por curso y división.
-           </p>
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <div className="p-3 bg-blue-600 rounded-full shadow-md">
+              <CalendarCheck className="text-white" size={28} />
+            </div>
+            <h1 className="text-3xl font-bold text-gray-900">
+              Tomar Asistencia (Admin)
+            </h1>
+          </div>
+          <p className="text-gray-600 text-lg">
+            Registra la asistencia general por curso y división.
+          </p>
         </div>
 
-        {/* Selección de curso */}
+        {/* Selección de curso (sin cambios) */}
         <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-200">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <input
@@ -158,7 +216,9 @@ const TomarAsistenciaAdmin = () => {
             >
               <option value="">Seleccionar Año</option>
               {aniosDisponibles.map((a) => (
-                <option key={a} value={a}>{a}° Año</option>
+                <option key={a} value={a}>
+                  {a}° Año
+                </option>
               ))}
             </select>
             <select
@@ -168,11 +228,14 @@ const TomarAsistenciaAdmin = () => {
             >
               <option value="">División</option>
               {divisionesDisponibles.map((d) => (
-                <option key={d} value={d}>{d}</option>
+                <option key={d} value={d}>
+                  {d}
+                </option>
               ))}
             </select>
+            {/* El botón ahora llama a la nueva función */}
             <button
-              onClick={fetchAlumnos}
+              onClick={fetchAlumnosYAsistencia}
               disabled={loading}
               className={`${btnPrimaryStyle} md:col-span-1`}
             >
@@ -181,12 +244,12 @@ const TomarAsistenciaAdmin = () => {
               ) : (
                 <Users size={18} className="mr-2" />
               )}
-              {loading ? "Cargando..." : "Cargar Alumnos"}
+              {loading ? 'Cargando...' : 'Cargar Alumnos'}
             </button>
           </div>
         </div>
 
-        {/* Lista de alumnos */}
+        {/* Lista de alumnos (sin cambios estéticos) */}
         {loading ? (
           <div className="text-center py-10">
             <Loader2 className="animate-spin h-10 w-10 text-blue-600 mx-auto" />
@@ -195,15 +258,26 @@ const TomarAsistenciaAdmin = () => {
         ) : alumnos.length > 0 ? (
           <div className="bg-white rounded-2xl shadow-lg border border-gray-200">
             <div className="px-6 py-4 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-4">
-                 <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                   <UserCheck className="text-blue-600" /> Lista de Alumnos ({alumnos.length})
-                 </h2>
-                 <div className="flex gap-2 flex-wrap">
-                     <button onClick={() => marcarTodos('presente')} className="px-3 py-1.5 text-xs font-medium rounded-md bg-green-100 text-green-700 hover:bg-green-200">Marcar Todos Presentes</button>
-                     <button onClick={() => marcarTodos('ausente')} className="px-3 py-1.5 text-xs font-medium rounded-md bg-red-100 text-red-700 hover:bg-red-200">Marcar Todos Ausentes</button>
-                 </div>
+              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                <UserCheck className="text-blue-600" /> Lista de Alumnos (
+                {alumnos.length})
+              </h2>
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  onClick={() => marcarTodos('presente')}
+                  className="px-3 py-1.5 text-xs font-medium rounded-md bg-green-100 text-green-700 hover:bg-green-200"
+                >
+                  Marcar Todos Presentes
+                </button>
+                <button
+                  onClick={() => marcarTodos('ausente')}
+                  className="px-3 py-1.5 text-xs font-medium rounded-md bg-red-100 text-red-700 hover:bg-red-200"
+                >
+                  Marcar Todos Ausentes
+                </button>
+              </div>
             </div>
-            
+
             <div className="p-6 space-y-3">
               {alumnos.map((alumno) => (
                 <div
@@ -215,37 +289,50 @@ const TomarAsistenciaAdmin = () => {
                       {alumno.nombre.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <p className="font-semibold text-gray-900">{alumno.nombre}</p>
+                      <p className="font-semibold text-gray-900">
+                        {alumno.nombre}
+                      </p>
                       <p className="text-gray-600 text-xs">{alumno.email}</p>
                     </div>
                   </div>
                   <div className="flex gap-2 justify-end flex-wrap">
-                    {["presente", "ausente", "tarde", "justificado"].map(
+                    {['presente', 'ausente', 'tarde', 'justificado'].map(
                       (estado) => {
-                        const baseStyle = "px-3 py-1.5 text-xs font-medium rounded-full transition-all duration-150";
+                        const baseStyle =
+                          'px-3 py-1.5 text-xs font-medium rounded-full transition-all duration-150 capitalize';
                         const activeStyle = {
-                            presente: "bg-green-600 text-white shadow-md",
-                            ausente: "bg-red-600 text-white shadow-md",
-                            tarde: "bg-yellow-500 text-white shadow-md",
-                            justificado: "bg-blue-600 text-white shadow-md"
+                          presente: 'bg-green-600 text-white shadow-md',
+                          ausente: 'bg-red-600 text-white shadow-md',
+                          tarde: 'bg-yellow-500 text-white shadow-md',
+                          justificado: 'bg-blue-600 text-white shadow-md',
                         };
                         const inactiveStyle = {
-                            presente: "bg-gray-200 text-gray-700 hover:bg-green-100 hover:text-green-700",
-                            ausente: "bg-gray-200 text-gray-700 hover:bg-red-100 hover:text-red-700",
-                            tarde: "bg-gray-200 text-gray-700 hover:bg-yellow-100 hover:text-yellow-700",
-                            justificado: "bg-gray-200 text-gray-700 hover:bg-blue-100 hover:text-blue-700"
+                          presente:
+                            'bg-gray-200 text-gray-700 hover:bg-green-100 hover:text-green-700',
+                          ausente:
+                            'bg-gray-200 text-gray-700 hover:bg-red-100 hover:text-red-700',
+                          tarde:
+                            'bg-gray-200 text-gray-700 hover:bg-yellow-100 hover:text-yellow-700',
+                          justificado:
+                            'bg-gray-200 text-gray-700 hover:bg-blue-100 hover:text-blue-700',
                         };
                         const isActive = asistencias[alumno._id] === estado;
 
                         return (
                           <button
                             key={estado}
-                            onClick={() => cambiarEstadoAsistencia(alumno._id, estado)}
-                            className={`${baseStyle} ${isActive ? activeStyle[estado] : inactiveStyle[estado]}`}
+                            onClick={() =>
+                              cambiarEstadoAsistencia(alumno._id, estado)
+                            }
+                            className={`${baseStyle} ${
+                              isActive
+                                ? activeStyle[estado]
+                                : inactiveStyle[estado]
+                            }`}
                           >
                             {estado}
                           </button>
-                        )
+                        );
                       }
                     )}
                   </div>
@@ -260,17 +347,16 @@ const TomarAsistenciaAdmin = () => {
                 className="inline-flex items-center justify-center bg-green-600 text-white font-bold px-4 py-3 rounded-lg text-sm shadow hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 w-full sm:w-auto"
               >
                 <Save size={18} className="mr-2" />
-                {saving ? "Guardando..." : "Guardar Asistencia"}
+                {saving ? 'Guardando...' : 'Guardar Asistencia'}
               </button>
             </div>
           </div>
         ) : (
           <div className="bg-white rounded-2xl p-6 text-center text-gray-600 shadow-lg border border-gray-200">
-             <School className="mx-auto mb-4 text-gray-400" size={40} />
-             {(!anio || !division) 
-                ? "Selecciona un año y división para cargar la lista de alumnos."
-                : "No hay alumnos registrados en esta sección." // Este mensaje se mostrará si la API devuelve []
-             }
+            <School className="mx-auto mb-4 text-gray-400" size={40} />
+            {!anio || !division
+              ? 'Selecciona un año y división para cargar la lista de alumnos.'
+              : 'No hay alumnos registrados en esta sección.'}
           </div>
         )}
       </div>

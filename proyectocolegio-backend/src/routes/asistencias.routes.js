@@ -1,56 +1,63 @@
-import express from "express";
-import { body } from "express-validator";
-import {
-  crearMateria,
-  obtenerMaterias, // Función unificada
-  obtenerMateria,
-  obtenerMateriasPorAnio,
-  actualizarMateria,
-  eliminarMateria,
-  inscribirseAMateria,
-  verAlumnosMateria,
-  verAlumnosPorProfesor,
-  obtenerProfesores
-// ELIMINADA: obtenerMateriasFiltradas
-} from "../controllers/materia.controller.js";
+// proyectocolegio-backend/src/routes/asistencias.routes.js
 
-import { validateFields } from "../middlewares/validateFields.js";
-import { checkRole } from "../middlewares/checkRole.js";
-import { obtenerMateriasDelProfesor } from "../controllers/materia.controller.js";
-import { checkAuth, esAdmin } from "../middlewares/checkAuth.js"; // 'esAdmin' no parece estar definido, pero sigo tu import
+import express from 'express';
+import { checkAuth } from '../middlewares/checkAuth.js';
+import { checkRole } from '../middlewares/checkRole.js';
+// Importamos los controladores CORRECTOS de asistencia
+import {
+  registrarAsistencias,
+  obtenerAsistenciasPorClaseYFecha,
+  obtenerAsistenciasPorAlumno,
+} from '../controllers/asistencia.controller.js'; // Asegúrate que este controlador exista
+
 const router = express.Router();
 
-// Admin crea materia
+/**
+ * @route   POST /api/asistencias
+ * @desc    Registra o actualiza las asistencias para una clase y fecha.
+ * @access  Admin, Profesor
+ */
 router.post(
-"/",
-  [
-    checkAuth,
-    checkRole("admin"),
-    body("nombre", "Nombre obligatorio").notEmpty(),
-    body("anio", "Año inválido (0-6)").isInt({ min: 0, max: 6 }),
-    // La validación de 'division' se hace en el controlador
-    validateFields,
-  ],
-  crearMateria
+  '/',
+  checkAuth,
+  checkRole(['admin', 'profesor']),
+  registrarAsistencias
 );
 
+/**
+ * @route   GET /api/asistencias
+ * @desc    Obtiene las asistencias por claseId y fecha (query params)
+ * @access  Admin, Profesor
+ */
+router.get(
+  '/',
+  checkAuth,
+  checkRole(['admin', 'profesor']),
+  obtenerAsistenciasPorClaseYFecha
+);
 
-// Rutas específicas primero
-// --- RUTA CORREGIDA ---
-// Esta ruta ahora maneja "GET /" y "GET /?anio=1", etc.
-router.get("/", checkAuth, obtenerMaterias); 
-// --- FIN CORRECCIÓN ---
+/**
+ * @route   GET /api/asistencias/alumno
+ * @desc    Obtiene el historial de asistencias DEL ALUMNO LOGUEADO.
+ * @access  Alumno
+ */
+router.get(
+  '/alumno',
+  checkAuth,
+  checkRole(['alumno']), // Solo alumnos
+  obtenerAsistenciasPorAlumno
+);
 
-router.get("/profesor/alumnos", checkAuth, checkRole("profesor"), verAlumnosPorProfesor);
-router.get("/profesor/materias", checkAuth, checkRole("profesor"), obtenerMateriasDelProfesor);
-router.get("/profesores", checkAuth, checkRole("admin"), obtenerProfesores); // Usando checkRole
-router.get("/anio/:anio", checkAuth, obtenerMateriasPorAnio);
-router.post("/inscribirse/:id", checkAuth, checkRole("alumno"), inscribirseAMateria);
-
-// Después las rutas con :id
-router.get("/:id", checkAuth, obtenerMateria);
-router.put("/:id", checkAuth, checkRole("admin"), actualizarMateria); // Solo Admin puede actualizar
-router.delete("/:id", checkAuth, checkRole("admin"), eliminarMateria); // Solo Admin puede eliminar
-router.get("/:id/alumnos", checkAuth, checkRole(["admin", "profesor"]), verAlumnosMateria); // Admin o Profesor
+/**
+ * @route   GET /api/asistencias/alumno/:alumnoId
+ * @desc    Obtiene el historial de asistencias de un alumno específico (para Admin).
+ * @access  Admin
+ */
+router.get(
+  '/alumno/:alumnoId',
+  checkAuth,
+  checkRole(['admin']), // Solo admin
+  obtenerAsistenciasPorAlumno
+);
 
 export default router;
