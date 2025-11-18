@@ -1,27 +1,25 @@
-// src/routes/materia.routes.js
 import express from "express";
 import { body } from "express-validator";
 import {
   crearMateria,
-  obtenerMaterias,
-  obtenerMateria,
-  obtenerMateriasPorAnio,
+  obtenerMateria, // Obtener una por ID
+  obtenerMateriasFiltradas, // Usaremos esta como la principal para GET /
   actualizarMateria,
   eliminarMateria,
   inscribirseAMateria,
   verAlumnosMateria,
   verAlumnosPorProfesor,
   obtenerProfesores,
-  obtenerMateriasFiltradas
+  obtenerMateriasDelProfesor // Importamos la función del profesor
 } from "../controllers/materia.controller.js";
 
 import { validateFields } from "../middlewares/validateFields.js";
 import { checkRole } from "../middlewares/checkRole.js";
-import { obtenerMateriasDelProfesor } from "../controllers/materia.controller.js";
 import { checkAuth, esAdmin } from "../middlewares/checkAuth.js";
+
 const router = express.Router();
 
-// Admin crea materia
+// --- RUTAS DE GESTIÓN (ADMIN) ---
 router.post(
   "/",
   [
@@ -34,17 +32,29 @@ router.post(
   crearMateria
 );
 
+// --- RUTAS DE LISTADO ---
 
-// Rutas específicas primero
-router.get("/", checkAuth, obtenerMaterias);
+// 1. (PROFESOR) Mis materias
+// IMPORTANTE: Esta ruta debe ir ANTES de las rutas con :id
+router.get(
+  "/profesor/listado", 
+  checkAuth, 
+  checkRole("profesor"), 
+  obtenerMateriasDelProfesor
+);
+
+// 2. (GENERAL/ADMIN) Obtener todas (con opción de filtros ?anio=X)
+// Fusionamos las dos rutas GET / anteriores en esta sola
 router.get("/", checkAuth, obtenerMateriasFiltradas);
+
+
+// --- RUTAS ESPECÍFICAS ---
 router.get("/profesor/alumnos", checkAuth, checkRole("profesor"), verAlumnosPorProfesor);
-router.get("/profesor/materias", checkAuth, checkRole("profesor"), obtenerMateriasDelProfesor);
 router.get("/profesores", checkAuth, esAdmin, obtenerProfesores);
-router.get("/anio/:anio", checkAuth, obtenerMateriasPorAnio);
 router.post("/inscribirse/:id", checkAuth, checkRole("alumno"), inscribirseAMateria);
 
-// Después las rutas con :id
+
+// --- RUTAS CON PARÁMETRO ID (Siempre al final) ---
 router.get("/:id", checkAuth, obtenerMateria);
 router.put("/:id", checkAuth, actualizarMateria);
 router.delete("/:id", checkAuth, eliminarMateria);

@@ -1,31 +1,39 @@
 import {
-  // --- Íconos seleccionados para cada link ---
   Home,
   Users,
   Layers,
-  PlusSquare, // Mejor para "Crear"
-  Settings,   // Mejor para "Gestionar"
-  // --- Íconos del resto del componente ---
+  PlusSquare, 
+  Settings, 
   LogOut,
   ShieldCheck,
+  CalendarCheck, // Icono para asistencia
+  ClipboardList, // Icono para auditoría
+  FileEdit      // Icono para notas
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { useAuth } from "../../context/AuthContext"; // Asegúrate que la ruta sea correcta
+import { useAuth } from "../../context/AuthContext";
 
-// Items de navegación del Admin
+// Items de navegación del Admin CORREGIDOS
 const navItems = [
   { to: "/admin/Inicio", icon: Home, text: "Inicio" },
   { to: "/admin/usuarios", icon: Users, text: "Usuarios" },
   { to: "/admin/materias", icon: Layers, text: "Materias" },
-  { to: "/admin/verificacion", icon: Settings, text: "Gestionar Clases" },
-   { to: "/admin/AsistenciaGestion", icon: Settings, text: "Gestionar Asistencias" },
-    { to: "/admin/GestionNotas", icon: Settings, text: "Gestión de Notas" },
-    { to: "/admin/VerAsistencias", icon: Users, text: "Ver Asistencias" },
-    { to: "/admin/AuditoriaNotas", icon: Users, text: "Auditoría de Notas" },
-   
+  
+  // --- GESTIÓN DE CLASES ---
+  // Esta ruta lleva a ClasesAdmin.jsx (Crear/Listar/Eliminar Clases)
+  { to: "/admin/CrearClases", icon: PlusSquare, text: "Gestionar Clases" },
+  
+  // --- ASISTENCIAS ---
+  { to: "/admin/AsistenciaGestion", icon: CalendarCheck, text: "Tomar Asistencia" },
+  { to: "/admin/VerAsistencias", icon: Users, text: "Ver Historial" },
+  
+  // --- NOTAS ---
+  { to: "/admin/GestionNotas", icon: FileEdit, text: "Gestión de Notas" },
+  { to: "/admin/AuditoriaNotas", icon: ClipboardList, text: "Auditoría Notas" },
+  
+  // Opcionales / Otros
+  { to: "/admin/clasesAdminAlumnos", icon: Settings, text: "Asignar Alumnos" },
 ];
-
-// --- No hay cambios en el resto del código, es reutilizable ---
 
 const NavItem = ({ to, icon: Icon, text }) => (
   <NavLink
@@ -62,7 +70,7 @@ const SidebarAdmin = () => {
         </h1>
       </div>
 
-      <nav className="flex-grow space-y-2">
+      <nav className="flex-grow space-y-2 overflow-y-auto">
         {navItems.map((item) => (
           <NavItem key={item.to} {...item} />
         ))}

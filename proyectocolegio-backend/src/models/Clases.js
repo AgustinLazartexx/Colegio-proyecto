@@ -1,4 +1,4 @@
-// models/Clases.js
+// src/models/Clases.js
 import mongoose from "mongoose";
 
 const claseSchema = new mongoose.Schema({
@@ -12,13 +12,22 @@ const claseSchema = new mongoose.Schema({
     ref: "User",
     required: true
   }],
+  
+  // --- CAMPO AÑADIDO ---
+  // La lista de alumnos inscritos a ESTA clase específica
+  alumnos: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User"
+  }],
+  // --- FIN CAMPO AÑADIDO ---
+
   anio: {
     type: Number,
     required: [true, "El año de cursada es requerido"],
-    min: [0, "El año de cursada debe ser mínimo 0 (para general)"], // <-- CORREGIDO
+    min: [0, "El año de cursada debe ser mínimo 0 (para general)"],
     max: [6, "El año de cursada debe ser máximo 6"],
     validate: {
-      validator: (v) => Number.isInteger(v) && v >= 0 && v <= 6, // <-- CORREGIDO
+      validator: (v) => Number.isInteger(v) && v >= 0 && v <= 6,
       message: props => `${props.value} no es un año válido (0-6)`
     }
   },
@@ -58,6 +67,8 @@ const claseSchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
+
+// ... (tus 'pre' y 'statics' existentes están bien) ...
 
 // Validación horaInicio < horaFin y cálculo de duración
 claseSchema.pre('validate', function(next) {
@@ -120,6 +131,7 @@ claseSchema.methods.obtenerInfoCompleta = function() {
     id: this._id,
     materia: this.materia,
     profesores: this.profesores,
+    alumnos: this.alumnos, // <-- Devolvemos los alumnos
     anio: this.anio,
     anioCursada: `${this.anio}° Año`,
     division: this.division,
@@ -131,6 +143,5 @@ claseSchema.methods.obtenerInfoCompleta = function() {
   };
 };
 
-// --- CORRECCIÓN: Exportación ---
 const Clase = mongoose.model("Clase", claseSchema);
 export default Clase;

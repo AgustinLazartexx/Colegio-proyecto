@@ -1,371 +1,187 @@
-import React, { useEffect, useState } from "react";
-import axios from "axios";
-import {
-  Pencil,
-  Trash2,
-  Plus,
-  X,
-  Book,
-  Calendar,
-  User,
-  LayoutGrid,
-  Loader2,
-  AlertCircle,
-  Hash,
-} from "lucide-react";
-import Swal from "sweetalert2";
+import React, { useState, useEffect } from "react";
 import { toast } from "react-toastify";
+import { Plus, Search, Edit2, Trash2, BookOpen, X, Save, Loader2, User } from "lucide-react";
+import Swal from "sweetalert2";
+
+// IMPORTAR DESDE API.JS
+import { 
+  getMaterias, 
+  createMateria, 
+  updateMateria, 
+  deleteMateria, 
+  getProfesores 
+} from "../../api/api";
 
 const MateriasAdmin = () => {
   const [materias, setMaterias] = useState([]);
   const [profesores, setProfesores] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
   const [showModal, setShowModal] = useState(false);
-  const [modoEdicion, setModoEdicion] = useState(false);
-  const [form, setForm] = useState({ nombre: "", anio: "", profesor: "", division: "" });
-  const [editandoId, setEditandoId] = useState(null);
-  const [loadingAction, setLoadingAction] = useState(false);
+  const [editingMateria, setEditingMateria] = useState(null);
+  const [formData, setFormData] = useState({
+    nombre: "", anio: "", division: "", profesor: ""
+  });
 
-  const token = localStorage.getItem("token");
+  const anios = [1, 2, 3, 4, 5, 6];
+  const divisiones = ["A", "B", "C"];
 
-  const fetchMaterias = async () => {
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const res = await axios.get("http://localhost:5000/api/materias", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setMaterias(res.data);
+      const [resMaterias, resProfesores] = await Promise.all([
+        getMaterias(),
+        getProfesores()
+      ]);
+      setMaterias(resMaterias.data || []);
+      // Filtramos solo por si getProfesores devuelve todos los usuarios
+      const profes = resProfesores.data || [];
+      setProfesores(profes.filter(p => p.rol === 'profesor')); 
     } catch (error) {
-      toast.error("Error al obtener materias");
+      console.error(error);
+      toast.error("Error al cargar datos");
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchProfesores = async () => {
-    try {
-      const res = await axios.get("http://localhost:5000/api/usuarios", {
-        headers: { Authorization: `Bearer ${token}` },
+  const handleOpenModal = (materia = null) => {
+    if (materia) {
+      setEditingMateria(materia);
+      setFormData({
+        nombre: materia.nombre,
+        anio: materia.anio,
+        division: materia.division || "",
+        profesor: materia.profesor?._id || materia.profesor || ""
       });
-      setProfesores(res.data.filter((u) => u.rol === "profesor"));
-    } catch {
-      toast.error("Error al obtener profesores");
+    } else {
+      setEditingMateria(null);
+      setFormData({ nombre: "", anio: "", division: "", profesor: "" });
+    }
+    setShowModal(true);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      // Asegurar que el profesor vacío se envíe como null o no se envíe si el backend lo requiere
+      const payload = { ...formData };
+      if (!payload.profesor) delete payload.profesor;
+
+      if (editingMateria) {
+        await updateMateria(editingMateria._id, payload);
+        toast.success("Materia actualizada");
+      } else {
+        await createMateria(payload);
+        toast.success("Materia creada");
+      }
+      setShowModal(false);
+      fetchData();
+    } catch (error) {
+      const msg = error.response?.data?.msg || "Error al guardar";
+      toast.error(msg);
     }
   };
 
-  const handleDelete = async (id) => {
-    const confirm = await Swal.fire({
-      title: "¿Estás seguro?",
-      text: "Esta acción no se puede deshacer.",
+  const handleDelete = (materia) => {
+    Swal.fire({
+      title: "¿Eliminar materia?",
+      text: "Se eliminará permanentemente.",
       icon: "warning",
       showCancelButton: true,
-      confirmButtonColor: "#EF4444",
-      cancelButtonColor: "#6B7280",
       confirmButtonText: "Sí, eliminar",
-      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#d33"
+    }).then(async (result) => {
+      if (result.isConfirmed) {
+        try {
+          await deleteMateria(materia._id);
+          setMaterias(prev => prev.filter(m => m._id !== materia._id));
+          Swal.fire("Eliminada", "", "success");
+        } catch (error) {
+          toast.error("Error al eliminar");
+        }
+      }
     });
-    if (!confirm.isConfirmed) return;
-
-    try {
-      await axios.delete(`http://localhost:5000/api/materias/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      toast.success("Materia eliminada correctamente");
-      fetchMaterias();
-    } catch {
-      toast.error("Error al eliminar materia");
-    }
   };
 
-  const handleGuardar = async () => {
-    // Validar año
-    const anioNum = parseInt(form.anio, 10);
-    if (isNaN(anioNum) || form.anio === "") {
-      toast.error("Por favor, selecciona un año.");
-      return;
-    }
-    
-    // Si el año es 1-6, la división es obligatoria
-    if (anioNum > 0 && !["A", "B", "C"].includes(form.division)) {
-      toast.error(`Por favor, selecciona una división (A, B, o C) para ${anioNum}° Año.`);
-      return;
-    }
+  const filteredMaterias = materias.filter(m => 
+    m.nombre.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
-    setLoadingAction(true);
-    const url = modoEdicion
-      ? `http://localhost:5000/api/materias/${editandoId}`
-      : "http://localhost:5000/api/materias";
-    const method = modoEdicion ? "put" : "post";
-
-    // Preparar payload
-    const payload = {
-      nombre: form.nombre,
-      anio: anioNum,
-      profesor: form.profesor || null,
-      // Si el año es 0 (General), forzamos la división a null
-      division: anioNum === 0 ? null : form.division
-    };
-
-    try {
-      await axios[method](url, payload, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      toast.success(modoEdicion ? "Materia actualizada" : "Materia creada");
-      setShowModal(false);
-      setForm({ nombre: "", anio: "", profesor: "", division: "" });
-      setModoEdicion(false);
-      setEditandoId(null);
-      fetchMaterias();
-    } catch (error) {
-      const errorMessage =
-        error.response?.data?.msg || error.response?.data?.error || "Error al guardar materia";
-      toast.error(errorMessage);
-    } finally {
-      setLoadingAction(false);
-    }
-  };
-
-  const abrirModalEditar = (materia) => {
-    setModoEdicion(true);
-    setEditandoId(materia._id);
-    setForm({
-      nombre: materia.nombre,
-      anio: materia.anio,
-      profesor: materia.profesor?._id || "",
-      division: materia.division || "", // Añadir esta línea
-    });
-    setShowModal(true);
-  };
-
-  const abrirModalNuevo = () => {
-    setModoEdicion(false);
-    setForm({ nombre: "", anio: "", profesor: "", division: "" });
-    setShowModal(true);
-  };
-
-  useEffect(() => {
-    fetchMaterias();
-    fetchProfesores();
-  }, []);
+  if (loading) return <div className="flex justify-center p-10"><Loader2 className="animate-spin" /></div>;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-100 p-8">
-      <div className="max-w-6xl mx-auto space-y-8">
-        {/* HEADER */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg">
-              <Book size={32} />
-            </div>
-            <div>
-              <h1 className="text-4xl font-extrabold text-gray-900">
-                Gestión de Materias
-              </h1>
-              <p className="text-xl text-gray-600">
-                Crea, edita y elimina materias de la plataforma.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={abrirModalNuevo}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-all transform hover:scale-105 flex items-center gap-2"
-          >
-            <Plus size={20} />
-            Nueva Materia
-          </button>
-        </div>
-
-        {/* TABLA O ESTADOS */}
-        <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-200">
-          {loading ? (
-            <div className="flex flex-col items-center justify-center p-12">
-              <Loader2 size={48} className="animate-spin text-blue-500 mb-4" />
-              <p className="text-lg text-gray-700">Cargando materias...</p>
-            </div>
-          ) : materias.length === 0 ? (
-            <div className="flex flex-col items-center justify-center p-12 text-center text-gray-500">
-              <AlertCircle size={48} className="text-gray-400 mb-4" />
-              <p className="text-lg font-semibold">No hay materias registradas.</p>
-              <p className="mt-2">Haz clic en "Nueva Materia" para agregar una.</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                      <div className="flex items-center gap-2"><LayoutGrid size={16} /> Nombre</div>
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                      <div className="flex items-center gap-2"><Calendar size={16} /> Año</div>
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                      <div className="flex items-center gap-2"><Hash size={16} /> División</div>
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                      <div className="flex items-center gap-2"><User size={16} /> Profesor</div>
-                    </th>
-                    <th className="px-6 py-4 text-center text-xs font-bold text-gray-600 uppercase tracking-wider">
-                      Acciones
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {materias.map((materia) => (
-                    <tr key={materia._id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
-                        {materia.nombre}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                        {materia.anio === 0 ? "General" : `${materia.anio}°`}
-                      </td>
-                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-  {materia.division || "Sin asignar"}
-</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                        {materia.profesor?.nombre || "Sin asignar"} {materia.profesor?.apellido || ""}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-center">
-                        <div className="flex items-center justify-center gap-4">
-                          <button
-                            className="text-indigo-600 hover:text-indigo-900 transition-colors"
-                            title="Editar materia"
-                            onClick={() => abrirModalEditar(materia)}
-                          >
-                            <Pencil size={18} />
-                          </button>
-                          <button
-                            className="text-red-600 hover:text-red-900 transition-colors"
-                            title="Eliminar materia"
-                            onClick={() => handleDelete(materia._id)}
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* MODAL */}
-        {showModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-3xl p-8 w-full max-w-lg shadow-2xl relative">
-              <button
-                onClick={() => setShowModal(false)}
-                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <X size={24} />
-              </button>
-              <h2 className="text-3xl font-bold text-gray-900 mb-6">
-                <LayoutGrid size={28} className="inline-block mr-3 text-blue-600" />
-                {modoEdicion ? "Editar Materia" : "Nueva Materia"}
-              </h2>
-
-              <div className="space-y-5">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Nombre
-                  </label>
-                  <input
-                    type="text"
-                    value={form.nombre}
-                    onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-                    className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                    required
-                  />
-                </div>
-
-                {/* Campos de Año y División */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Año
-                    </label>
-                    <select
-                      value={form.anio}
-                      onChange={(e) => setForm({ ...form, anio: e.target.value, division: "" })}
-                      className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white"
-                      required
-                    >
-                      <option value="">Seleccionar...</option>
-                      <option value="0">General (Asistencias)</option>
-                      <option value="1">1° Año</option>
-                      <option value="2">2° Año</option>
-                      <option value="3">3° Año</option>
-                      <option value="4">4° Año</option>
-                      <option value="5">5° Año</option>
-                      <option value="6">6° Año</option>
-                    </select>
-                  </div>
-
-                  {/* El selector de División SÓLO aparece si el año es 1-6 */}
-                  {!!form.anio && parseInt(form.anio, 10) > 0 && (
-                    <div>
-                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                        División
-                     </label>
-                     <input
-                          type="text"
-                          value={form.division}
-                          onChange={(e) => setForm({ ...form, division: e.target.value })}
-                          className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                          placeholder="Ej: A, B, C..."
-                        />
-                     </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Profesor asignado (opcional)
-                  </label>
-                  <select
-                    value={form.profesor}
-                    onChange={(e) => setForm({ ...form, profesor: e.target.value })}
-                    className="w-full border border-gray-300 p-3 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                  >
-                    <option value="">-- Sin asignar --</option>
-                    {profesores.map((prof) => (
-                      <option key={prof._id} value={prof._id}>
-                        {prof.nombre} {prof.apellido}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="mt-6 flex justify-end gap-4">
-                <button
-                  onClick={() => setShowModal(false)}
-                  className="bg-gray-200 text-gray-700 font-semibold px-6 py-3 rounded-xl hover:bg-gray-300 transition-colors"
-                  disabled={loadingAction}
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleGuardar}
-                  className="bg-blue-600 text-white font-semibold px-6 py-3 rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  disabled={loadingAction}
-                >
-                  {loadingAction ? (
-                    <>
-                      <Loader2 size={20} className="animate-spin" />
-                      Guardando...
-                    </>
-                  ) : (
-                    modoEdicion ? "Guardar Cambios" : "Crear Materia"
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+    <div className="p-6 space-y-6 bg-gray-50 min-h-screen">
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold flex items-center gap-2"><BookOpen /> Gestión de Materias</h1>
+        <button onClick={() => handleOpenModal()} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex gap-2">
+          <Plus /> Nueva Materia
+        </button>
       </div>
+
+      <div className="bg-white p-4 rounded shadow">
+        <div className="relative">
+          <Search className="absolute left-3 top-3 text-gray-400" size={20} />
+          <input 
+            type="text" placeholder="Buscar materia..." 
+            value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+            className="w-full pl-10 p-2 border rounded outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {filteredMaterias.map(materia => (
+          <div key={materia._id} className="bg-white p-5 rounded shadow hover:shadow-md relative group">
+            <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button onClick={() => handleOpenModal(materia)} className="text-gray-500 hover:text-blue-600"><Edit2 size={18}/></button>
+              <button onClick={() => handleDelete(materia)} className="text-gray-500 hover:text-red-600"><Trash2 size={18}/></button>
+            </div>
+            <h3 className="font-bold text-lg">{materia.nombre}</h3>
+            <div className="flex gap-2 my-2">
+              <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">{materia.anio}° Año</span>
+              <span className="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded">Div. {materia.division}</span>
+            </div>
+            <div className="flex items-center gap-2 mt-4 text-gray-600 text-sm">
+              <User size={16} />
+              {materia.profesor ? `${materia.profesor.nombre} ${materia.profesor.apellido || ''}` : 'Sin asignar'}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {showModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-6 rounded-lg w-full max-w-md">
+             <div className="flex justify-between mb-4">
+               <h3 className="font-bold text-lg">{editingMateria ? "Editar" : "Nueva"} Materia</h3>
+               <button onClick={() => setShowModal(false)}><X /></button>
+             </div>
+             <form onSubmit={handleSubmit} className="space-y-4">
+               <input className="w-full p-2 border rounded" placeholder="Nombre" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} required />
+               <div className="grid grid-cols-2 gap-4">
+                 <select className="p-2 border rounded" value={formData.anio} onChange={e => setFormData({...formData, anio: e.target.value})} required>
+                   <option value="">Año</option>
+                   {anios.map(a => <option key={a} value={a}>{a}°</option>)}
+                 </select>
+                 <select className="p-2 border rounded" value={formData.division} onChange={e => setFormData({...formData, division: e.target.value})} required>
+                   <option value="">División</option>
+                   {divisiones.map(d => <option key={d} value={d}>{d}</option>)}
+                 </select>
+               </div>
+               <select className="w-full p-2 border rounded" value={formData.profesor} onChange={e => setFormData({...formData, profesor: e.target.value})}>
+                 <option value="">-- Profesor --</option>
+                 {profesores.map(p => <option key={p._id} value={p._id}>{p.nombre} {p.apellido}</option>)}
+               </select>
+               <button type="submit" className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Guardar</button>
+             </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

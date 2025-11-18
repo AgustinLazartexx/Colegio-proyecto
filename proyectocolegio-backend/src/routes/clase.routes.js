@@ -1,68 +1,49 @@
-// routes/clase.routes.js (Verifica que coincida con esto)
 import { Router } from "express";
 import { checkAuth } from "../middlewares/checkAuth.js";
 import { checkRole } from "../middlewares/checkRole.js";
-import { 
-  crearClase, 
-  obtenerTodasLasClases,
-  obtenerClasesProfesor, // <- Este se usa para /misclases
+import {
+  crearClase,
   actualizarClase,
   eliminarClase,
-  obtenerClasePorId
+  obtenerTodasLasClases,
+  obtenerClasesProfesor,
+  obtenerClasePorId,
+  // Importamos las funciones de alumnos
+  asignarAlumno,
+  desasignarAlumno,
+  listarAlumnosDeClase,
 } from "../controllers/clase.controller.js";
-// Importa Clase para las rutas adicionales si las mantienes
-import Clase from "../models/Clases.js"; 
-
 
 const router = Router();
 
-// Rutas para PROFESORES
-router.get(
-  "/misclases",
-  [checkAuth, checkRole("profesor")],
-  obtenerClasesProfesor // <- Correcto
-);
+const adminSolo = [checkAuth, checkRole("admin")];
+const adminProfesor = [checkAuth, checkRole("admin", "profesor")];
+const profesorSolo = [checkAuth, checkRole("profesor")];
 
-// Rutas para ADMIN
-router.post("/", [checkAuth, checkRole("admin")], crearClase);
-router.get("/", [checkAuth, checkRole("admin")], obtenerTodasLasClases);
-router.put("/:id", [checkAuth, checkRole("admin")], actualizarClase);
-router.delete("/:id", [checkAuth, checkRole("admin")], eliminarClase);
+// ==========================================
+//             RUTAS PRINCIPALES
+// ==========================================
 
-// Rutas para AMBOS (Admin y Profesor dueño)
-router.get("/:id", [checkAuth, checkRole("admin", "profesor")], obtenerClasePorId);
+// 1. Listar Clases
+router.get("/", adminSolo, obtenerTodasLasClases);
+router.get("/misclases", profesorSolo, obtenerClasesProfesor);
 
-// --- RUTAS ADICIONALES (Revisar si las necesitas) ---
-// Puedes mantenerlas, pero asegúrate de que la lógica dentro de ellas
-// y los .populate() usen 'profesores' en lugar de 'profesor'.
+// 2. Gestión de Clases (CRUD)
+router.post("/", adminSolo, crearClase);
+router.put("/:id", adminSolo, actualizarClase);
+router.delete("/:id", adminSolo, eliminarClase);
 
-// Ejemplo: Obtener clases por materia (necesita .populate('profesores'))
-router.get("/materia/:materiaId", [checkAuth, checkRole("admin", "profesor")],
-  async (req, res) => {
-    try {
-      const { materiaId } = req.params;
-      const clases = await Clase.find({ materia: materiaId })
-        .populate("materia", "nombre")
-        .populate("profesores", "nombre email") // <-- Corregido
-        .sort({ division: 1, diaSemana: 1, horaInicio: 1 });
-      res.json({ msg: "Clases obtenidas", clases });
-    } catch (error) { res.status(500).json({ msg: "Error", error: error.message }); }
-  }
-);
 
-// Ejemplo: Obtener clases por año (necesita .populate('profesores'))
-router.get("/anio/:anio", [checkAuth, checkRole("admin")],
-  async (req, res) => {
-    try {
-      const { anio } = req.params;
-      const clases = await Clase.find({ anio: parseInt(anio) })
-        .populate("materia", "nombre")
-        .populate("profesores", "nombre email") // <-- Corregido
-        .sort({ division: 1, diaSemana: 1, horaInicio: 1 });
-      res.json({ msg: `Clases del año ${anio}`, clases });
-    } catch (error) { res.status(500).json({ msg: "Error", error: error.message }); }
-  }
-);
+// ==========================================
+//       GESTIÓN DE ALUMNOS Y DETALLES
+// ==========================================
 
+// CORRECCIÓN: Usamos ":id" en lugar de ":claseId" para consistencia con el controller
+router.get("/:id", adminProfesor, obtenerClasePorId);
+
+// Rutas de Alumnos (Usamos :id para la clase)
+router.get("/:id/alumnos", adminProfesor, listarAlumnosDeClase);
+router.post("/:id/alumnos", adminSolo, asignarAlumno);
+router.delete("/:id/alumnos/:alumnoId", adminSolo, desasignarAlumno);
 
 export default router;

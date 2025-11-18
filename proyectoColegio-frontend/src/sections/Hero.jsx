@@ -13,7 +13,7 @@ const Hero = () => {
         viewport={{ once: true }}
       >
         <h1 className="text-4xl md:text-5xl font-bold text-accent mb-4">
-          Academia Secundaria Del Sol
+          Colegio Reina de la Esperanza
         </h1>
         <p className="text-lg text-gray-700 mb-6">
           Formación integral con orientación en <span className="text-secondary font-semibold">Contabilidad</span> y <span className="text-secondary font-semibold">Administración de Empresas</span>.

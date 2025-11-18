@@ -3,123 +3,115 @@ import { toast } from 'react-toastify';
 import { CalendarCheck, UserCheck, Save, School, Loader2, Users } from 'lucide-react';
 import api from '../../api/api';
 
-// Importamos las funciones específicas de api.js
+
+// 🔹 CORRECCIÓN: Importar todo desde 'api.js'
 import {
-  obtenerAlumnosPorCurso,
-  obtenerAsistenciasPorClaseYFecha,
-  registrarAsistencias,
-} from '../../api/api';
+  getAlumnosPorCurso,
+  obtenerAsistenciasPorClaseYFecha,
+  registrarAsistencias,
+  getTodasLasClases // Importar la función correcta
+} from '../../api/api'; // <-- Apuntar al archivo api.js
 
 const TomarAsistenciaAdmin = () => {
-  const [anio, setAnio] = useState('');
-  const [division, setDivision] = useState('');
-  const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
-  const [alumnos, setAlumnos] = useState([]);
-  const [asistencias, setAsistencias] = useState({});
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [allClases, setAllClases] = useState([]);
+  const [anio, setAnio] = useState('');
+  const [division, setDivision] = useState('');
+  const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
+  const [alumnos, setAlumnos] = useState([]);
+  const [asistencias, setAsistencias] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [allClases, setAllClases] = useState([]);
 
-  const aniosDisponibles = ['1', '2', '3', '4', '5', '6'];
-  const divisionesDisponibles = ['A', 'B', 'C'];
+  const aniosDisponibles = ['1', '2', '3', '4', '5', '6'];
+  const divisionesDisponibles = ['A', 'B', 'C'];
 
-  // 1. Cargar la lista de TODAS las clases una vez al montar
-  useEffect(() => {
-    const loadClases = async () => {
-      try {
-        const res = await api.get('/clases'); // Llama a obtenerTodasLasClases
-        setAllClases(res.data.clases || []);
+  // 1. Cargar la lista de TODAS las clases
+  useEffect(() => {
+    const loadClases = async () => {
+      try {
+        // 🔹 CORRECCIÓN: Usar la función importada 'getTodasLasClases'
+        const res = await getTodasLasClases(); 
         
-        // --- DEBUGGING ---
-        console.log("CLASES CARGADAS DESDE LA API:", res.data.clases);
-        // --- FIN DEBUGGING ---
+        // 🔹 CORRECCIÓN: El error estaba aquí. 'res.data' sí existe ahora.
+        setAllClases(res.data.clases || []);
+        
+        console.log("CLASES CARGADAS DESDE LA API:", res.data.clases);
 
-      } catch (e) {
-        toast.error('Error: No se pudo cargar la lista de clases.');
-        console.error("Error cargando clases:", e);
-      }
-    };
-    loadClases();
-  }, []);
+      } catch (e) {
+        toast.error('Error: No se pudo cargar la lista de clases.');
+        console.error("Error cargando clases:", e);
+      }
+    };
+    loadClases();
+  }, []);
 
-  // 2. 🔹 CORRECCIÓN: Función para encontrar el ID de la clase "General"
-  const findGeneralClaseId = () => {
-    if (!anio || !division) return null;
+  // 2. (Esta función está bien)
+  const findGeneralClaseId = () => {
+    if (!anio || !division) return null;
+    console.log(`Buscando clase con Año: "${anio}" y División: "${division}"`);
 
-    console.log(`Buscando clase con Año: "${anio}" y División: "${division}"`);
+    const generalClass = allClases.find((c) => {
+      const anioMatch = String(c.anio) === String(anio);
+      const divisionMatch = String(c.division).toUpperCase() === String(division).toUpperCase();
+      const materiaMatch = c.materia && c.materia.nombre.toLowerCase().includes('asistencia general');
+      return anioMatch && divisionMatch && materiaMatch;
+    });
+    console.log('Clase "General" encontrada:', generalClass);
+    return generalClass ? generalClass.id : null; 
+  };
 
-    const generalClass = allClases.find((c) => {
-      // Comprobaciones de depuración
-      // console.log(`Comparando con: Año=${c.anio} (tipo ${typeof c.anio}), Div=${c.division} (tipo ${typeof c.division}), Materia=${c.materia?.nombre}`);
+  // 3. Cargar alumnos y asistencias previas
+  const fetchAlumnosYAsistencia = async () => {
+    if (!anio || !division || !fecha) {
+      toast.info('Selecciona año, división y fecha para cargar la lista.');
+      return;
+    }
+    setLoading(true);
+    setAlumnos([]);
+    setAsistencias({});
+    const claseId = findGeneralClaseId(); 
 
-      const anioMatch = String(c.anio) === String(anio);
-      const divisionMatch = String(c.division).toUpperCase() === String(division).toUpperCase();
-      const materiaMatch = c.materia && c.materia.nombre.toLowerCase().includes('asistencia general');
+    if (!claseId) {
+      toast.error(
+        `No se encontró una clase de "Asistencia General" para ${anio}° ${division}.`
+      );
+      toast.info('Asegúrate de crearla en el panel "Gestionar Clases".');
+      setLoading(false);
+      return;
+    }
 
-      return anioMatch && divisionMatch && materiaMatch;
-    });
+    try {
+      // 3b. Cargar alumnos
+      // 🔹 CORRECCIÓN: 'getAlumnosPorCurso' ahora devuelve la respuesta de Axios
+      const resAlumnos = await getAlumnosPorCurso(anio, division);
+      const alumnosEncontrados = resAlumnos.data || []; // La data está en .data
+      setAlumnos(alumnosEncontrados);
 
-    // --- DEBUGGING ---
-    console.log('Clase "General" encontrada:', generalClass);
-    // --- FIN DEBUGGING ---
+      if (alumnosEncontrados.length === 0) {
+        toast.warn(`No se encontraron alumnos para ${anio}° ${division}.`);
+        setLoading(false);
+        return;
+      }
 
-    return generalClass ? generalClass.id : null; 
-  };
+      // 3c. Cargar asistencias (Esta función ya devuelve la data)
+      const asistenciasGuardadas = await obtenerAsistenciasPorClaseYFecha(
+        claseId,
+        fecha
+      );
 
-  // 3. 🔹 Cargar alumnos y asistencias previas
-  const fetchAlumnosYAsistencia = async () => {
-    if (!anio || !division || !fecha) {
-      toast.info('Selecciona año, división y fecha para cargar la lista.');
-      return;
-    }
-
-    setLoading(true);
-    setAlumnos([]);
-    setAsistencias({});
-
-    // 3a. Encontrar el claseId de "Asistencia General"
-    const claseId = findGeneralClaseId(); // Esta función ahora tiene los console.log
-
-    if (!claseId) {
-      toast.error(
-        `No se encontró una clase de "Asistencia General" para ${anio}° ${division}.`
-      );
-      toast.info('Asegúrate de crearla en el panel "Gestionar Clases".');
-      setLoading(false);
-      return;
-    }
-
-    try {
-      // 3b. Cargar alumnos
-      const resAlumnos = await obtenerAlumnosPorCurso(anio, division);
-      const alumnosEncontrados = resAlumnos.usuarios || []; 
-      setAlumnos(alumnosEncontrados);
-
-      if (alumnosEncontrados.length === 0) {
-        toast.warn(`No se encontraron alumnos para ${anio}° ${division}.`);
-        setLoading(false);
-        return;
-      }
-
-      // 3c. Cargar asistencias existentes
-      const asistenciasGuardadas = await obtenerAsistenciasPorClaseYFecha(
-        claseId,
-        fecha
-      );
-
-      // 3d. Mezclar
-      const inicial = {};
-      alumnosEncontrados.forEach((a) => {
-        inicial[a._id] = asistenciasGuardadas[a._id] || 'presente';
-      });
-      setAsistencias(inicial);
-    } catch (err) {
-      console.error(err);
-      toast.error('Error al cargar alumnos o asistencias.');
-    } finally {
-      setLoading(false);
-    }
-  };
+      // 3d. Mezclar
+      const inicial = {};
+      alumnosEncontrados.forEach((a) => {
+        inicial[a._id] = asistenciasGuardadas[a._id] || 'presente';
+      });
+      setAsistencias(inicial);
+    } catch (err) {
+      console.error(err);
+      toast.error('Error al cargar alumnos o asistencias.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // (El resto de las funciones no necesitan cambios)
 

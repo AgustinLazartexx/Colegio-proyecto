@@ -14,7 +14,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
      <BrowserRouter>
       <AuthProvider>
         <App />
-        <ToastContainer /> {/* 👈 esto lo muestra en toda la app */}
+        <ToastContainer /> 
       </AuthProvider>
     </BrowserRouter>
     

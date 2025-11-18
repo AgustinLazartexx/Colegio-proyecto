@@ -1,21 +1,27 @@
 export const checkRole = (...rolesPermitidos) => {
   return (req, res, next) => {
-   
-    try {
-      // Intentamos obtener el rol de req.rol o req.user.rol
-      const rol = req.rol || (req.user && req.user.rol); 
+    // 1. Verificar si checkAuth hizo su trabajo
+    if (!req.user) {
+      console.log("!!! checkRole: req.user no existe. ¿Pasaste por checkAuth?");
+      return res.status(401).json({ msg: "No autenticado (Token inválido o expirado)" });
+    }
 
+    // 2. Aplanar los roles por si se pasaron como arrays o strings sueltos
+    // Esto permite usar checkRole("admin") O checkRole(["admin"])
+    const roles = rolesPermitidos.flat();
 
-      if (!rol || !rolesPermitidos.includes(rol)) {
-        console.log("!!! checkRole FALLÓ: Rol no autorizado."); // Log ROLE 4a
-        return res.status(403).json({ msg: "Acceso denegado: Rol no autorizado" });
-      }
+    console.log(`--- DEBUG ROL ---`);
+    console.log(`Rol del Usuario: ${req.user.rol}`);
+    console.log(`Roles Permitidos: ${roles}`);
 
-      
-      next(); // Pasa al siguiente middleware o controlador
-    } catch (err) {
-     
-      return res.status(500).json({ msg: "Error al verificar rol" });
+    // 3. Verificar si el rol del usuario está en la lista permitida
+    if (roles.includes(req.user.rol)) {
+      next();
+    } else {
+      console.log("!!! checkRole: Acceso Denegado.");
+      return res.status(403).json({ 
+        msg: `No tienes permisos. Se requiere: ${roles.join(" o ")}` 
+      });
     }
   };
 };

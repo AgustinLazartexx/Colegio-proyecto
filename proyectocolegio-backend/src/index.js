@@ -16,7 +16,6 @@ import calificacionRoutes from "./routes/calificacion.routes.js";
 import tareaRoutes from "./routes/tarea.routes.js";
 import entregaRoutes from "./routes/entrega.routes.js";
 import tareasAlumnoRoutes from "./routes/tareas.alumno.routes.js";
-import getMateriasPorAlumno from "./routes/materia.alumno.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import anuncioRoutes from "./routes/anuncio.routes.js";
 import claseRoutes from "./routes/clase.routes.js";
@@ -67,7 +66,6 @@ app.use("/api/calificaciones", calificacionRoutes);
 app.use("/api/tareas", tareaRoutes);
 app.use("/api/entregas", entregaRoutes);
 app.use("/api/tareas/alumno", tareasAlumnoRoutes);
-app.use("/api/materias", getMateriasPorAlumno); // Ojo: prefijo duplicado, puede ser confuso
 app.use("/api/admin", adminRoutes);
 app.use("/api/anuncios", anuncioRoutes);
 app.use("/api/clases", claseRoutes);

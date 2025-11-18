@@ -1,23 +1,29 @@
-import User from "../models/User.js";
+// src/controllers/alumnos.controller.js
+import User from "../models/User.js"; // Asegúrate que la ruta sea correcta
 
 /**
- * 📘 Listar alumnos con filtros opcionales por año y división
+ * 📘 Listar alumnos con filtros por año y división
  * Ejemplo:
- *   GET /api/alumnos?anio=3&division=A
+ * GET /api/alumnos?anio=3&division=A
  */
-export const listarAlumnos = async (req, res) => {
+export const listarAlumnosPorCurso = async (req, res) => {
   try {
     const { anio, division } = req.query;
-    const filtros = { rol: "alumno" };
+    
+    if (!anio || !division) {
+      return res.status(400).json({ msg: "Debe indicar año y división" });
+    }
 
-    // Aplicar filtros si vienen en la query
-    if (anio) filtros.anio = parseInt(anio);
-    if (division) filtros.division = division;
+    const filtros = { 
+      rol: "alumno",
+      anio: parseInt(anio),
+      division: division.toUpperCase()
+    };
 
     console.log("📋 Filtros aplicados:", filtros);
 
     const alumnos = await User.find(filtros)
-      .select("-password")
+      .select("-contraseña") // Corregido de 'password' a 'contraseña'
       .sort({ nombre: 1 });
 
     if (!alumnos.length) {
@@ -25,7 +31,8 @@ export const listarAlumnos = async (req, res) => {
     }
 
     res.json(alumnos);
-  } catch (error) {
+  } catch (error)
+ {
     console.error("Error al listar alumnos:", error);
     res.status(500).json({
       msg: "Error interno al listar alumnos",
