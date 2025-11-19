@@ -19,6 +19,10 @@ export default api;
 // ==========================================
 //       FUNCIONES DE USUARIOS (Backend user.routes.js)
 // ==========================================
+// Devuelve: { alumnos: number, profesores: number, materias: number }
+export const getAdminStats = () => {
+  return api.get('/admin/stats');
+};
 
 // GET /api/usuarios
 export const getUsuarios = (filtros = {}) => {
@@ -50,8 +54,6 @@ export const getProfesores = () => {
 // Para Admin (trae todas o filtra por año/profe)
 export const getMaterias = (params = {}) => api.get('/materias', { params });
 
-// Para Profesor (trae SOLO las suyas) - NUEVA FUNCIÓN
-export const getMateriasProfesor = () => api.get('/materias/profesor/listado');
 
 export const getMateriaById = (id) => api.get(`/materias/${id}`);
 export const createMateria = (data) => api.post('/materias', data);
@@ -66,8 +68,7 @@ export const eliminarClase = (id) => api.delete(`/clases/${id}`);
 
 export const getTodasLasClases = () => api.get('/clases'); 
 
-// Para el PROFESOR: Obtiene solo las clases asignadas a él
-export const getMisClases = () => api.get('/clases/misclases');
+
 
 // Obtener detalle de una clase por ID (útil para admin y profesor)
 export const getClaseById = (id) => api.get(`/clases/${id}`);
@@ -132,3 +133,9 @@ export const guardarNota = (data) => {
   return api.post('/notas/guardar-una', data);
 };
 
+// Para el PROFESOR: Obtiene solo las clases asignadas a él
+export const getMisClases = () => api.get('/clases/misclases');
+
+// Para Profesor (trae SOLO las suyas)
+export const getMateriasProfesor = () => api.get('/materias/profesor/listado');
+// ...

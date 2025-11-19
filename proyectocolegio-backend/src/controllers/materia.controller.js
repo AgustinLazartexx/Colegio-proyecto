@@ -8,7 +8,6 @@ export const crearMateria = async (req, res) => {
   try {
     const { nombre, anio, profesor, division } = req.body;
 
-    // Validar si ya existe
     const existe = await Materia.findOne({ nombre, anio, division });
     if (existe) {
       return res.status(400).json({ msg: "La materia ya existe para ese año y división" });
@@ -29,6 +28,7 @@ export const crearMateria = async (req, res) => {
 // ----------------------------------------------------
 export const obtenerMaterias = async (req, res) => {
   try {
+    // CORRECCIÓN: Quitamos 'alumnos' del populate si existía antes
     const materias = await Materia.find().populate("profesor", "nombre apellido");
     res.json(materias);
   } catch (error) {
@@ -37,7 +37,7 @@ export const obtenerMaterias = async (req, res) => {
 };
 
 // ----------------------------------------------------
-// Obtener materias filtradas (GET /api/materias?anio=1)
+// Obtener materias filtradas
 // ----------------------------------------------------
 export const obtenerMateriasFiltradas = async (req, res) => {
   try {
@@ -59,7 +59,8 @@ export const obtenerMateriasFiltradas = async (req, res) => {
 export const obtenerMateria = async (req, res) => {
   try {
     const { id } = req.params;
-    const materia = await Materia.findById(id).populate("profesor alumnos", "nombre apellido email");
+    // CORRECCIÓN: Eliminado 'alumnos' del populate. Solo traemos profesor.
+    const materia = await Materia.findById(id).populate("profesor", "nombre apellido email");
 
     if (!materia) {
       return res.status(404).json({ msg: "Materia no encontrada" });
@@ -108,105 +109,59 @@ export const eliminarMateria = async (req, res) => {
   }
 };
 
-
 // ----------------------------------------------------
-// Inscribir alumno a materia (solo alumno)
+// Inscribir alumno (ESTA LÓGICA DEBE CAMBIAR A 'CLASES' EN EL FUTURO)
+// Por ahora la dejamos comentada o retornamos error si ya no usas el array en Materia
 // ----------------------------------------------------
 export const inscribirseAMateria = async (req, res) => {
-  try {
-    const { id } = req.params;
-    // CORREGIDO: Usar req.user.id (no req.uid)
-    const alumnoId = req.user.id; 
-
-    const materia = await Materia.findById(id);
-    if (!materia) return res.status(404).json({ msg: "Materia no encontrada" });
-
-    if (materia.alumnos.includes(alumnoId)) {
-      return res.status(400).json({ msg: "Ya estás inscripto en esta materia" });
-    }
-
-    materia.alumnos.push(alumnoId);
-    await materia.save();
-
-    res.json({ msg: "Inscripción exitosa", materia });
-  } catch (error) {
-    console.error("Error en inscripción:", error);
-    res.status(500).json({ msg: "Error al inscribirse" });
-  }
+    // Si ya no tienes el campo 'alumnos', esta función dará error.
+    // Deberías mover esta lógica al controlador de Clases.
+    res.status(501).json({ msg: "Funcionalidad movida a gestión de Clases" });
 };
 
 // ----------------------------------------------------
-// Ver alumnos inscriptos en una materia
-// CORREGIDO: Aquí estaba el ERROR 500
+// Ver alumnos de una materia
+// NOTA: Como quitaste el array, esto ya no funcionará leyendo de Materia.
+// Debes buscar en el modelo 'Clase' o 'Usuario' filtrando por año/división.
 // ----------------------------------------------------
 export const verAlumnosMateria = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const materia = await Materia.findById(id).populate("alumnos", "nombre apellido email");
-    
-    if (!materia) return res.status(404).json({ msg: "Materia no encontrada" });
-
-    // CORRECCIÓN: Usar req.user.rol y req.user.id de forma segura
-    const esAdmin = req.user.rol === "admin";
-    
-    // Validamos si materia.profesor existe antes de hacer toString()
-    const esProfesorAsignado = materia.profesor && (req.user.id === materia.profesor.toString());
-
-    // Si no es admin ni el profe asignado, rechazar
-    if (!esAdmin && !esProfesorAsignado) {
-      return res.status(403).json({ msg: "Acceso denegado. No eres el profesor de esta materia." });
-    }
-
-    res.json(materia.alumnos);
-  } catch (error) {
-    console.error("Error en verAlumnosMateria:", error); // Ver error en consola del servidor
-    res.status(500).json({ msg: "Error interno al obtener alumnos" });
-  }
+  // Devolvemos array vacío temporalmente para que no rompa el front
+  res.json([]); 
 };
 
 // ----------------------------------------------------
-// Obtener materias del profesor logueado
+// Obtener materias del profesor logueado (CORREGIDA)
 // ----------------------------------------------------
 export const obtenerMateriasDelProfesor = async (req, res) => {
   try {
-    // CORREGIDO: Usar req.user.id
+    // Validación extra de seguridad
+    if (!req.user || !req.user.id) {
+        return res.status(401).json({ msg: "Token inválido o usuario no encontrado" });
+    }
+    
     const profesorId = req.user.id; 
-    const materias = await Materia.find({ profesor: profesorId }).populate("alumnos", "nombre apellido email");
+    
+    // CORRECCIÓN IMPORTANTE: Eliminado .populate("alumnos")
+    // Ya no existe el campo alumnos, así que no intentamos poblarlo.
+    const materias = await Materia.find({ profesor: profesorId })
+        .populate("profesor", "nombre apellido email");
     
     res.json(materias);
   } catch (error) {
     console.error("Error al obtener materias del profesor:", error);
-    res.status(500).json({ msg: "Error al obtener materias del profesor" });
+    res.status(500).json({ msg: "Error al obtener materias del profesor", error: error.message });
   }
 };
 
 // ----------------------------------------------------
-// Obtener alumnos de las materias del profesor autenticado
+// Obtener alumnos por profesor
 // ----------------------------------------------------
 export const verAlumnosPorProfesor = async (req, res) => {
-  try {
-    // CORREGIDO: Usar req.user.id
-    const profesorId = req.user.id;
-
-    const materias = await Materia.find({ profesor: profesorId })
-      .populate("alumnos", "nombre apellido email")
-      .select("nombre alumnos");
-
-    if (!materias || materias.length === 0) {
-      // Devolver array vacío en lugar de error 404 para no romper el frontend
-      return res.json([]); 
-    }
-
-    res.json(materias);
-  } catch (error) {
-    console.error("Error verAlumnosPorProfesor:", error);
-    res.status(500).json({ msg: "Error al obtener los alumnos del profesor" });
-  }
+   // Misma situación: 'alumnos' ya no existe en Materia.
+   // Devolvemos vacío para evitar el crash hasta que conectes con el modelo 'Clase'
+   res.json([]);
 };
 
-// ----------------------------------------------------
-// Obtener todos los profesores
-// ----------------------------------------------------
 export const obtenerProfesores = async (req, res) => {
   try {
     const profesores = await User.find({ rol: "profesor" }).select("nombre apellido email");

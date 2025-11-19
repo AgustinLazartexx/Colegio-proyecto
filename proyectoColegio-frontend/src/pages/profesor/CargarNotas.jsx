@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useParams } from "react-router-dom"; // <--- IMPORTANTE: Nuevo import
 import { useAuth } from "../../context/AuthContext";
 import { toast } from "react-toastify";
 import { GraduationCap, Frown, Loader2, Check } from "lucide-react";
@@ -125,6 +126,13 @@ const PromedioCell = ({ valor }) => {
 // --- Componente Principal ---
 const CargarNotas = ({ materiaIdProp }) => {
   const { usuario } = useAuth();
+  
+  // 1. Recuperamos el ID de los parámetros de la URL (caso Profesor)
+  const { id } = useParams();
+  
+  // 2. Definimos el ID final: Si el Admin pasa prop, usa esa. Si no, usa la URL.
+  const materiaId = materiaIdProp || id;
+
   const [alumnos, setAlumnos] = useState([]);
   const [trimestre, setTrimestre] = useState("1");
   const [allNotes, setAllNotes] = useState({
@@ -137,19 +145,19 @@ const CargarNotas = ({ materiaIdProp }) => {
   // Cargar datos iniciales
   useEffect(() => {
     const fetchData = async () => {
-      if (!materiaIdProp) {
-        console.warn("No se proporcionó materiaIdProp");
+      // 3. Validación usando la variable unificada
+      if (!materiaId) {
         return;
       }
       
       setLoading(true);
       try {
-        // Carga paralela de alumnos y notas de todos los trimestres
+        // Carga paralela de alumnos y notas usando materiaId
         const [resAlumnos, resT1, resT2, resT3] = await Promise.all([
-          getAlumnosDeMateria(materiaIdProp),
-          getNotasDeMateria(materiaIdProp, "1"),
-          getNotasDeMateria(materiaIdProp, "2"),
-          getNotasDeMateria(materiaIdProp, "3"),
+          getAlumnosDeMateria(materiaId),
+          getNotasDeMateria(materiaId, "1"),
+          getNotasDeMateria(materiaId, "2"),
+          getNotasDeMateria(materiaId, "3"),
         ]);
 
         setAlumnos(resAlumnos.data || []);
@@ -167,7 +175,7 @@ const CargarNotas = ({ materiaIdProp }) => {
     };
     
     fetchData();
-  }, [materiaIdProp]);
+  }, [materiaId]); // 4. Dependencia actualizada
 
   // Callback cuando se guarda una nota
   const handleNotaGuardada = (tri, alumnoId, tipoNota, notaCompleta) => {
@@ -188,6 +196,10 @@ const CargarNotas = ({ materiaIdProp }) => {
         <span className="ml-2 text-gray-600">Cargando notas...</span>
       </div>
     );
+  }
+
+  if (!materiaId) {
+      return <div className="p-8 text-center">Seleccione una materia</div>;
   }
 
   if (alumnos.length === 0) {
@@ -258,9 +270,10 @@ const CargarNotas = ({ materiaIdProp }) => {
                     {alumno.nombre}
                   </td>
                   
+                  {/* Usamos la variable unificada 'materiaId' en lugar de 'materiaIdProp' */}
                   <NotaInput 
                     alumnoId={alumno._id} 
-                    materiaId={materiaIdProp} 
+                    materiaId={materiaId} 
                     trimestre={trimestre} 
                     tipoNota="orientadora" 
                     valorInicial={notas.orientadora} 
@@ -270,7 +283,7 @@ const CargarNotas = ({ materiaIdProp }) => {
                   
                   <NotaInput 
                     alumnoId={alumno._id} 
-                    materiaId={materiaIdProp} 
+                    materiaId={materiaId} 
                     trimestre={trimestre} 
                     tipoNota="proceso" 
                     valorInicial={notas.proceso} 
@@ -280,7 +293,7 @@ const CargarNotas = ({ materiaIdProp }) => {
                   
                   <NotaInput 
                     alumnoId={alumno._id} 
-                    materiaId={materiaIdProp} 
+                    materiaId={materiaId} 
                     trimestre={trimestre} 
                     tipoNota="integradora" 
                     valorInicial={notas.integradora} 
@@ -292,7 +305,7 @@ const CargarNotas = ({ materiaIdProp }) => {
                   
                   <NotaInput 
                     alumnoId={alumno._id} 
-                    materiaId={materiaIdProp} 
+                    materiaId={materiaId} 
                     trimestre={trimestre} 
                     tipoNota="recuperacion" 
                     valorInicial={notas.recuperacion} 

@@ -1,27 +1,30 @@
 import React, { useEffect, useState } from "react";
-import axios from "axios";
-import { useAuth } from "../../context/AuthContext";
+// 1. Importamos la función centralizada desde tu api.js
+import { getAdminStats } from "../../api/api"; 
 import {
   UserGroupIcon,
   AcademicCapIcon,
   BookOpenIcon,
   ClipboardDocumentCheckIcon,
   ChartBarSquareIcon,
-  SparklesIcon,
 } from "@heroicons/react/24/outline";
 
 const DashboardAdmin = () => {
-  const { token } = useAuth();
-  const [stats, setStats] = useState({});
+  // Ya no necesitamos extraer el token manualmente aquí, api.js lo maneja
+  const [stats, setStats] = useState({
+    alumnos: 0,
+    profesores: 0,
+    materias: 0,
+    tareasPendientes: 0
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const res = await axios.get("http://localhost:5000/api/admin/stats", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setStats(res.data);
+        // 2. Usamos la función limpia que ya incluye el token y la URL correcta
+        const { data } = await getAdminStats();
+        setStats(data);
       } catch (err) {
         console.error("Error al obtener estadísticas:", err);
       } finally {
@@ -29,7 +32,7 @@ const DashboardAdmin = () => {
       }
     };
     fetchStats();
-  }, [token]);
+  }, []);
 
   const cards = [
     {
@@ -55,7 +58,9 @@ const DashboardAdmin = () => {
     },
     {
       title: "Tareas Pendientes",
-      value: stats.tareasPendientes || 0,
+      // Nota: Tu backend actual (admin.controller.js) aún no devuelve este campo, 
+      // así que se mostrará como 0 por defecto.
+      value: stats.tareasPendientes || 0, 
       icon: ClipboardDocumentCheckIcon,
       bgColor: "bg-slate-50",
       textColor: "text-slate-600",
