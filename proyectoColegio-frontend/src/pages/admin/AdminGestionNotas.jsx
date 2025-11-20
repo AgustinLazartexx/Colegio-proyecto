@@ -1,14 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-toastify';
-import { Filter, GraduationCap, Loader2, Search } from 'lucide-react';
+import { Filter, GraduationCap, Loader2, Search, ChevronRight, School } from 'lucide-react';
 import CargarNotas from '../profesor/CargarNotas';
-
-// 1. IMPORTAR DESDE API.JS
 import { getMaterias } from '../../api/api'; 
 
 const AdminGestionNotas = () => {
-  const { token } = useAuth(); // El token lo maneja api.js, pero usamos esto para saber si está cargado
+  const { token } = useAuth();
   const [allMaterias, setAllMaterias] = useState([]);
   const [filteredMaterias, setFilteredMaterias] = useState([]);
   const [selectedAnio, setSelectedAnio] = useState('');
@@ -17,93 +15,146 @@ const AdminGestionNotas = () => {
 
   const aniosDisponibles = ["1", "2", "3", "4", "5", "6"];
 
-  // 2. Cargar Materias
   useEffect(() => {
     const fetchAllMaterias = async () => {
-      if (!token) return; // Esperar a que haya sesión
-      
       setLoadingMaterias(true);
       try {
-        // Usamos la función centralizada
         const res = await getMaterias();
-        
-        // Manejo robusto de la respuesta (puede venir directa o en propiedad)
-        const data = res.data.materias || res.data || [];
-        
+        const data = Array.isArray(res.data) ? res.data : (res.data.materias || []);
         setAllMaterias(data);
         setFilteredMaterias(data);
       } catch (err) {
         console.error("Error cargando materias:", err);
-        toast.error("Error al cargar materias.");
+        toast.error("No se pudo sincronizar con el servidor.");
       } finally {
         setLoadingMaterias(false);
       }
     };
-
     fetchAllMaterias();
   }, [token]);
 
-  // 3. Filtrar Materias
   useEffect(() => {
     if (!selectedAnio) {
       setFilteredMaterias(allMaterias);
     } else {
       setFilteredMaterias(allMaterias.filter(m => String(m.anio) === selectedAnio));
     }
-    setSelectedMateriaId('');
+    setSelectedMateriaId(''); // Reset al cambiar filtro
   }, [selectedAnio, allMaterias]);
 
-  return (
-    <div className="p-6 bg-gray-100 min-h-screen space-y-6">
-      <div className="flex items-center gap-4">
-          <div className="bg-sky-100 p-3 rounded-full"><GraduationCap className="text-sky-600" /></div>
-          <div>
-            <h1 className="text-2xl font-bold">Gestión de Notas (Admin)</h1>
-            <p className="text-gray-500">Supervisar y modificar calificaciones.</p>
-          </div>
-      </div>
+  const materiaActiva = allMaterias.find(m => m._id === selectedMateriaId);
 
-      {/* Filtros */}
-      <div className="bg-white p-6 rounded shadow">
-          <h2 className="font-semibold mb-4 flex items-center gap-2"><Filter size={18} /> Filtros</h2>
-          {loadingMaterias ? <Loader2 className="animate-spin mx-auto" /> : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                      <label className="block text-sm font-medium mb-1">Año</label>
-                      <select value={selectedAnio} onChange={(e) => setSelectedAnio(e.target.value)} className="w-full p-2 border rounded">
-                          <option value="">Todos</option>
-                          {aniosDisponibles.map(a => <option key={a} value={a}>{a}° Año</option>)}
-                      </select>
+  return (
+    <div className="min-h-screen bg-slate-50 p-6 md:p-10 font-sans text-slate-800">
+      {/* --- Encabezado Principal --- */}
+      <header className="mb-8">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                  <div className="p-3 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-200">
+                      <GraduationCap size={32} strokeWidth={1.5} />
                   </div>
                   <div>
-                      <label className="block text-sm font-medium mb-1">Materia</label>
-                      <select 
-                        value={selectedMateriaId} 
-                        onChange={(e) => setSelectedMateriaId(e.target.value)} 
-                        className="w-full p-2 border rounded"
-                        disabled={(!selectedAnio && allMaterias.length > 50) || loadingMaterias}
-                      >
-                          <option value="">Seleccionar...</option>
-                          {filteredMaterias.map(m => (
-                              <option key={m._id} value={m._id}>{m.nombre} ({m.anio}° "{m.division || 'U'}")</option>
-                          ))}
-                      </select>
+                      <h1 className="text-3xl font-bold tracking-tight text-slate-900">Gestión de Notas</h1>
+                      <p className="text-slate-500 font-medium mt-1">Panel de Administración Académica</p>
+                  </div>
+              </div>
+              <div className="hidden md:flex items-center gap-2 text-sm text-slate-400 bg-white px-4 py-2 rounded-full shadow-sm border border-slate-200">
+                  <School size={14} />
+                  <span>Colegio</span>
+                  <ChevronRight size={14} />
+                  <span>Administración</span>
+                  <ChevronRight size={14} />
+                  <span className="text-blue-600 font-semibold">Notas</span>
+              </div>
+          </div>
+      </header>
+
+      {/* --- Barra de Herramientas / Filtros --- */}
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-8 transition-all hover:shadow-md">
+          <div className="flex items-center gap-2 mb-4 pb-2 border-b border-slate-100">
+            <Filter className="text-blue-600" size={18} />
+            <h3 className="font-bold text-slate-700">Filtros de Selección</h3>
+          </div>
+
+          {loadingMaterias ? (
+              <div className="flex justify-center py-8">
+                  <div className="flex flex-col items-center gap-2">
+                      <Loader2 className="animate-spin text-blue-600" size={30} />
+                      <span className="text-sm text-slate-400">Cargando catálogo...</span>
+                  </div>
+              </div>
+          ) : (
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+                  {/* Selector de Año */}
+                  <div className="md:col-span-3">
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2 ml-1">Año Escolar</label>
+                      <div className="relative">
+                          <select 
+                            value={selectedAnio} 
+                            onChange={(e) => setSelectedAnio(e.target.value)} 
+                            className="w-full appearance-none bg-slate-50 border border-slate-300 text-slate-700 py-3 px-4 pr-8 rounded-xl focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer font-medium"
+                          >
+                              <option value="">Todos los años</option>
+                              {aniosDisponibles.map(a => <option key={a} value={a}>{a}° Año</option>)}
+                          </select>
+                          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-500">
+                              <ChevronRight className="rotate-90" size={16} />
+                          </div>
+                      </div>
+                  </div>
+
+                  {/* Selector de Materia */}
+                  <div className="md:col-span-9">
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2 ml-1">Materia / Curso</label>
+                      <div className="relative">
+                          <select 
+                            value={selectedMateriaId} 
+                            onChange={(e) => setSelectedMateriaId(e.target.value)} 
+                            className="w-full appearance-none bg-slate-50 border border-slate-300 text-slate-700 py-3 px-4 pr-8 rounded-xl focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled={filteredMaterias.length === 0}
+                          >
+                              <option value="">-- Seleccione una materia para comenzar --</option>
+                              {filteredMaterias.map(m => (
+                                  <option key={m._id} value={m._id}>
+                                    {m.nombre} | {m.anio}° "{m.division || 'U'}" | Docente: {m.profesor?.nombre ? `${m.profesor.nombre} ${m.profesor.apellido}` : 'Sin Asignar'}
+                                  </option>
+                              ))}
+                          </select>
+                          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-500">
+                              <Search size={16} />
+                          </div>
+                      </div>
+                      {filteredMaterias.length === 0 && (
+                          <p className="text-xs text-amber-600 mt-2 ml-1 flex items-center gap-1">
+                              <AlertCircle size={12}/> No se encontraron materias para el filtro seleccionado.
+                          </p>
+                      )}
                   </div>
               </div>
           )}
       </div>
 
-      {/* Renderizado Condicional de CargarNotas */}
-      {selectedMateriaId ? (
-          <div className="bg-white rounded shadow overflow-hidden">
-              <CargarNotas materiaIdProp={selectedMateriaId} />
-          </div>
-      ) : (
-          <div className="text-center py-12 bg-white rounded shadow border-dashed border">
-                <Search className="mx-auto text-gray-400 mb-2" size={48} />
-                <p className="text-gray-500">Selecciona una materia para ver las notas.</p>
-          </div>
-      )}
+      {/* --- Área de Contenido (Tabla) --- */}
+      <div className="transition-all duration-500 ease-in-out">
+          {selectedMateriaId && materiaActiva ? (
+              <CargarNotas 
+                  materiaId={selectedMateriaId} 
+                  materiaNombre={materiaActiva.nombre}
+                  anio={materiaActiva.anio}
+                  division={materiaActiva.division}
+              />
+          ) : (
+              <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-slate-300 rounded-2xl bg-slate-50/50 text-slate-400">
+                    <div className="bg-white p-4 rounded-full shadow-sm mb-4">
+                        <Search className="w-12 h-12 text-blue-200" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-slate-600">Esperando selección</h3>
+                    <p className="max-w-sm text-center mt-1 text-sm">
+                        Selecciona un año y una materia en el panel superior para visualizar y editar las calificaciones de los alumnos.
+                    </p>
+              </div>
+          )}
+      </div>
     </div>
   );
 };
