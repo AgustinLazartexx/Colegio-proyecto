@@ -192,3 +192,31 @@ export const obtenerAsistenciasPorAlumno = async (req, res) => {
     res.status(500).json({ msg: "Error interno del servidor", error: error.message });
   }
 };
+// 2. AGREGAR ESTA NUEVA FUNCIÓN AL FINAL DEL ARCHIVO
+export const getReporteAsistencias = async (req, res) => {
+    try {
+        const { claseId, fecha } = req.query;
+        
+        if (!claseId || !fecha) {
+            return res.status(400).json({ msg: "Faltan claseId o fecha" });
+        }
+
+        // Normalizar fecha
+        const fechaBusqueda = new Date(fecha);
+        fechaBusqueda.setUTCHours(0, 0, 0, 0);
+
+        const datos = await Asistencia.find({ 
+            clase: claseId, 
+            fecha: fechaBusqueda 
+        })
+        .populate("alumno", "nombre apellido email") // Traer datos del alumno
+        .populate("cargadoPor", "nombre apellido rol") // Traer quién cargó (Profesor o Admin)
+        .sort({ "alumno.apellido": 1 });
+
+        res.json(datos);
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ msg: "Error al generar reporte" });
+    }
+};

@@ -98,6 +98,9 @@ export const desasignarAlumnoDeClase = (claseId, alumnoId) => {
 export const registrarAsistencias = (data) => api.post('/asistencias', data);
 export const obtenerAsistenciasPorClaseYFecha = (claseId, fecha) => api.get('/asistencias', { params: { claseId, fecha } });
 
+export const getReporteAsistencias = (claseId, fecha) => 
+  api.get('/asistencias/reporte-detallado', { params: { claseId, fecha } });
+
 // --- NOTAS ---
 export const getNotasPorClase = (claseId) => api.get(`/notas/clase/${claseId}`);
 export const crearNota = (data) => api.post('/notas', data);

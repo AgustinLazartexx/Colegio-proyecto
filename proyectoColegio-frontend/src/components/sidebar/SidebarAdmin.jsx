@@ -22,6 +22,7 @@ const navItems = [
   // --- GESTIÓN DE CLASES ---
   // Esta ruta lleva a ClasesAdmin.jsx (Crear/Listar/Eliminar Clases)
   { to: "/admin/CrearClases", icon: PlusSquare, text: "Gestionar Clases" },
+  { to: "/admin/clasesAdminAlumnos", icon: PlusSquare, text: "Asignar Alumnos" },
   
   // --- ASISTENCIAS ---
   { to: "/admin/AsistenciaGestion", icon: CalendarCheck, text: "Tomar Asistencia" },
@@ -31,8 +32,7 @@ const navItems = [
   { to: "/admin/GestionNotas", icon: FileEdit, text: "Gestión de Notas" },
   { to: "/admin/AuditoriaNotas", icon: ClipboardList, text: "Auditoría Notas" },
   
-  // Opcionales / Otros
-  { to: "/admin/clasesAdminAlumnos", icon: Settings, text: "Asignar Alumnos" },
+  
 ];
 
 const NavItem = ({ to, icon: Icon, text }) => (

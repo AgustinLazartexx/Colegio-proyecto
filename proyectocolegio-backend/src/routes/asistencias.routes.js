@@ -8,6 +8,7 @@ import {
   registrarAsistencias,
   obtenerAsistenciasPorClaseYFecha,
   obtenerAsistenciasPorAlumno,
+  getReporteAsistencias
 } from '../controllers/asistencia.controller.js'; // Asegúrate que este controlador exista
 
 const router = express.Router();
@@ -58,6 +59,14 @@ router.get(
   checkAuth,
   checkRole(['admin']), // Solo admin
   obtenerAsistenciasPorAlumno
+);
+
+// NUEVA RUTA: REPORTE DETALLADO PARA ADMIN
+router.get(
+    "/reporte-detallado",
+    checkAuth,
+    checkRole(["admin"]), // Solo admin puede ver reporte global
+    getReporteAsistencias
 );
 
 export default router;
