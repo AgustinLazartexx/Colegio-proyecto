@@ -17,98 +17,87 @@ api.interceptors.request.use((config) => {
 export default api;
 
 // ==========================================
-//       FUNCIONES DE USUARIOS (Backend user.routes.js)
+//       FUNCIONES DE USUARIOS
 // ==========================================
-// Devuelve: { alumnos: number, profesores: number, materias: number }
-export const getAdminStats = () => {
-  return api.get('/admin/stats');
-};
+export const getAdminStats = () => api.get('/admin/stats');
+export const getUsuarios = (filtros = {}) => api.get('/usuarios', { params: filtros });
+export const crearUsuario = (userData) => api.post('/usuarios/admin/crear', userData);
+export const actualizarUsuario = (id, userData) => api.put(`/usuarios/${id}`, userData);
+export const eliminarUsuario = (id) => api.delete(`/usuarios/${id}`);
+export const getProfesores = () => api.get('/usuarios', { params: { rol: 'profesor' } });
 
-// GET /api/usuarios
-export const getUsuarios = (filtros = {}) => {
-  return api.get('/usuarios', { params: filtros });
-};
-
-// POST /api/usuarios/admin/crear  <-- ¡AQUÍ ESTABA EL DETALLE!
-export const crearUsuario = (userData) => {
-  return api.post('/usuarios/admin/crear', userData);
-};
-
-// PUT /api/usuarios/:id
-export const actualizarUsuario = (id, userData) => {
-  return api.put(`/usuarios/${id}`, userData);
-};
-
-// DELETE /api/usuarios/:id
-export const eliminarUsuario = (id) => {
-  return api.delete(`/usuarios/${id}`);
-};
-
-// GET /api/usuarios/profesores (Asegúrate de tener esta ruta en el back o usa un filtro en getUsuarios)
-export const getProfesores = () => {
-    // Si no tienes una ruta especifica, filtramos en el frontend o backend
-    // Por ahora asumimos que existe o usamos getUsuarios
-    return api.get('/usuarios', { params: { rol: 'profesor' } });
-};
-// --- MATERIAS ---
-// Para Admin (trae todas o filtra por año/profe)
+// ==========================================
+//       MATERIAS
+// ==========================================
 export const getMaterias = (params = {}) => api.get('/materias', { params });
-
-
 export const getMateriaById = (id) => api.get(`/materias/${id}`);
 export const createMateria = (data) => api.post('/materias', data);
 export const updateMateria = (id, data) => api.put(`/materias/${id}`, data);
 export const deleteMateria = (id) => api.delete(`/materias/${id}`);
+export const getMateriasProfesor = () => api.get('/materias/profesor/listado');
 
-// --- CLASES ---
-
+// ==========================================
+//       CLASES (Gestión y Profesor)
+// ==========================================
 export const crearClase = (data) => api.post('/clases', data);
 export const actualizarClase = (id, data) => api.put(`/clases/${id}`, data);
 export const eliminarClase = (id) => api.delete(`/clases/${id}`);
 
+// Admin: Todas las clases
 export const getTodasLasClases = () => api.get('/clases'); 
 
+// Profesor: Solo mis clases
+export const getMisClases = () => api.get('/clases/misclases');
 
-
-// Obtener detalle de una clase por ID (útil para admin y profesor)
+// Detalle y Alumnos de CLASE
 export const getClaseById = (id) => api.get(`/clases/${id}`);
+export const getAlumnosDeClase = (claseId) => api.get(`/clases/${claseId}/alumnos`);
 
-// --- GESTIÓN ALUMNOS EN CLASES ---
-export const getAlumnosDeClase = (claseId) => {
-    return api.get(`/clases/${claseId}/alumnos`);
+// ==========================================
+//    FUNCIONES "VIEJAS" O DE MATERIAS 
+//    (Necesarias para CargarNotas.jsx)
+// ==========================================
+export const getAlumnosDeMateria = (materiaId) => {
+  return api.get(`/materias/${materiaId}/alumnos`);
 };
 
-// CORRECCIÓN: Usamos getUsuarios filtrando por rol, año y división
+export const getNotasDeMateria = (materiaId, trimestre) => {
+  return api.get(`/notas/materia/${materiaId}`, {
+    params: { trimestre }
+  });
+};
+
+// ==========================================
+//       GESTIÓN ALUMNOS (Admin)
+// ==========================================
 export const getAlumnosPorCurso = (anio, division) => {
     const params = { rol: 'alumno' };
     if (anio) params.anio = anio;
     if (division) params.division = division;
     return api.get('/usuarios', { params }); 
 };
+export const asignarAlumnoAClase = (claseId, alumnoId) => api.post(`/clases/${claseId}/alumnos`, { alumnoId });
+export const desasignarAlumnoDeClase = (claseId, alumnoId) => api.delete(`/clases/${claseId}/alumnos/${alumnoId}`);
 
-export const asignarAlumnoAClase = (claseId, alumnoId) => {
-    return api.post(`/clases/${claseId}/alumnos`, { alumnoId });
-};
-
-export const desasignarAlumnoDeClase = (claseId, alumnoId) => {
-    return api.delete(`/clases/${claseId}/alumnos/${alumnoId}`);
-}
-
-// --- ASISTENCIA ---
+// ==========================================
+//       ASISTENCIA
+// ==========================================
 export const registrarAsistencias = (data) => api.post('/asistencias', data);
+// Esta función puede usarse para consultar si ya se tomó asistencia hoy
+export const obtenerAsistenciaFecha = (claseId, fecha) => api.get('/asistencias', { params: { claseId, fecha } });
 export const obtenerAsistenciasPorClaseYFecha = (claseId, fecha) => api.get('/asistencias', { params: { claseId, fecha } });
+export const getReporteAsistencias = (claseId, fecha) => api.get('/asistencias/reporte-detallado', { params: { claseId, fecha } });
 
-export const getReporteAsistencias = (claseId, fecha) => 
-  api.get('/asistencias/reporte-detallado', { params: { claseId, fecha } });
-
-// --- NOTAS ---
+// ==========================================
+//       NOTAS Y TAREAS
+// ==========================================
 export const getNotasPorClase = (claseId) => api.get(`/notas/clase/${claseId}`);
 export const crearNota = (data) => api.post('/notas', data);
 export const updateNota = (id, data) => api.put(`/notas/${id}`, data);
 export const deleteNota = (id) => api.delete(`/notas/${id}`);
 export const getAuditoriaNotas = () => api.get('/notas/auditoria');
+export const guardarNota = (data) => api.post('/notas/guardar-una', data);
 
-// --- TAREAS Y ENTREGAS ---
 export const crearTarea = (data) => api.post('/tareas', data);
 export const getTareasProfesor = () => api.get('/tareas/profesor');
 export const getTareasClase = (claseId) => api.get(`/tareas/clase/${claseId}`);
@@ -116,29 +105,10 @@ export const eliminarTarea = (id) => api.delete(`/tareas/${id}`);
 export const getEntregasTarea = (tareaId) => api.get(`/entregas/tarea/${tareaId}`);
 export const calificarEntrega = (id, data) => api.put(`/entregas/${id}/calificar`, data);
 
-// --- FUNCIONES ESPECÍFICAS DE NOTAS Y MATERIAS ---
-
-// Obtener alumnos inscritos en una materia específica
-export const getAlumnosDeMateria = (materiaId) => {
-  return api.get(`/materias/${materiaId}/alumnos`);
-};
-
-// Obtener las notas de una materia filtradas por trimestre
-// Devuelve un objeto con las notas de los alumnos para ese trimestre
-export const getNotasDeMateria = (materiaId, trimestre) => {
-  return api.get(`/notas/materia/${materiaId}`, {
-    params: { trimestre }
-  });
-};
-
-// Guardar o actualizar una sola nota
-export const guardarNota = (data) => {
-  // data: { materiaId, alumnoId, trimestre, tipoNota, nota }
-  return api.post('/notas/guardar-una', data);
-};
-// Para el PROFESOR: Obtiene solo las clases asignadas a él
-export const getMisClases = () => api.get('/clases/misclases');
-
-// Para Profesor (trae SOLO las suyas)
-export const getMateriasProfesor = () => api.get('/materias/profesor/listado');
-// ...
+// ==========================================
+//       ANUNCIOS
+// ==========================================
+export const getMisAnuncios = () => api.get('/anuncios/profesor/mis-anuncios');
+export const crearAnuncio = (data) => api.post('/anuncios', data);
+export const actualizarAnuncio = (id, data) => api.put(`/anuncios/${id}`, data);
+export const eliminarAnuncio = (id) => api.delete(`/anuncios/${id}`);

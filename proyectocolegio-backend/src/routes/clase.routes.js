@@ -8,7 +8,6 @@ import {
   obtenerTodasLasClases,
   obtenerClasesProfesor,
   obtenerClasePorId,
-  // Importamos las funciones de alumnos
   asignarAlumno,
   desasignarAlumno,
   listarAlumnosDeClase,
@@ -16,34 +15,26 @@ import {
 
 const router = Router();
 
+// Middlewares de rol
 const adminSolo = [checkAuth, checkRole("admin")];
 const adminProfesor = [checkAuth, checkRole("admin", "profesor")];
 const profesorSolo = [checkAuth, checkRole("profesor")];
 
-// ==========================================
-//             RUTAS PRINCIPALES
-// ==========================================
-
-// 1. Listar Clases
+// --- Rutas Generales ---
 router.get("/", adminSolo, obtenerTodasLasClases);
 router.get("/misclases", profesorSolo, obtenerClasesProfesor);
-
-// 2. Gestión de Clases (CRUD)
 router.post("/", adminSolo, crearClase);
-router.put("/:id", adminSolo, actualizarClase);
-router.delete("/:id", adminSolo, eliminarClase);
 
+// --- Rutas Específicas por ID ---
+// NOTA: Tu controlador lee 'req.params.claseId', así que usamos ':claseId'
+router.get("/:claseId", adminProfesor, obtenerClasePorId); 
+router.put("/:id", adminSolo, actualizarClase); // Este controlador lee 'id'
+router.delete("/:id", adminSolo, eliminarClase); // Este controlador lee 'id'
 
-// ==========================================
-//       GESTIÓN DE ALUMNOS Y DETALLES
-// ==========================================
-
-// CORRECCIÓN: Usamos ":id" en lugar de ":claseId" para consistencia con el controller
-router.get("/:id", adminProfesor, obtenerClasePorId);
-
-// Rutas de Alumnos (Usamos :id para la clase)
-router.get("/:id/alumnos", adminProfesor, listarAlumnosDeClase);
+// --- Gestión de Alumnos en Clases ---
+// El controlador 'asignarAlumno' lee 'id' (de la clase)
 router.post("/:id/alumnos", adminSolo, asignarAlumno);
 router.delete("/:id/alumnos/:alumnoId", adminSolo, desasignarAlumno);
+router.get("/:id/alumnos", adminProfesor, listarAlumnosDeClase);
 
 export default router;

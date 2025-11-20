@@ -19,11 +19,7 @@ import { useAuth } from "../../context/AuthContext";
 // Array de navegación con un ícono único para cada elemento
 const navItems = [
   { to: "/profesor", icon: Home, text: "Inicio" },
-  { to: "/profesor/clases", icon: BookOpen, text: "Clases" },
-  { to: "/profesor/profesor/ver-alumnos", icon: Users, text: "Alumnos" },
-  { to: "/profesor/verEntregas", icon: ClipboardCheck, text: "Tareas" },
-  { to: "/profesor/cargar-tarea", icon: Upload, text: "Cargar Tarea" },
-  { to: "/profesor/mensajes", icon: Megaphone, text: "Anuncios" },
+  { to: "/profesor/Clases", icon: BookOpen, text: "Clases" },
   { to: "/profesor/crud-anuncios", icon: FilePenLine, text: "Administrar Anuncios" },
   { to: "/profesor/tomar-asistencia", icon: CalendarCheck, text: "Tomar Asistencia" },
   { to: "/profesor/cargar-notas", icon: GraduationCap, text: "Subir Notas" },

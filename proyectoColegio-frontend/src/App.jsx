@@ -21,7 +21,7 @@ import AdminDashboard from "./pages/AdminDashboard";
 
 // Páginas del profesor
 import InicioProfesor from "./pages/profesor/InicioProfesor";
-import ClasesProfesor from "./pages/profesor/Clases"; 
+import Clases from "./pages/profesor/Clases"; 
 import Mensajes from "./pages/profesor/Mensajes";
 import EntregasTarea from "./pages/profesor/EntregasTarea";
 import CargarTarea from "./pages/profesor/CargarTarea";
@@ -102,7 +102,7 @@ function App() {
         {/* Rutas PROFESOR */}
         <Route path="/profesor/*" element={<PrivateRoute allowedRoles={["profesor"]}><ProfesorDashboard /></PrivateRoute>}>
           <Route index element={<InicioProfesor />} />
-          <Route path="clasesProfesor" element={<ClasesProfesor />} />
+          <Route path="Clases" element={<Clases />} />
           <Route path="mensajes" element={<Mensajes />} />
           <Route path="tarea/:tareaId/entregas" element={<EntregasTarea />} />
           <Route path="cargar-tarea" element={<CargarTarea />} />

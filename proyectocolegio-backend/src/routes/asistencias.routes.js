@@ -1,72 +1,28 @@
-// proyectocolegio-backend/src/routes/asistencias.routes.js
-
-import express from 'express';
-import { checkAuth } from '../middlewares/checkAuth.js';
-import { checkRole } from '../middlewares/checkRole.js';
-// Importamos los controladores CORRECTOS de asistencia
+import { Router } from "express";
+import { checkAuth } from "../middlewares/checkAuth.js";
+import { checkRole } from "../middlewares/checkRole.js";
 import {
   registrarAsistencias,
   obtenerAsistenciasPorClaseYFecha,
   obtenerAsistenciasPorAlumno,
   getReporteAsistencias
-} from '../controllers/asistencia.controller.js'; // Asegúrate que este controlador exista
+} from "../controllers/asistencia.controller.js";
 
-const router = express.Router();
+const router = Router();
 
-/**
- * @route   POST /api/asistencias
- * @desc    Registra o actualiza las asistencias para una clase y fecha.
- * @access  Admin, Profesor
- */
-router.post(
-  '/',
-  checkAuth,
-  checkRole(['admin', 'profesor']),
-  registrarAsistencias
-);
+// Registrar (Tomar) asistencia
+router.post('/', checkAuth, checkRole(['admin', 'profesor']), registrarAsistencias);
 
-/**
- * @route   GET /api/asistencias
- * @desc    Obtiene las asistencias por claseId y fecha (query params)
- * @access  Admin, Profesor
- */
-router.get(
-  '/',
-  checkAuth,
-  checkRole(['admin', 'profesor']),
-  obtenerAsistenciasPorClaseYFecha
-);
+// Consultar asistencia de un día (para profesor/admin)
+router.get('/', checkAuth, checkRole(['admin', 'profesor']), obtenerAsistenciasPorClaseYFecha);
 
-/**
- * @route   GET /api/asistencias/alumno
- * @desc    Obtiene el historial de asistencias DEL ALUMNO LOGUEADO.
- * @access  Alumno
- */
-router.get(
-  '/alumno',
-  checkAuth,
-  checkRole(['alumno']), // Solo alumnos
-  obtenerAsistenciasPorAlumno
-);
+// Historial del alumno (para el alumno mismo)
+router.get('/alumno', checkAuth, checkRole(['alumno']), obtenerAsistenciasPorAlumno);
 
-/**
- * @route   GET /api/asistencias/alumno/:alumnoId
- * @desc    Obtiene el historial de asistencias de un alumno específico (para Admin).
- * @access  Admin
- */
-router.get(
-  '/alumno/:alumnoId',
-  checkAuth,
-  checkRole(['admin']), // Solo admin
-  obtenerAsistenciasPorAlumno
-);
+// Historial de un alumno específico (para admin)
+router.get('/alumno/:alumnoId', checkAuth, checkRole(['admin']), obtenerAsistenciasPorAlumno);
 
-// NUEVA RUTA: REPORTE DETALLADO PARA ADMIN
-router.get(
-    "/reporte-detallado",
-    checkAuth,
-    checkRole(["admin"]), // Solo admin puede ver reporte global
-    getReporteAsistencias
-);
+// Reporte detallado (agregado)
+router.get('/reporte-detallado', checkAuth, checkRole(['admin', 'profesor']), getReporteAsistencias);
 
 export default router;
