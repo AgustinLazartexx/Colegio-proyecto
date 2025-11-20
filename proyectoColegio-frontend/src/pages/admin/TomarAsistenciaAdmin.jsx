@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { CalendarCheck, UserCheck, Save, School, Loader2, Users } from 'lucide-react';
-import api from '../../api/api';
+
 
 
 // 🔹 CORRECCIÓN: Importar todo desde 'api.js'

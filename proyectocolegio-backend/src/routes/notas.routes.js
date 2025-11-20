@@ -1,12 +1,13 @@
 // src/routes/notas.routes.js
 import { Router } from "express";
-import { checkAuth } from "../middlewares/checkAuth.js";
-import { checkRole } from "../middlewares/checkRole.js";
+import { checkAuth } from "../middlewares/checkAuth.js"; // <--- ASEGÚRATE DE TENER LAS LLAVES {}
+import { checkRole } from "../middlewares/checkRole.js"; // <--- ASEGÚRATE DE TENER LAS LLAVES {}
 import {
   guardarNota,
   getNotasPorMateriaTrimestre,
   misNotasAlumno,
-  getAuditoriaNotas
+  getAuditoriaNotas,
+  cambiarEstadoTrimestre // <--- IMPORTAR ESTA NUEVA FUNCIÓN
 } from "../controllers/notas.controller.js";
 
 const router = Router();
@@ -16,44 +17,49 @@ const logNotasRoute = (req, res, next) => {
   next();
 };
 
-// Profesor Y Admin guardan notas
+// 1. GUARDAR NOTA (Profesor carga / Admin corrige)
 router.post(
   "/guardar-una",
   logNotasRoute,
   checkAuth,
-  // --- CAMBIO ---
-  checkRole("profesor", "admin"), // Roles como argumentos separados
-  // --- FIN CAMBIO ---
+  checkRole("profesor", "admin"), 
   guardarNota
 );
 
-// Profesor Y Admin ven la grilla
+// 2. VER GRILLA (Profesor ve su curso / Admin supervisa)
 router.get(
   "/materia/:id",
   logNotasRoute,
   checkAuth,
-  // --- CAMBIO ---
-  checkRole("profesor", "admin"), // Roles como argumentos separados
-  // --- FIN CAMBIO ---
+  checkRole("profesor", "admin"), 
   getNotasPorMateriaTrimestre 
 );
 
-// Alumno ve su boletín
+// 3. VER BOLETÍN (Alumno)
 router.get(
   "/mias",
   logNotasRoute,
   checkAuth,
-  checkRole("alumno"), // Aquí está bien porque es un solo rol
+  checkRole("alumno"), 
   misNotasAlumno
 );
 
-// Admin ve el log de cambios
+// 4. AUDITORÍA (Solo Admin)
 router.get(
   "/auditoria",
   logNotasRoute,
   checkAuth,
-  checkRole("admin"), // Aquí está bien
+  checkRole("admin"), 
   getAuditoriaNotas
+);
+
+// 5. APROBAR/BLOQUEAR TRIMESTRE (Solo Admin) - ¡IMPORTANTE!
+// Esta ruta faltaba y es necesaria para cerrar el ciclo.
+router.post(
+    "/cambiar-estado",
+    checkAuth,
+    checkRole("admin"),
+    cambiarEstadoTrimestre
 );
 
 export default router;

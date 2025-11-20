@@ -1,73 +1,54 @@
 // src/controllers/notas.controller.js
 import NotaTrimestral from "../models/notaTrimestral.model.js";
 import AuditoriaNota from "../models/auditoriaNota.model.js";
-import Materia from "../models/materia.model.js"; // Asegúrate que la ruta sea correcta
-import mongoose from "mongoose";
+import Materia from "../models/materia.model.js";
 
-
-
-// --- HELPER DE SEGURIDAD CON LOGS DETALLADOS ---
+// --- HELPER DE SEGURIDAD ---
 const assertProfesorDeLaMateria = async (materiaId, usuario) => {
-  
   if (!usuario || !usuario.id) {
-    console.error("ERROR: El objeto 'usuario' del token NO tiene 'id'. Verifica checkAuth.");
     const e = new Error("Error interno de autenticación");
     e.status = 500;
     throw e;
   }
 
-  if (usuario.rol === 'admin') {
-    console.log("Rol es Admin. Permiso concedido automáticamente."); // Log 4a
-    return;
-  }
+  if (usuario.rol === 'admin') return; // Admin pase libre
 
-  
-  // Usamos .lean() para obtener un objeto JS simple, más rápido si solo leemos
   const materia = await Materia.findById(materiaId).select('profesor').lean();
-
   if (!materia) {
-    
     const e = new Error("Materia no encontrada");
     e.status = 404;
     throw e;
   }
 
-
-  if (!materia.profesor) {
-      console.error("ERROR: La materia encontrada NO tiene un profesor asignado.");
-       const e = new Error("Error de configuración: Materia sin profesor asignado.");
-       e.status = 500;
-       throw e;
-  }
-
-  const profesorEnMateria = materia.profesor.toString();
-  const profesorEnToken = usuario.id.toString();
-
-  
-
-  if (profesorEnMateria !== profesorEnToken) {
-    
+  if (!materia.profesor || materia.profesor.toString() !== usuario.id.toString()) {
     const e = new Error("No autorizado para esta materia");
     e.status = 403;
     throw e;
   }
-
-  
 };
 
 /**
  * Endpoint: POST /api/notas/guardar-una
+ * LOGICA CORREGIDA:
+ * 1. El profesor puede editar siempre, EXCEPTO si isBloqueada es true.
+ * 2. El admin siempre puede editar (y genera auditoría).
  */
 export const guardarNota = async (req, res) => {
   try {
     const { materiaId, alumnoId, trimestre, tipoNota, nota } = req.body;
-    const usuario = req.user; // Usamos req.user consistentemente
+    const usuario = req.user;
 
-    if (!materiaId || !alumnoId || !trimestre || !tipoNota || nota === undefined) {
+    // Validar campos permitidos para evitar inyección de datos en otros campos
+    const camposPermitidos = ["orientadora", "proceso", "integradora", "recuperacion"];
+    if (!camposPermitidos.includes(tipoNota)) {
+      return res.status(400).json({ msg: "Tipo de nota no válido" });
+    }
+
+    if (!materiaId || !alumnoId || !trimestre || nota === undefined) {
       return res.status(400).json({ msg: "Datos incompletos" });
     }
 
-    // 1. Verificar permisos
+    // 1. Verificar permisos (Profesor de la materia o Admin)
     await assertProfesorDeLaMateria(materiaId, usuario);
 
     // 2. Buscar o crear el documento de notas
@@ -86,20 +67,25 @@ export const guardarNota = async (req, res) => {
       });
     }
 
-    // 3. REGLA DE ROLES Y INMUTABILIDAD
+    // 3. VERIFICACIÓN DE BLOQUEO (Admin vs Profesor)
+    // Si el trimestre está bloqueado/cerrado y el usuario NO es admin, rechazar.
+    if (doc.isBloqueada && usuario.rol !== 'admin') {
+      return res.status(403).json({ 
+        msg: "El trimestre está cerrado y aprobado por administración. No se pueden modificar las notas." 
+      });
+    }
+
+    // 4. LÓGICA DE AUDITORÍA Y CAMBIO
     const valorActual = doc[tipoNota];
-    // Convertir "" a null, y otros valores a Number
     const notaNueva = nota === "" ? null : Number(nota);
 
-    // Solo proceder si el valor realmente cambió
-    if (String(valorActual) !== String(notaNueva)) { // Comparar como strings
-        if (valorActual !== null && valorActual !== undefined && String(valorActual) !== "") {
-            if (usuario.rol === 'profesor') {
-                return res.status(403).json({ msg: "Esta nota ya fue guardada y no se puede modificar." });
-            }
-
-            if (usuario.rol === 'admin') {
-                const auditoria = new AuditoriaNota({
+    // Solo actuamos si el valor es diferente
+    if (String(valorActual) !== String(notaNueva)) {
+        
+        // Si es ADMIN modificando una nota existente, generamos auditoría
+        if (usuario.rol === 'admin' && valorActual !== null && valorActual !== undefined) {
+            try {
+                await AuditoriaNota.create({
                   notaOriginalId: doc._id,
                   materia: materiaId,
                   alumno: alumnoId,
@@ -109,112 +95,134 @@ export const guardarNota = async (req, res) => {
                   valorNuevo: String(notaNueva),
                   modificadoPor: usuario.id
                 });
-                await auditoria.save();
+            } catch (auditErr) {
+                console.error("Error guardando auditoría:", auditErr);
+                // No detenemos el flujo, pero logueamos el error
             }
         }
 
-        // 4. Asignar la nueva nota y guardar
+        // Aplicamos el cambio
         doc[tipoNota] = notaNueva;
         doc.actualizadoPor = usuario.id;
 
-        await doc.save();
-    } else {
-        // Si el valor no cambió, no hacemos nada, pero devolvemos el doc actual
-        console.log("Nota no modificada (valor igual al anterior).");
-    }
+        // Si el admin toca la nota, podríamos querer desbloquear o mantener aprobado,
+        // por seguridad, si se edita una nota, se podría quitar la aprobación:
+        // doc.isAprobadaAdmin = false; // Descomentar si quieres que requiera re-aprobación
 
-    res.json({ msg: "Operación completada", nota: doc });
+        await doc.save();
+        return res.json({ msg: "Nota actualizada correctamente", nota: doc });
+    } 
+    
+    // Si no hubo cambios
+    res.json({ msg: "Sin cambios", nota: doc });
 
   } catch (err) {
-    console.error("Error en guardarNota:", err); // Log de error específico
+    console.error("Error en guardarNota:", err);
     res.status(err.status || 500).json({ msg: err.message || "Error al guardar la nota" });
   }
 };
 
 /**
- * Endpoint: GET /api/notas/materia/:id?trimestre=N
+ * Endpoint: POST /api/notas/cambiar-estado
+ * NUEVO: Permite al ADMIN aprobar o bloquear el trimestre de un alumno.
  */
-export const getNotasPorMateriaTrimestre = async (req, res) => {
-  // --- LOG DE ENTRADA A LA FUNCIÓN ---
-  console.log(`\n>>> Entrando a getNotasPorMateriaTrimestre (Trimestre: ${req.query.trimestre})`); 
-  // --- FIN LOG ---
+export const cambiarEstadoTrimestre = async (req, res) => {
+    try {
+        const { notaId, isAprobadaAdmin, isBloqueada, observacion } = req.body;
+        const usuario = req.user;
 
+        // Solo Admins pueden hacer esto
+        if (usuario.rol !== 'admin') {
+            return res.status(403).json({ msg: "Acceso denegado. Requiere rol Administrador." });
+        }
+
+        const doc = await NotaTrimestral.findById(notaId);
+        if (!doc) {
+            return res.status(404).json({ msg: "Documento de notas no encontrado" });
+        }
+
+        // Actualizamos campos si vienen en el body
+        if (isAprobadaAdmin !== undefined) doc.isAprobadaAdmin = isAprobadaAdmin;
+        if (isBloqueada !== undefined) doc.isBloqueada = isBloqueada;
+        if (observacion !== undefined) doc.observacion = observacion;
+        
+        doc.actualizadoPor = usuario.id;
+        
+        await doc.save();
+
+        res.json({ msg: "Estado del trimestre actualizado", doc });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ msg: "Error al cambiar estado" });
+    }
+};
+
+// ... (Mantén getNotasPorMateriaTrimestre, getAuditoriaNotas, misNotasAlumno igual que antes)
+
+export const getNotasPorMateriaTrimestre = async (req, res) => {
   try {
     const { id } = req.params; // materiaId
     const { trimestre } = req.query;
-    const usuario = req.user; // Usamos req.user
+    const usuario = req.user;
 
-    if (!trimestre) {
-      return res.status(400).json({ msg: "Debe especificar un trimestre." });
-    }
+    if (!trimestre) return res.status(400).json({ msg: "Debe especificar un trimestre." });
 
-    // 1. Verificar permisos
     await assertProfesorDeLaMateria(id, usuario);
 
-    // 2. Buscar todas las notas de esa materia y trimestre
-    const notasDocs = await NotaTrimestral.find({
-      materia: id,
-      trimestre: Number(trimestre)
-    });
+    const notasDocs = await NotaTrimestral.find({ materia: id, trimestre: Number(trimestre) });
 
-    // 3. Formatear como objeto { [alumnoId]: { ...notas } }
     const notasObjeto = notasDocs.reduce((acc, doc) => {
       acc[doc.alumno] = {
-        _id: doc._id, // Incluir el ID del documento de nota puede ser útil
+        _id: doc._id,
         orientadora: doc.orientadora,
         proceso: doc.proceso,
         integradora: doc.integradora,
         recuperacion: doc.recuperacion,
         promedioPonderado: doc.promedioPonderado,
         notaFinalTrimestre: doc.notaFinalTrimestre,
+        // Enviamos estado al front para que el profesor vea si está bloqueado
+        isAprobadaAdmin: doc.isAprobadaAdmin, 
+        isBloqueada: doc.isBloqueada,
+        observacion: doc.observacion
       };
       return acc;
     }, {});
 
     res.json(notasObjeto);
-
   } catch (err) {
-    console.error("Error en getNotasPorMateriaTrimestre:", err); // Log de error específico
-    res.status(err.status || 500).json({ msg: err.message || "Error al obtener las notas" });
+    res.status(err.status || 500).json({ msg: err.message });
   }
 };
 
-/**
- * Endpoint: GET /api/notas/auditoria
- */
+// ... el resto de funciones (getAuditoriaNotas, misNotasAlumno) se mantienen igual.
 export const getAuditoriaNotas = async (req, res) => {
-  try {
-    const { materiaId, trimestre } = req.query;
+    try {
+      const { materiaId, trimestre } = req.query;
+      const query = {};
+      if (materiaId) query.materia = materiaId;
+      if (trimestre) query.trimestre = trimestre;
+  
+      const logs = await AuditoriaNota.find(query)
+        .populate("modificadoPor", "nombre")
+        .populate("alumno", "nombre") // Asumiendo que tienes referencia a Alumno en el modelo Auditoria
+        .sort({ createdAt: -1 });
+  
+      res.json(logs);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ msg: "Error al obtener auditoría" });
+    }
+  };
 
-    const query = {};
-    if (materiaId) query.materia = materiaId;
-    if (trimestre) query.trimestre = trimestre;
-
-    const logs = await AuditoriaNota.find(query)
-      .populate("modificadoPor", "nombre")
-      .populate("alumno", "nombre")
-      .sort({ createdAt: -1 });
-
-    res.json(logs);
-
-  } catch (err) {
-    console.error("Error en getAuditoriaNotas:", err); // Log de error específico
-    res.status(500).json({ msg: "Error al obtener auditoría" });
-  }
-};
-
-/**
- * Endpoint: GET /api/notas/mias
- */
-export const misNotasAlumno = async (req, res) => {
-  try {
-    const data = await NotaTrimestral.find({ alumno: req.user.id }) // Usamos req.user.id
-      .populate("materia", "nombre")
-      .sort({ materia: 1, trimestre: 1 });
-
-    res.json({ total: data.length, notas: data });
-  } catch (err) {
-    console.error("Error en misNotasAlumno:", err); // Log de error específico
-    res.status(500).json({ msg: "Error al obtener notas" });
-  }
-};
+  export const misNotasAlumno = async (req, res) => {
+    try {
+      const data = await NotaTrimestral.find({ alumno: req.user.id })
+        .populate("materia", "nombre")
+        .sort({ materia: 1, trimestre: 1 });
+  
+      res.json({ total: data.length, notas: data });
+    } catch (err) {
+      res.status(500).json({ msg: "Error al obtener notas" });
+    }
+  };

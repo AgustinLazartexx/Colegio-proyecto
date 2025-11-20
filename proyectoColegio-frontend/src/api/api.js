@@ -115,24 +115,24 @@ export const calificarEntrega = (id, data) => api.put(`/entregas/${id}/calificar
 
 // --- FUNCIONES ESPECÍFICAS DE NOTAS Y MATERIAS ---
 
-// Obtener alumnos de una materia específica
+// Obtener alumnos inscritos en una materia específica
 export const getAlumnosDeMateria = (materiaId) => {
   return api.get(`/materias/${materiaId}/alumnos`);
 };
 
 // Obtener las notas de una materia filtradas por trimestre
+// Devuelve un objeto con las notas de los alumnos para ese trimestre
 export const getNotasDeMateria = (materiaId, trimestre) => {
   return api.get(`/notas/materia/${materiaId}`, {
     params: { trimestre }
   });
 };
 
-// Guardar una sola nota
+// Guardar o actualizar una sola nota
 export const guardarNota = (data) => {
   // data: { materiaId, alumnoId, trimestre, tipoNota, nota }
   return api.post('/notas/guardar-una', data);
 };
-
 // Para el PROFESOR: Obtiene solo las clases asignadas a él
 export const getMisClases = () => api.get('/clases/misclases');
 
