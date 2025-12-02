@@ -1,159 +1,89 @@
-import React, { useEffect, useState } from "react";
-import axios from "axios";
-import { useAuth } from "../../context/AuthContext";
-import { toast } from "react-toastify";
-import {
-  FaBook,
-  FaChalkboardTeacher,
-  FaCalendarAlt,
-  FaExclamationCircle,
-} from "react-icons/fa";
-import { RiLoader4Fill } from "react-icons/ri";
+import { useEffect, useState } from "react";
+import { getMisClasesAlumno } from "../../api/api";
+import { Calendar, Clock, User, BookOpen } from "lucide-react"; // Íconos para que se vea moderno
 
-const AlumnoMaterias = () => {
-  const { usuario } = useAuth();
-  const token = localStorage.getItem("token");
-  const [materias, setMaterias] = useState([]);
+const CronogramaAlumno = () => {
+  const [clases, setClases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const fetchMaterias = async () => {
+    const cargarClases = async () => {
       try {
-        setLoading(true);
-        setError(null);
-        // Utilizar el ID del usuario para obtener las materias a las que está inscrito
-        const userId = usuario?.id || usuario?._id;
-        if (!userId) {
-          setError("No se pudo obtener el ID del usuario.");
-          setLoading(false);
-          return;
-        }
-
-        const res = await axios.get(`http://localhost:5000/api/materias/alumno/${userId}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        setMaterias(res.data);
+        const res = await getMisClasesAlumno();
+        setClases(res.data);
       } catch (err) {
-        console.error("Error al obtener materias:", err.response?.data || err.message);
-        setError("No se pudieron cargar las materias. Inténtalo de nuevo más tarde.");
-        toast.error("Error al cargar materias");
+        console.error(err);
+        setError("No se pudo cargar el horario.");
       } finally {
         setLoading(false);
       }
     };
+    cargarClases();
+  }, []);
 
-    if (usuario && token) {
-      fetchMaterias();
-    }
-  }, [usuario, token]);
+  if (loading) return <div className="p-4 text-center text-gray-500">Cargando tu agenda...</div>;
+  if (error) return <div className="p-4 text-center text-red-500">{error}</div>;
+  if (clases.length === 0) return <div className="p-4 text-center text-gray-500">No tienes clases asignadas aún.</div>;
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="flex flex-col items-center p-8 bg-white rounded-xl shadow-lg">
-          <RiLoader4Fill className="animate-spin text-4xl text-blue-500 mb-4" />
-          <p className="text-lg text-gray-700">Cargando tus materias...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="text-center p-8 bg-white rounded-xl shadow-lg">
-          <FaExclamationCircle className="text-red-500 text-5xl mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-red-700 mb-2">Error</h2>
-          <p className="text-gray-600">{error}</p>
-        </div>
-      </div>
-    );
-  }
+  // Ordenar días para mostrar (Lunes primero)
+  const diasOrden = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"];
   
-  if (materias.length === 0) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="text-center p-8 bg-white rounded-xl shadow-lg">
-          <FaBook className="text-blue-500 text-5xl mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-gray-800 mb-2">No tienes materias inscritas</h2>
-          <p className="text-gray-600">
-            Aún no te has inscrito en ninguna materia. Contáctate con tu administrador para que te asigne a una.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  // Agrupar clases por día
+  const clasesPorDia = diasOrden.reduce((acc, dia) => {
+    const clasesDelDia = clases.filter(c => c.dia === dia);
+    if (clasesDelDia.length > 0) {
+      // Ordenar por horario de inicio dentro del día
+      acc[dia] = clasesDelDia.sort((a, b) => a.horarioInicio.localeCompare(b.horarioInicio));
+    }
+    return acc;
+  }, {});
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-8">
-      <div className="max-w-6xl mx-auto">
-        {/* Encabezado de la página */}
-        <div className="text-center mb-10">
-          <h1 className="text-4xl font-extrabold text-gray-900 mb-2">
-            Mis Materias
-          </h1>
-          <p className="text-xl text-gray-600">
-            Revisa las materias a las que te has inscrito.
-          </p>
-        </div>
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+      <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+        <Calendar className="text-accent" /> Mi Horario Semanal
+      </h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {materias.map((materia) => (
-            <div
-              key={materia._id}
-              className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden transform hover:scale-105 transition-transform duration-300"
-            >
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="bg-blue-600 text-white rounded-full p-3 shadow-md">
-                      <FaBook size={20} />
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {Object.keys(clasesPorDia).length > 0 ? (
+          Object.entries(clasesPorDia).map(([dia, listaClases]) => (
+            <div key={dia} className="bg-gray-50 rounded-lg p-4 border-t-4 border-accent">
+              <h3 className="font-bold text-lg text-gray-700 mb-3 border-b pb-2">{dia}</h3>
+              <div className="space-y-3">
+                {listaClases.map((clase) => (
+                  <div key={clase._id} className="bg-white p-3 rounded shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+                    <div className="flex items-center justify-between mb-1">
+                        <span className="font-semibold text-accent flex items-center gap-1 text-sm">
+                           <BookOpen size={14}/> {clase.materia?.nombre || "Materia sin nombre"}
+                        </span>
                     </div>
-                    <div>
-                      <h2 className="text-xl font-bold text-gray-900">
-                        {materia.nombre}
-                      </h2>
-                      <p className="text-sm text-gray-500">
-                        {materia.sigla || "Materia"}
-                      </p>
+                    <div className="text-xs text-gray-500 flex items-center gap-1 mb-1">
+                      <Clock size={12} /> {clase.horarioInicio} - {clase.horarioFin} hs
                     </div>
+                    <div className="text-xs text-gray-600 flex items-center gap-1">
+  <User size={12} /> 
+  {/* Lógica nueva: Si hay profesores, mapeamos sus nombres, sino mostramos "A designar" */}
+  Prof. {clase.profesores && clase.profesores.length > 0 
+    ? clase.profesores.map(p => p.nombre).join(", ") 
+    : "A designar"}
+</div>
+                    {clase.aula && (
+                       <div className="mt-2 text-xs font-medium bg-blue-50 text-blue-700 px-2 py-1 rounded inline-block">
+                         Aula: {clase.aula}
+                       </div>
+                    )}
                   </div>
-                  {materia.anio && (
-                    <div className="bg-blue-100 text-blue-700 rounded-full px-4 py-1 text-sm font-semibold flex items-center gap-1">
-                      <FaCalendarAlt size={14} />
-                      {materia.anio}
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-3 mt-4">
-                  <div className="flex items-center text-gray-700">
-                    <FaChalkboardTeacher className="text-gray-400 mr-3" />
-                    <span className="text-sm font-medium">
-                      Profesor:{" "}
-                      <span className="font-semibold text-gray-900">
-                        {materia.profesor?.nombre || "Sin asignar"} {materia.profesor?.apellido || ""}
-                      </span>
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Pie de página de la tarjeta */}
-              <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
-                <span className="text-sm text-gray-600">
-                  ID de Materia: {materia._id}
-                </span>
+                ))}
               </div>
             </div>
-          ))}
-        </div>
+          ))
+        ) : (
+            <p className="col-span-full text-center text-gray-500">No hay clases para mostrar en los días hábiles.</p>
+        )}
       </div>
     </div>
   );
 };
 
-export default AlumnoMaterias;
+export default CronogramaAlumno;

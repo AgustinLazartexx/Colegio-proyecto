@@ -344,3 +344,31 @@ export const listarAlumnosDeClase = async (req, res) => {
     res.status(500).json({ msg: "Error interno", error: error.message });
   }
 };
+
+export const getMisClasesAlumno = async (req, res) => {
+  try {
+    // 1. Verificar que el usuario existe y es alumno
+    // Usamos req.user.id que viene del token (middleware checkAuth)
+    const alumno = await User.findById(req.user.id);
+    
+    if (!alumno || alumno.rol !== 'alumno') {
+       return res.status(400).json({ msg: "Usuario no válido para esta consulta" });
+    }
+
+    const { anio, division } = alumno;
+    
+    console.log(`--- Buscando Clases para: Año ${anio} - Div ${division} ---`);
+
+    // 2. Buscamos las clases que coincidan con el Año y División del alumno
+    const clases = await Clase.find({ anio, division })
+      .populate('materia', 'nombre')    // Trae el nombre de la materia
+      .populate('profesores', 'nombre') // <--- CORRECCIÓN: 'profesores' (plural)
+      .sort({ diaSemana: 1, horaInicio: 1 }); // Ordenamos (esto se puede refinar luego)
+
+    res.json(clases);
+
+  } catch (error) {
+    console.error("Error en getMisClasesAlumno:", error);
+    res.status(500).json({ msg: "Error al obtener el cronograma" });
+  }
+};

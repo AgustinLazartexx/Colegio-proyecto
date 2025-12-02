@@ -18,7 +18,14 @@ const userSchema = new mongoose.Schema({
   anio: { type: Number, min: 1, max: 6 }, // Año del alumno (usado también por materia)
   division: { type: String, uppercase: true, trim: true }, // División del alumno (puede ser null para profes/admin)
   mustChangePassword: { type: Boolean, default: true }, // Forzar cambio al inicio
-  isActive: { type: Boolean, default: true } // Para deshabilitar
+  isActive: { type: Boolean, default: true },// Para deshabilitar
+  // --- NUEVO CAMPO: CONTROL DE CUOTAS ---
+  acceso_habilitado: { 
+    type: Boolean, 
+    default: true, // Por defecto entran, el admin lo cambiará a false si no pagan
+    required: true 
+  }
+  // --------------------------------------
   // --- FIN CAMPOS NUEVOS/MODIFICADOS ---
 
 }, { timestamps: true });

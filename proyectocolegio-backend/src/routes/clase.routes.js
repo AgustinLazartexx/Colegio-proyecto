@@ -11,6 +11,7 @@ import {
   asignarAlumno,
   desasignarAlumno,
   listarAlumnosDeClase,
+  getMisClasesAlumno,
 } from "../controllers/clase.controller.js";
 
 const router = Router();
@@ -24,6 +25,7 @@ const profesorSolo = [checkAuth, checkRole("profesor")];
 router.get("/", adminSolo, obtenerTodasLasClases);
 router.get("/misclases", profesorSolo, obtenerClasesProfesor);
 router.post("/", adminSolo, crearClase);
+router.get("/alumno/mis-clases", checkAuth, getMisClasesAlumno);
 
 // --- Rutas Específicas por ID ---
 // NOTA: Tu controlador lee 'req.params.claseId', así que usamos ':claseId'

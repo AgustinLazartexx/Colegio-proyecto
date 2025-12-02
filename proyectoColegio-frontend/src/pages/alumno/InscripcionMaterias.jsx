@@ -1,179 +1,101 @@
 import React, { useEffect, useState } from "react";
-import axios from "axios";
-import { toast } from "react-toastify";
-import { useAuth } from "../../context/AuthContext";
-import {
-  Book,
-  CheckCircle,
-  XCircle,
-  Loader2,
-  Calendar,
-  User,
-  ListPlus,
-} from "lucide-react";
+import SidebarAlumno from "../../components/sidebar/SidebarAlumno"; // Ajusta la ruta si es necesario
+import { getMisClasesAlumno } from "../../api/api";
+import { Calendar, Clock, User, BookOpen, MapPin } from "lucide-react";
 
-const InscripcionMaterias = () => {
-  const { usuario, token } = useAuth();
-  
-  const [materias, setMaterias] = useState([]);
-  const [inscribiendo, setInscribiendo] = useState(null);
+const MisClases = () => {
+  const [clases, setClases] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
   useEffect(() => {
-    const obtenerMaterias = async () => {
+    const cargarClases = async () => {
       try {
-        setLoading(true);
-        setError(null);
-        const res = await axios.get("http://localhost:5000/api/materias", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setMaterias(res.data);
-      } catch (error) {
-        console.error("Error al obtener materias", error);
-        setError("No se pudieron cargar las materias disponibles. Por favor, reintenta.");
-        toast.error("No se pudieron cargar las materias.");
+        const res = await getMisClasesAlumno();
+        setClases(res.data);
+      } catch (err) {
+        console.error("Error al cargar clases:", err);
       } finally {
         setLoading(false);
       }
     };
-    if (token) {
-      obtenerMaterias();
-    } else {
-      setLoading(false);
-      setError("No estás autenticado. Por favor, inicia sesión para ver las materias.");
-    }
-  }, [token]);
+    cargarClases();
+  }, []);
 
-  const inscribirse = async (materiaId) => {
-    setInscribiendo(materiaId);
-    try {
-      await axios.post(
-        `http://localhost:5000/api/materias/inscribirse/${materiaId}`,
-        {},
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-      toast.success(
-        <div className="flex items-center gap-2">
-          <CheckCircle size={20} /> ¡Inscripción exitosa!
-        </div>
-      );
-    } catch (error) {
-      console.error(error);
-      const errorMessage = error.response?.data?.error || "Ya estás inscripto o hubo un error.";
-      toast.error(
-        <div className="flex items-center gap-2">
-          <XCircle size={20} /> {errorMessage}
-        </div>
-      );
-    } finally {
-      setInscribiendo(null);
-    }
-  };
+  // Función para ordenar los días correctamente
+  const ordenDias = { "Lunes": 1, "Martes": 2, "Miércoles": 3, "Jueves": 4, "Viernes": 5, "Sábado": 6 };
+  
+  // Agrupar clases por día
+  const clasesPorDia = clases.reduce((acc, clase) => {
+    const dia = clase.diaSemana || "Sin Día";
+    if (!acc[dia]) acc[dia] = [];
+    acc[dia].push(clase);
+    return acc;
+  }, {});
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="flex flex-col items-center p-8 bg-white rounded-xl shadow-lg">
-          <Loader2 className="animate-spin text-4xl text-blue-500 mb-4" />
-          <p className="text-lg text-gray-700">Cargando materias disponibles...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="text-center p-8 bg-white rounded-xl shadow-lg">
-          <XCircle className="text-red-500 text-5xl mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-red-700 mb-2">Error</h2>
-          <p className="text-gray-600">{error}</p>
-        </div>
-      </div>
-    );
-  }
+  // Ordenar los días para pintarlos en orden (Lunes primero)
+  const diasOrdenados = Object.keys(clasesPorDia).sort((a, b) => {
+    return (ordenDias[a] || 7) - (ordenDias[b] || 7);
+  });
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 p-8">
-      <div className="max-w-6xl mx-auto">
-        {/* Encabezado */}
-        <div className="text-center mb-10">
-          <h1 className="text-4xl font-extrabold text-gray-900 mb-2">
-            Inscripción a Materias
+    <div className="flex h-screen bg-gray-100">
+    
+      
+      <div className="flex-1 overflow-y-auto p-8">
+        <header className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2">
+            <Calendar className="text-blue-600" /> Mi Cronograma de Clases
           </h1>
-          <p className="text-xl text-gray-600">
-            Explora las materias disponibles y únete a ellas.
-          </p>
-        </div>
-        
-        {materias.length === 0 ? (
-          <div className="flex items-center justify-center">
-            <div className="text-center p-8 bg-white rounded-xl shadow-lg">
-              <Book className="text-gray-400 text-5xl mx-auto mb-4" />
-              <h2 className="text-xl font-bold text-gray-800 mb-2">No hay materias disponibles</h2>
-              <p className="text-gray-600">
-                Por favor, regresa más tarde.
-              </p>
-            </div>
+          <p className="text-gray-600 mt-2">Horarios y materias asignadas a tu curso.</p>
+        </header>
+
+        {loading ? (
+          <p className="text-gray-500">Cargando horario...</p>
+        ) : diasOrdenados.length === 0 ? (
+          <div className="bg-white p-6 rounded-xl shadow text-center text-gray-500">
+            No tienes clases asignadas todavía.
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {materias.map((materia) => (
-              <div
-                key={materia._id}
-                className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden transform hover:scale-105 transition-transform duration-300"
-              >
-                <div className="p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="bg-purple-600 text-white rounded-full p-3 shadow-md">
-                        <Book size={20} />
-                      </div>
-                      <div>
-                        <h3 className="text-xl font-bold text-gray-900">
-                          {materia.nombre}
-                        </h3>
-                        <p className="text-sm text-gray-500">{materia.sigla || "Materia"}</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {diasOrdenados.map((dia) => (
+              <div key={dia} className="bg-white rounded-xl shadow-sm border-t-4 border-blue-500 overflow-hidden">
+                <div className="bg-gray-50 p-4 border-b border-gray-100">
+                  <h2 className="font-bold text-xl text-gray-800">{dia}</h2>
+                </div>
+                <div className="p-4 space-y-4">
+                  {clasesPorDia[dia]
+                    .sort((a, b) => a.horaInicio.localeCompare(b.horaInicio)) // Ordenar por hora
+                    .map((clase) => (
+                    <div key={clase._id} className="relative pl-4 border-l-2 border-gray-200 hover:border-blue-400 transition-colors">
+                      <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                        <BookOpen size={16} className="text-blue-600"/>
+                        {clase.materia?.nombre || "Materia"}
+                      </h3>
+                      
+                      <div className="mt-2 space-y-1">
+                        <p className="text-sm text-gray-600 flex items-center gap-2">
+                          <Clock size={14} /> 
+                          <span className="font-medium bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs">
+                            {clase.horaInicio} - {clase.horaFin}
+                          </span>
+                        </p>
+                        
+                        <p className="text-sm text-gray-500 flex items-center gap-2">
+                          <User size={14} />
+                          {/* --- AQUÍ ESTÁ EL CAMBIO IMPORTANTE PARA LEER ARRAY --- */}
+                          {clase.profesores && clase.profesores.length > 0 
+                            ? clase.profesores.map(p => p.nombre).join(", ") 
+                            : "Sin asignar"}
+                        </p>
+
+                        {clase.aula && (
+                          <p className="text-xs text-gray-400 flex items-center gap-2 pt-1">
+                            <MapPin size={12} /> Aula: {clase.aula}
+                          </p>
+                        )}
                       </div>
                     </div>
-                    {materia.anio && (
-                      <div className="bg-purple-100 text-purple-700 rounded-full px-4 py-1 text-sm font-semibold flex items-center gap-1">
-                        <Calendar size={14} />
-                        {materia.anio}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center text-gray-700 mt-4">
-                    <User className="text-gray-400 mr-3" />
-                    <span className="text-sm font-medium">
-                      Profesor:{" "}
-                      <span className="font-semibold text-gray-900">
-                        {materia.profesor?.nombre || "Sin asignar"} {materia.profesor?.apellido || ""}
-                      </span>
-                    </span>
-                  </div>
-                  
-                  {/* Botón de Inscripción */}
-                  <button
-                    onClick={() => inscribirse(materia._id)}
-                    disabled={inscribiendo === materia._id}
-                    className="mt-6 w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 px-6 rounded-xl shadow-lg hover:from-blue-700 hover:to-indigo-700 transition-all transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {inscribiendo === materia._id ? (
-                      <>
-                        <Loader2 className="animate-spin" size={20} />
-                        <span>Inscribiendo...</span>
-                      </>
-                    ) : (
-                      <>
-                        <ListPlus size={20} />
-                        <span>Inscribirme</span>
-                      </>
-                    )}
-                  </button>
+                  ))}
                 </div>
               </div>
             ))}
@@ -184,4 +106,4 @@ const InscripcionMaterias = () => {
   );
 };
 
-export default InscripcionMaterias;
+export default MisClases;

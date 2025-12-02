@@ -16,9 +16,10 @@ import { useAuth } from "../../context/AuthContext"; // Asegúrate que la ruta s
 const navItems = [
   { to: "/alumno", icon: Home, text: "Inicio" },
   { to: "/alumno/materias", icon: BookOpen, text: "Materias" },
-  { to: "/alumno/tareas", icon: ClipboardList, text: "Tareas" },
-  { to: "/alumno/inscripcion", icon: PenSquare, text: "Inscripción a Materias" },
+  { to: "/alumno/asistencias", icon: ClipboardList, text: "Mis Asistencias" },
+  { to: "/alumno/inscripcion", icon: PenSquare, text: "Mis Clases" },
   { to: "/alumno/examenes", icon: Megaphone, text: "Anuncios" },
+  { to: "/alumno/boletin", icon: ClipboardList, text: "Mis Notas" },
 ];
 
 // --- No hay cambios en el resto del código, es reutilizable ---

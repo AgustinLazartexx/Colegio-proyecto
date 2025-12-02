@@ -52,6 +52,7 @@ export const getMisClases = () => api.get('/clases/misclases');
 // Detalle y Alumnos de CLASE
 export const getClaseById = (id) => api.get(`/clases/${id}`);
 export const getAlumnosDeClase = (claseId) => api.get(`/clases/${claseId}/alumnos`);
+export const getMisClasesAlumno = () => api.get('/clases/alumno/mis-clases');
 
 // ==========================================
 //    FUNCIONES "VIEJAS" O DE MATERIAS 
@@ -87,6 +88,7 @@ export const registrarAsistencias = (data) => api.post('/asistencias', data);
 export const obtenerAsistenciaFecha = (claseId, fecha) => api.get('/asistencias', { params: { claseId, fecha } });
 export const obtenerAsistenciasPorClaseYFecha = (claseId, fecha) => api.get('/asistencias', { params: { claseId, fecha } });
 export const getReporteAsistencias = (claseId, fecha) => api.get('/asistencias/reporte-detallado', { params: { claseId, fecha } });
+export const getMisAsistenciasAlumno = () => api.get('/asistencias/alumno/mis-asistencias');
 
 // ==========================================
 //       NOTAS Y TAREAS
@@ -104,6 +106,8 @@ export const getTareasClase = (claseId) => api.get(`/tareas/clase/${claseId}`);
 export const eliminarTarea = (id) => api.delete(`/tareas/${id}`);
 export const getEntregasTarea = (tareaId) => api.get(`/entregas/tarea/${tareaId}`);
 export const calificarEntrega = (id, data) => api.put(`/entregas/${id}/calificar`, data);
+// --- NUEVO: Para que el alumno vea su boletín ---
+export const getMisNotasAlumno = () => api.get('/notas/mias');
 
 // ==========================================
 //       ANUNCIOS

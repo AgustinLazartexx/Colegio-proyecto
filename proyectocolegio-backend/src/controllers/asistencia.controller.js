@@ -220,3 +220,52 @@ export const getReporteAsistencias = async (req, res) => {
         res.status(500).json({ msg: "Error al generar reporte" });
     }
 };
+
+export const getMisAsistencias = async (req, res) => {
+  try {
+    const alumnoId = req.user.id;
+    
+    console.log(`--- Buscando asistencias para: ${alumnoId} ---`);
+
+    // 1. Búsqueda CORREGIDA según tu modelo
+    // Buscamos directamente por el campo 'alumno' que definiste en el Schema
+    const asistencias = await Asistencia.find({ alumno: alumnoId })
+      .populate({
+        path: 'clase',
+        select: 'materia diaSemana horarioInicio',
+        populate: { path: 'materia', select: 'nombre' } // Anidado para sacar nombre materia
+      })
+      .sort({ fecha: -1 }); // Ordenar por fecha descendente
+
+    console.log(`Encontradas: ${asistencias.length}`);
+
+    // 2. Procesamos los datos (Data Shaping)
+    const historial = asistencias.map(doc => {
+      // Normalizamos el estado (primera letra mayúscula)
+      const estadoFormat = doc.estado.charAt(0).toUpperCase() + doc.estado.slice(1);
+      
+      return {
+        id: doc._id,
+        fecha: doc.fecha,
+        materia: doc.clase?.materia?.nombre || "Materia sin asignar",
+        estado: estadoFormat, // "Presente", "Ausente", etc.
+        observacion: '-' // Tu modelo actual no tiene observaciones, enviamos guion
+      };
+    });
+
+    // 3. Calcular estadísticas
+    const total = historial.length;
+    // Filtramos buscando 'Presente' (o como lo guardes, tu enum dice "presente" en minúscula)
+    const presentes = historial.filter(h => h.estado.toLowerCase() === 'presente').length;
+    const porcentaje = total > 0 ? Math.round((presentes / total) * 100) : 100;
+
+    res.json({
+      resumen: { total, presentes, porcentaje },
+      historial
+    });
+
+  } catch (error) {
+    console.error("Error en getMisAsistencias:", error);
+    res.status(500).json({ msg: "Error al obtener asistencias" });
+  }
+};

@@ -36,8 +36,8 @@ import InicioAlumno from "./pages/alumno/InicioAlumno";
 import InscripcionMaterias from "./pages/alumno/InscripcionMaterias";
 import Materias from "./pages/alumno/Materias";
 import TareasAlumno from './pages/alumno/TareasAlumno';
-import Asistencias from "./pages/alumno/Asistencias";
-import Examenes from "./pages/alumno/Examenes";
+import AsistenciasAlumno from "./pages/alumno/AsistenciasAlumno";
+import Boletin from "./pages/alumno/Boletin";
 
 // Páginas del admin
 import UsuariosAdmin from "./pages/admin/UsuariosAdmin";
@@ -95,8 +95,9 @@ function App() {
           <Route path="materias" element={<Materias />} />
           <Route path="inscripcion" element={<InscripcionMaterias />} />
           <Route path="tareas" element={<TareasAlumno />} />
-          <Route path="asistencia" element={<Asistencias />} />
-          <Route path="examenes" element={<Examenes />} />
+          <Route path="asistencias" element={<AsistenciasAlumno />} />
+          <Route path="boletin" element={<Boletin />} />
+          
         </Route>
 
         {/* Rutas PROFESOR */}

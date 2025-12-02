@@ -19,7 +19,7 @@ const LoginModal = ({ isOpen, onClose }) => {
     }));
   };
 
-  const handleSubmit = async (e) => {
+ const handleSubmit = async (e) => {
     e.preventDefault();
     const { email, password } = formData;
 
@@ -30,41 +30,46 @@ const LoginModal = ({ isOpen, onClose }) => {
     try {
       setLoading(true);
 
+      // 1. Esperamos a que el login sea exitoso
       const user = await toast.promise(
         login(email, password),
         {
           pending: "Verificando credenciales...",
           success: {
-            render() {
-              return "¡Bienvenido!";
-            },
+            render() { return "¡Bienvenido!"; },
           },
-          error: "Credenciales inválidas o error del servidor",
+          error: {
+            render({ data }) {
+              return data.message || "Error al iniciar sesión";
+            }
+          },
         },
-        {
-          autoClose: 2000,
-        }
-      );
+        { autoClose: 2000 }
+      ); // <--- AQUÍ cerramos el toast.promise
 
-      // Esperar a que se cierre el toast para redirigir
+      // 2. Solo si llegamos aquí (login exitoso), ejecutamos la redirección
       setTimeout(() => {
-        switch (user.rol) {
-          case "alumno":
-            navigate("/alumno");
-            break;
-          case "profesor":
-            navigate("/profesor");
-            break;
-          case "admin":
-            navigate("/admin/Inicio");
-            break;
-          default:
-            navigate("/");
+        if (user && user.rol) { // Verificación extra de seguridad
+            switch (user.rol) {
+              case "alumno":
+                navigate("/alumno");
+                break;
+              case "profesor":
+                navigate("/profesor");
+                break;
+              case "admin":
+                navigate("/admin/Inicio");
+                break;
+              default:
+                navigate("/");
+            }
         }
-        onClose(); // cerrar el modal después de redirigir
-      }, 2200); // un poco más que el autoClose del toast
+        onClose(); 
+      }, 2200);
+
     } catch (err) {
-      console.error("Error al iniciar sesión:", err);
+      console.error("Error controlado:", err);
+      // No hacemos nada más, el toast de error ya se mostró
     } finally {
       setLoading(false);
     }

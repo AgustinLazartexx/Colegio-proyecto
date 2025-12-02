@@ -15,6 +15,15 @@ export const login = async (req, res) => {
     if (!isMatch)
       return res.status(401).json({ msg: "Contraseña incorrecta" });
 
+    // --- NUEVA VALIDACIÓN: GATEKEEPER ---
+    // Si es alumno Y tiene el acceso deshabilitado, le prohibimos la entrada.
+    if (user.rol === 'alumno' && user.acceso_habilitado === false) {
+      return res.status(403).json({ 
+        msg: "Acceso restringido por estado de cuenta. Contacte administración." 
+      });
+    }
+    // ------------------------------------
+
     const payload = {
       id: user._id,
       rol: user.rol,
