@@ -1,121 +1,246 @@
 import React, { useEffect, useState } from "react";
-// 1. Importamos la función centralizada desde tu api.js
-import { getAdminStats } from "../../api/api"; 
-import {
-  UserGroupIcon,
-  AcademicCapIcon,
-  BookOpenIcon,
-  ClipboardDocumentCheckIcon,
-  ChartBarSquareIcon,
-} from "@heroicons/react/24/outline";
+import { Link } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
+import { 
+  Users, 
+  BookOpen, 
+  Calendar, 
+  TrendingUp, 
+  UserPlus, 
+  ClipboardCheck, 
+  School,
+  Bell,
+  ArrowRight
+} from "lucide-react";
+// Importamos las funciones de API para llenar los datos reales
+import { getUsuarios, getMaterias, getTodasLasClases } from "../../api/api";
 
 const DashboardAdmin = () => {
-  // Ya no necesitamos extraer el token manualmente aquí, api.js lo maneja
+  const { usuario } = useAuth();
+  
+  // Estados para los contadores (KPIs)
   const [stats, setStats] = useState({
-    alumnos: 0,
-    profesores: 0,
-    materias: 0,
-    tareasPendientes: 0
+    totalAlumnos: 0,
+    totalProfesores: 0,
+    totalMaterias: 0,
+    totalClases: 0
   });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchStats = async () => {
+    const cargarEstadisticas = async () => {
       try {
-        // 2. Usamos la función limpia que ya incluye el token y la URL correcta
-        const { data } = await getAdminStats();
-        setStats(data);
-      } catch (err) {
-        console.error("Error al obtener estadísticas:", err);
+        // Hacemos las peticiones en paralelo para que cargue rápido
+        const [resUsers, resMaterias, resClases] = await Promise.all([
+          getUsuarios(),       // Trae todos los usuarios
+          getMaterias(),       // Trae todas las materias
+          getTodasLasClases()  // Trae todas las clases
+        ]);
+
+        // Filtramos los usuarios para contar por rol
+        const alumnos = resUsers.data.filter(u => u.rol === 'alumno').length;
+        const profesores = resUsers.data.filter(u => u.rol === 'profesor').length;
+
+        setStats({
+          totalAlumnos: alumnos,
+          totalProfesores: profesores,
+          totalMaterias: resMaterias.data.length || 0,
+          totalClases: resClases.data.length || 0
+        });
+
+      } catch (error) {
+        console.error("Error cargando stats:", error);
       } finally {
         setLoading(false);
       }
     };
-    fetchStats();
+
+    cargarEstadisticas();
   }, []);
 
-  const cards = [
-    {
-      title: "Alumnos",
-      value: stats.alumnos || 0,
-      icon: UserGroupIcon,
-      bgColor: "bg-blue-50",
-      textColor: "text-blue-600",
-    },
-    {
-      title: "Profesores",
-      value: stats.profesores || 0,
-      icon: AcademicCapIcon,
-      bgColor: "bg-emerald-50",
-      textColor: "text-emerald-600",
-    },
-    {
-      title: "Materias",
-      value: stats.materias || 0,
-      icon: BookOpenIcon,
-      bgColor: "bg-amber-50",
-      textColor: "text-amber-600",
-    },
-    {
-      title: "Tareas Pendientes",
-      // Nota: Tu backend actual (admin.controller.js) aún no devuelve este campo, 
-      // así que se mostrará como 0 por defecto.
-      value: stats.tareasPendientes || 0, 
-      icon: ClipboardDocumentCheckIcon,
-      bgColor: "bg-slate-50",
-      textColor: "text-slate-600",
-    },
-  ];
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-100">
-        <p className="text-xl text-gray-600 animate-pulse">Cargando dashboard...</p>
-      </div>
-    );
-  }
+  const fechaHoy = new Date().toLocaleDateString('es-ES', { 
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
+  });
 
   return (
-    <div className="min-h-screen bg-gray-100 p-8 font-sans">
-      {/* Encabezado Principal */}
-      <div className="flex items-center justify-between pb-6 mb-8 border-b border-gray-200">
-        <div className="flex items-center gap-4">
-          <ChartBarSquareIcon className="h-12 w-12 text-gray-600" />
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">
-              Panel de Administración
-            </h1>
-            <p className="text-lg text-gray-500 mt-1">
-              Información clave de la plataforma en un solo lugar.
-            </p>
-          </div>
+    <div className="p-6 min-h-screen bg-gray-50/50 space-y-8">
+      
+      {/* --- 1. HEADER --- */}
+      <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-800">
+            Panel de Administración
+          </h1>
+          <p className="text-gray-500 mt-1 capitalize">
+            {fechaHoy} • Hola, {usuario?.nombre}
+          </p>
         </div>
-        <div className="text-right">
-          <p className="text-sm text-gray-500">Última actualización: {new Date().toLocaleTimeString()}</p>
+        <div className="flex items-center gap-3">
+            <Link to="/admin/crud-anuncios" className="flex items-center gap-2 bg-white border border-gray-200 text-gray-600 px-4 py-2 rounded-lg shadow-sm hover:bg-gray-50 transition">
+                <Bell size={18} /> Anuncios
+            </Link>
+            <button className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-medium">
+                Generar Reporte
+            </button>
         </div>
       </div>
 
-      {/* Tarjetas de Estadísticas */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {cards.map(({ title, value, icon: Icon, bgColor, textColor }) => (
-          <div
-            key={title}
-            className="bg-white rounded-xl shadow-md border border-gray-200 p-6 flex items-center gap-4 hover:shadow-lg transition-shadow duration-300"
-          >
-            <div className={`flex items-center justify-center p-3 rounded-xl ${bgColor}`}>
-              <Icon className={`h-8 w-8 ${textColor}`} />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-gray-500">{title}</p>
-              <p className="text-3xl font-extrabold text-gray-900 mt-1">
-                {value}
-              </p>
+      {/* --- 2. KPIs (Tarjetas de Estadísticas) --- */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard 
+          title="Alumnos Activos" 
+          value={loading ? "..." : stats.totalAlumnos} 
+          icon={<Users size={24}/>} 
+          color="bg-blue-500" 
+          subtext="Registrados en el sistema"
+        />
+        <StatCard 
+          title="Profesores" 
+          value={loading ? "..." : stats.totalProfesores} 
+          icon={<School size={24}/>} 
+          color="bg-emerald-500" 
+          subtext="Docentes asignados"
+        />
+        <StatCard 
+          title="Materias" 
+          value={loading ? "..." : stats.totalMaterias} 
+          icon={<BookOpen size={24}/>} 
+          color="bg-purple-500" 
+          subtext="Plan de estudios"
+        />
+        <StatCard 
+          title="Clases Creadas" 
+          value={loading ? "..." : stats.totalClases} 
+          icon={<Calendar size={24}/>} 
+          color="bg-amber-500" 
+          subtext="Horarios configurados"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        {/* --- 3. ACCESOS RÁPIDOS (Gestión) --- */}
+        <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+          <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+            <TrendingUp className="text-blue-600"/> Gestión Rápida
+          </h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Tarjeta de Acción: Usuarios */}
+            <ActionCard 
+              to="/admin/usuarios"
+              title="Gestionar Usuarios"
+              desc="Crear, editar o eliminar alumnos y profesores."
+              icon={<UserPlus size={20} />}
+              color="text-blue-600 bg-blue-50"
+            />
+
+            {/* Tarjeta de Acción: Materias */}
+            <ActionCard 
+              to="/admin/materias"
+              title="Catálogo de Materias"
+              desc="Administrar asignaturas y programas."
+              icon={<BookOpen size={20} />}
+              color="text-purple-600 bg-purple-50"
+            />
+
+            {/* Tarjeta de Acción: Clases */}
+            <ActionCard 
+              to="/admin/CrearClases"
+              title="Configurar Clases"
+              desc="Asignar horarios, aulas y profesores."
+              icon={<Calendar size={20} />}
+              color="text-amber-600 bg-amber-50"
+            />
+
+            {/* Tarjeta de Acción: Asistencia */}
+            <ActionCard 
+              to="/admin/AsistenciaGestion"
+              title="Control de Asistencia"
+              desc="Supervisar o tomar asistencia manualmente."
+              icon={<ClipboardCheck size={20} />}
+              color="text-emerald-600 bg-emerald-50"
+            />
+          </div>
+        </div>
+
+        {/* --- 4. PANEL LATERAL (Estado del Sistema) --- */}
+        <div className="space-y-6">
+          
+          {/* Estado de cuotas (Mockup por ahora) */}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+            <h3 className="font-bold text-gray-800 mb-4">Estado Financiero</h3>
+            <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Cuotas al día</span>
+                    <span className="text-sm font-bold text-green-600">85%</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                    <div className="bg-green-500 h-2.5 rounded-full" style={{ width: '85%' }}></div>
+                </div>
+                <div className="pt-2 border-t border-gray-50">
+                    <p className="text-xs text-gray-400">Actualizado hace 10 min</p>
+                </div>
             </div>
           </div>
-        ))}
+
+          {/* Auditoría reciente (Ejemplo visual) */}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+             <h3 className="font-bold text-gray-800 mb-4">Actividad Reciente</h3>
+             <ul className="space-y-3">
+                <ActivityItem text="Prof. Gomez subió notas de 5to A" time="Hace 5 min" />
+                <ActivityItem text="Nuevo alumno registrado: Juan P." time="Hace 20 min" />
+                <ActivityItem text="Asistencia 3ro B completada" time="Hace 1h" />
+             </ul>
+             <div className="mt-4 pt-2 border-t border-gray-50 text-center">
+                <Link to="/admin/AuditoriaNotas" className="text-sm text-blue-600 font-medium hover:underline">
+                    Ver auditoría completa
+                </Link>
+             </div>
+          </div>
+
+        </div>
       </div>
     </div>
   );
 };
+
+// --- Subcomponentes ---
+
+const StatCard = ({ title, value, icon, color, subtext }) => (
+  <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex items-start justify-between hover:shadow-md transition-shadow">
+    <div>
+      <p className="text-gray-500 text-sm font-medium">{title}</p>
+      <h3 className="text-2xl font-bold text-gray-800 mt-1">{value}</h3>
+      <p className="text-xs text-gray-400 mt-1">{subtext}</p>
+    </div>
+    <div className={`p-3 rounded-lg text-white shadow-sm ${color}`}>
+      {icon}
+    </div>
+  </div>
+);
+
+const ActionCard = ({ to, title, desc, icon, color }) => (
+  <Link to={to} className="flex items-start gap-4 p-4 rounded-xl border border-gray-100 hover:border-blue-300 hover:bg-blue-50/30 transition-all group">
+    <div className={`p-3 rounded-lg ${color}`}>
+        {icon}
+    </div>
+    <div className="flex-1">
+        <h4 className="font-bold text-gray-800 group-hover:text-blue-700 transition-colors">{title}</h4>
+        <p className="text-sm text-gray-500 mt-1">{desc}</p>
+    </div>
+    <ArrowRight className="text-gray-300 group-hover:text-blue-500 transition-colors" size={18} />
+  </Link>
+);
+
+const ActivityItem = ({ text, time }) => (
+    <li className="flex items-start gap-3 text-sm">
+        <div className="w-2 h-2 mt-1.5 rounded-full bg-blue-400 flex-shrink-0"></div>
+        <div>
+            <p className="text-gray-700">{text}</p>
+            <span className="text-xs text-gray-400">{time}</span>
+        </div>
+    </li>
+);
 
 export default DashboardAdmin;
