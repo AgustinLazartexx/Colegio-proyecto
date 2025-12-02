@@ -26,15 +26,14 @@ router.post(
 
 // Obtener anuncios para un alumno
 router.get(
-  "/alumno/:idAlumno",
+  "/alumno/mis-anuncios",
   [
     checkAuth,
     checkRole("alumno"),
-    param("idAlumno", "ID de alumno inválido").isMongoId(),
-    validateFields
+    // Ya no necesitamos validar param idAlumno
   ],
   obtenerAnunciosAlumno
-);
+)
 
 // 📌 Obtener anuncios del profesor autenticado
 router.get(

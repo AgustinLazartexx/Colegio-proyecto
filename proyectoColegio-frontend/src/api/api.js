@@ -116,3 +116,5 @@ export const getMisAnuncios = () => api.get('/anuncios/profesor/mis-anuncios');
 export const crearAnuncio = (data) => api.post('/anuncios', data);
 export const actualizarAnuncio = (id, data) => api.put(`/anuncios/${id}`, data);
 export const eliminarAnuncio = (id) => api.delete(`/anuncios/${id}`);
+// --- NUEVO: Función para el alumno ---
+export const getAnunciosAlumno = () => api.get('/anuncios/alumno/mis-anuncios');

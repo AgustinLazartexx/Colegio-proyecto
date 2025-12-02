@@ -38,6 +38,7 @@ import Materias from "./pages/alumno/Materias";
 import TareasAlumno from './pages/alumno/TareasAlumno';
 import AsistenciasAlumno from "./pages/alumno/AsistenciasAlumno";
 import Boletin from "./pages/alumno/Boletin";
+import AnunciosAlumno from "./pages/alumno/AnunciosAlumno"; // Importar componente
 
 // Páginas del admin
 import UsuariosAdmin from "./pages/admin/UsuariosAdmin";
@@ -97,6 +98,7 @@ function App() {
           <Route path="tareas" element={<TareasAlumno />} />
           <Route path="asistencias" element={<AsistenciasAlumno />} />
           <Route path="boletin" element={<Boletin />} />
+          <Route path="anuncios" element={<AnunciosAlumno />} />
           
         </Route>
 

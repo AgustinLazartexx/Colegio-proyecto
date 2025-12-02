@@ -15,10 +15,9 @@ import { useAuth } from "../../context/AuthContext"; // Asegúrate que la ruta s
 // Items de navegación del Alumno
 const navItems = [
   { to: "/alumno", icon: Home, text: "Inicio" },
-  { to: "/alumno/materias", icon: BookOpen, text: "Materias" },
   { to: "/alumno/asistencias", icon: ClipboardList, text: "Mis Asistencias" },
   { to: "/alumno/inscripcion", icon: PenSquare, text: "Mis Clases" },
-  { to: "/alumno/examenes", icon: Megaphone, text: "Anuncios" },
+  { to: "/alumno/anuncios", icon: Megaphone, text: "Anuncios" },
   { to: "/alumno/boletin", icon: ClipboardList, text: "Mis Notas" },
 ];
 

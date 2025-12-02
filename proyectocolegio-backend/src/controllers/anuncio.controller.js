@@ -21,34 +21,6 @@ export const crearAnuncio = async (req, res) => {
   }
 };
 
-
-
-export const obtenerAnunciosAlumno = async (req, res) => {
-  try {
-    const { idAlumno } = req.params;
-
-    // Buscar las materias en las que está inscripto el alumno
-    const materias = await Materia.find({ alumnos: idAlumno }).select("_id");
-    const materiaIds = materias.map(m => m._id);
-
-    // Si no está en ninguna materia, devolvemos vacío
-    if (materiaIds.length === 0) {
-      return res.json([]);
-    }
-
-    // Buscar anuncios de esas materias
-    const anuncios = await Anuncio.find({ materia: { $in: materiaIds } })
-      .populate("profesor", "nombre")
-      .populate("materia", "nombre")
-      .sort({ fecha: -1 });
-
-    res.json(anuncios);
-  } catch (err) {
-    console.error("❌ Error en obtenerAnunciosAlumno:", err);
-    res.status(500).json({ message: "Error al obtener anuncios", error: err.message });
-  }
-};
-
 // Obtener todos los anuncios de un profesor
 export const obtenerAnunciosProfesor = async (req, res) => {
   try {
@@ -110,5 +82,35 @@ export const eliminarAnuncio = async (req, res) => {
   } catch (err) {
     console.error("❌ Error en eliminarAnuncio:", err);
     res.status(500).json({ msg: "Error al eliminar anuncio", error: err.message });
+  }
+};
+
+export const obtenerAnunciosAlumno = async (req, res) => {
+  try {
+    // CAMBIO: Obtenemos el ID del token, no de los parámetros de la URL
+    const idAlumno = req.user.id; 
+
+    console.log(`--- Buscando anuncios para alumno: ${idAlumno} ---`);
+
+    // 1. Buscar todas las materias donde este alumno está inscrito
+    // (Asumiendo que tu modelo Materia tiene un array 'alumnos')
+    const materias = await Materia.find({ alumnos: idAlumno }).select("_id");
+    
+    const materiaIds = materias.map(m => m._id);
+
+    if (materiaIds.length === 0) {
+      return res.json([]); // No cursa materias, no hay anuncios
+    }
+
+    // 2. Buscar anuncios que pertenezcan a esas materias
+    const anuncios = await Anuncio.find({ materia: { $in: materiaIds } })
+      .populate("profesor", "nombre email") // Traemos datos del profe
+      .populate("materia", "nombre")        // Traemos nombre de la materia
+      .sort({ fecha: -1 });                 // Más nuevos primero
+
+    res.json(anuncios);
+  } catch (err) {
+    console.error("❌ Error en obtenerAnunciosAlumno:", err);
+    res.status(500).json({ message: "Error al obtener anuncios", error: err.message });
   }
 };
