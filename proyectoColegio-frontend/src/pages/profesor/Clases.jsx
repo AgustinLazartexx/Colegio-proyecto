@@ -105,9 +105,10 @@ const Clases = () => {
                                   </h4>
                                   <div className="text-sm text-gray-600 flex flex-wrap gap-4 mt-1">
                                       <span className="flex items-center gap-1">
-                                          <Clock size={16} className="text-gray-400"/> 
-                                          {clase.horaInicio} - {clase.horaFin}
-                                      </span>
+  <Clock size={16} className="text-gray-400"/> 
+  {/* Usamos 'horario' o un fallback por si acaso */}
+  {clase.horario || `${clase.horaInicio || '?'} - ${clase.horaFin || '?'}`}
+</span>
                                       <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-700 border border-gray-200">
                                           {clase.anio}° "{clase.division}"
                                       </span>
