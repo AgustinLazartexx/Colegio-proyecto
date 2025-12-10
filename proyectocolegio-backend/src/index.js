@@ -21,6 +21,7 @@ import anuncioRoutes from "./routes/anuncio.routes.js";
 import claseRoutes from "./routes/clase.routes.js";
 import asistenciasRoutes from "./routes/asistencias.routes.js";
 import notasRoutes from "./routes/notas.routes.js";
+import cuotaRoutes from "./routes/cuota.routes.js";
 
 dotenv.config();
 
@@ -71,7 +72,7 @@ app.use("/api/anuncios", anuncioRoutes);
 app.use("/api/clases", claseRoutes);
 app.use("/api/asistencias", asistenciasRoutes);
 app.use("/api/notas", notasRoutes);
-
+app.use("/api/cuotas", cuotaRoutes);
 
 // --- RUTA RAÍZ ---
 app.get("/", (req, res) => {

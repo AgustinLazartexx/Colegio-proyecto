@@ -118,3 +118,14 @@ export const actualizarAnuncio = (id, data) => api.put(`/anuncios/${id}`, data);
 export const eliminarAnuncio = (id) => api.delete(`/anuncios/${id}`);
 // --- NUEVO: Función para el alumno ---
 export const getAnunciosAlumno = () => api.get('/anuncios/alumno/mis-anuncios');
+
+// ==========================================
+//       GESTIÓN DE CUOTAS (FINANZAS)
+// ==========================================
+export const getCuotasDeAlumno = (alumnoId) => api.get(`/cuotas/alumno/${alumnoId}`);
+export const generarCuota = (data) => api.post('/cuotas/generar', data);
+export const registrarPagoCuota = (cuotaId, metodoPago) => api.put(`/cuotas/pagar/${cuotaId}`, { metodoPago });
+export const marcarCuotaVencida = (cuotaId) => api.put(`/cuotas/vencer/${cuotaId}`);
+
+// Para el alumno
+export const getMisCuotasAlumno = () => api.get('/cuotas/mis-cuotas');
