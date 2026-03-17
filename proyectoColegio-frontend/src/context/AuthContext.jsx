@@ -5,7 +5,7 @@ import axios from "axios";
 
 // Creamos una instancia de Axios para usar en toda la app.
 const apiClient = axios.create({
-  baseURL: "http://localhost:5000/api",
+  baseURL: "https://colegio-proyecto-backend.onrender.com/api",
 });
 
 export const AuthContext = createContext();
