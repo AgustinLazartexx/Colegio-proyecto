@@ -2,11 +2,10 @@ import express from "express";
 import cors from "cors";
 import morgan from "morgan";
 import dotenv from "dotenv";
-import path from "path"; // Importación necesaria
-import { fileURLToPath } from 'url'; // Importación necesaria
+import path from "path";
+import { fileURLToPath } from 'url';
 
 import connectMongo from "./config/mongo.js";
-import pool from "./config/mariadb.js";
 
 // --- Importaciones de Rutas ---
 import userRoutes from "./routes/user.routes.js";
@@ -27,37 +26,22 @@ dotenv.config();
 
 const app = express();
 
-// --- CONFIGURACIÓN DE MIDDLEWARES PRINCIPALES ---
-
-// MEJORA 1: Se elimina la llamada redundante a cors()
+// --- CONFIGURACIÓN DE MIDDLEWARES ---
 app.use(cors({
-  origin: "http://localhost:5173",
+  origin: process.env.FRONTEND_URL || "http://localhost:5173", // Ajustado para Render
   credentials: true
 }));
 
 app.use(express.json());
 app.use(morgan("dev"));
 
-// CORRECCIÓN: La configuración de archivos estáticos DEBE IR ANTES de las rutas de la API.
+// Archivos estáticos
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-
-// --- CONEXIONES A BASE DE DATOS ---
+// --- CONEXIÓN ÚNICA A MONGO ---
 connectMongo();
-
-(async () => {
-  try {
-    const conn = await pool.getConnection();
-    await conn.query("SELECT 1 + 1 AS result");
-    conn.release();
-    console.log("✅ MariaDB conectado");
-  } catch (err) {
-    console.error("❌ Error al conectar MariaDB:", err.message);
-  }
-})();
-
 
 // --- RUTAS DE LA API ---
 app.use("/api/usuarios", userRoutes);
@@ -74,14 +58,11 @@ app.use("/api/asistencias", asistenciasRoutes);
 app.use("/api/notas", notasRoutes);
 app.use("/api/cuotas", cuotaRoutes);
 
-// --- RUTA RAÍZ ---
 app.get("/", (req, res) => {
-  res.send("API Colegio funcionando 🏫");
+  res.send("API Colegio funcionando con MongoDB 🏫");
 });
 
-
-// --- INICIO DEL SERVIDOR ---
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`🚀 Servidor escuchando en http://localhost:${PORT}`);
+  console.log(`🚀 Servidor en puerto ${PORT}`);
 });

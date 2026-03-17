@@ -5,7 +5,7 @@ import { LogIn } from "lucide-react";
 const links = [
   { label: "Propuesta", targetId: "propuesta" },
   { label: "Contacto", targetId: "contacto" },
-  { label: "Comunidad", targetId: "comunidad" },
+  { label: "Tipo de Educación", targetId: "tipo-educacion" },
 ];
 
 /**
