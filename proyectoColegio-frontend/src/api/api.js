@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // 1. Configuración inicial
 const api = axios.create({
-  baseURL: `${import.meta.env.VITE_API_URL}/api`
+  baseURL: "https://colegio-proyecto-backend.onrender.com/api"
 });
 
 // 2. Interceptor de Token
