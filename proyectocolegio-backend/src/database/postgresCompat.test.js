@@ -12,7 +12,14 @@ test("translates binary UUID helpers while preserving bind parameter names", () 
   );
   assert.equal(
     sql,
-    'SELECT UPPER(encode(id, \'hex\')) AS "alumnoId" FROM users WHERE id = decode(:alumnoId, \'hex\') AND "isActive" = TRUE',
+    'SELECT UPPER(encode(id, \'hex\')) AS "alumnoId" FROM users WHERE id = decode(replace(:alumnoId, \'-\', \'\'), \'hex\') AND "isActive" = TRUE',
+  );
+});
+
+test("accepts UUID parameters with or without hyphens", () => {
+  assert.equal(
+    translatePostgresSql("SELECT UNHEX(:taskId)"),
+    "SELECT decode(replace(:taskId, '-', ''), 'hex')",
   );
 });
 
