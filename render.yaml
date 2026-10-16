@@ -25,10 +25,7 @@ services:
       - key: DEMO_USER_PASSWORD
         sync: false
       - key: FRONTEND_URL
-        fromService:
-          type: web
-          name: colegio-demo-web
-          property: url
+        sync: false
 
   - type: web
     name: colegio-demo-web
@@ -42,7 +39,4 @@ services:
         destination: /index.html
     envVars:
       - key: VITE_API_URL
-        fromService:
-          type: web
-          name: colegio-demo-api
-          property: url
+        sync: false
