@@ -25,7 +25,7 @@ services:
       - key: DEMO_USER_PASSWORD
         sync: false
       - key: FRONTEND_URL
-        sync: false
+        value: https://colegio-demo-web.onrender.com
 
   - type: web
     name: colegio-demo-web
@@ -39,4 +39,4 @@ services:
         destination: /index.html
     envVars:
       - key: VITE_API_URL
-        sync: false
+        value: https://colegio-demo-api.onrender.com
