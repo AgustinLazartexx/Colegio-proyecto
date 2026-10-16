@@ -28,7 +28,7 @@ services:
         fromService:
           type: web
           name: colegio-demo-web
-          property: host
+          property: url
 
   - type: web
     name: colegio-demo-web
@@ -45,4 +45,4 @@ services:
         fromService:
           type: web
           name: colegio-demo-api
-          property: host
+          property: url
