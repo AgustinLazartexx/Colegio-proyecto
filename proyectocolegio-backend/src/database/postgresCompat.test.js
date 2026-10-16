@@ -56,6 +56,7 @@ test("translates MariaDB table definitions and retains secondary indexes", () =>
   assert.match(sql, /"isActive" BOOLEAN NOT NULL DEFAULT TRUE/);
   assert.match(sql, /"createdAt" TIMESTAMP NOT NULL/);
   assert.match(sql, /CONSTRAINT "uq_demo_nombre" UNIQUE \(nombre\)/);
+  assert.doesNotMatch(sql, /,\s*\)$/);
   assert.doesNotMatch(sql, /ENGINE=|ON UPDATE CURRENT_TIMESTAMP|KEY idx_demo_created/);
   assert.deepEqual(indexes, [
     'CREATE INDEX IF NOT EXISTS idx_demo_created ON demo ("createdAt")',
@@ -99,6 +100,7 @@ test("translates the production schema migrations without MariaDB-only DDL", asy
   for (const { sql, indexes } of translations) {
     assert.doesNotMatch(sql, /\bBINARY\s*\(|\bENUM\s*\(|\bTINYINT\b|\bDATETIME\b|ENGINE\s*=/i);
     assert.doesNotMatch(sql, /ON UPDATE CURRENT_TIMESTAMP/i);
+    assert.doesNotMatch(sql, /,\s*\)$/);
     assert.ok(!indexes.some((index) => /\bKEY\s+\w+\s*\(/i.test(index)));
   }
 });

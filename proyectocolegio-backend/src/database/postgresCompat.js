@@ -72,7 +72,7 @@ export const translatePostgresDdl = (input) => {
     .replace(/\s+ON\s+UPDATE\s+CURRENT_TIMESTAMP/gi, "")
     .replace(/(\b[a-zA-Z_]\w*\s+BOOLEAN\b[^,\r\n]*\bDEFAULT)\s+1\b/gi, "$1 TRUE")
     .replace(/(\b[a-zA-Z_]\w*\s+BOOLEAN\b[^,\r\n]*\bDEFAULT)\s+0\b/gi, "$1 FALSE")
-    .replace(/,\s*\r?\n\s*\)/g, "\n)");
+    .replace(/,\s*$/, "");
 
   const statement = `${prefix}${body})`;
   if (hasUpdatedAt) {
