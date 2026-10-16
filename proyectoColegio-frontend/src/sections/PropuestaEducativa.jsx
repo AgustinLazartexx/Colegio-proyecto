@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 
+const MotionDiv = motion.div;
+const MotionImg = motion.img;
+
 const tabs = [
   {
     id: "primaria",
@@ -48,31 +51,34 @@ export default function PropuestaEducativa() {
   const tab = tabs.find((t) => t.id === activeTab);
 
   return (
-    <section id="propuesta" className="py-20 md:py-32 bg-[#F8F7F4]">
-      <div className="max-w-6xl mx-auto px-6">
-        <motion.div
-          className="text-center mb-16"
+    <section id="propuesta" className="scroll-mt-20 bg-[#F8F7F4] px-4 py-14 sm:px-6 sm:py-20 md:py-28">
+      <div className="mx-auto max-w-6xl">
+        <MotionDiv
+          className="mb-10 text-center sm:mb-16"
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
           viewport={{ once: true }}
         >
-          <h2 className="text-4xl font-bold text-[#0A2342] mb-4">
+          <h2 className="mb-4 text-3xl font-bold leading-tight text-[#0A2342] sm:text-4xl">
             Una Educación Integral y de Vanguardia
           </h2>
-          <p className="text-lg text-gray-600 max-w-3xl mx-auto">
+          <p className="mx-auto max-w-3xl text-base text-gray-700 sm:text-lg">
             Explorá nuestros programas académicos y la vibrante vida estudiantil que nos distingue.
           </p>
-        </motion.div>
+        </MotionDiv>
 
         {/* Tabs */}
-        <div className="flex justify-center border-b mb-12">
+        <div className="mb-10 flex flex-wrap justify-center gap-2 border-b border-slate-200 pb-3 sm:mb-12" role="group" aria-label="Elegir propuesta educativa">
           {tabs.map(({ id, title }) => (
             <button
               key={id}
-              className={`px-6 py-3 text-lg font-medium ${
-                activeTab === id ? "text-accent border-b-2 border-accent" : "text-gray-500"
-              } transition`}
+              type="button"
+              aria-pressed={activeTab === id}
+              aria-controls="propuesta-content"
+              className={`min-h-11 rounded-full px-4 py-2 text-sm font-semibold transition focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-200 sm:px-6 sm:text-base ${
+                activeTab === id ? "bg-[#193CB8] text-white" : "bg-white text-gray-700 hover:bg-blue-50"
+              }`}
               onClick={() => setActiveTab(id)}
             >
               {title}
@@ -81,16 +87,16 @@ export default function PropuestaEducativa() {
         </div>
 
         {/* Content */}
-        <div>
+        <div id="propuesta-content" aria-live="polite">
           {tab.id === "vida" ? (
-            <motion.div
+            <MotionDiv
               className="text-center"
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
               transition={{ duration: 0.6 }}
               viewport={{ once: true }}
             >
-              <h3 className="text-3xl font-bold text-[#0A2342] mb-4">{tab.heading}</h3>
+              <h3 className="mb-4 text-2xl font-bold text-[#0A2342] sm:text-3xl">{tab.heading}</h3>
               <p className="text-gray-700 max-w-2xl mx-auto mb-10">{tab.description}</p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                 {tab.items.map(({ icon, title }, i) => (
@@ -103,10 +109,10 @@ export default function PropuestaEducativa() {
                   </div>
                 ))}
               </div>
-            </motion.div>
+            </MotionDiv>
           ) : (
             <div className="grid md:grid-cols-2 gap-12 items-center">
-              <motion.img
+              <MotionImg
                 src={tab.img}
                 alt={tab.title}
                 className="rounded-lg shadow-xl w-full object-cover max-h-[400px]"
@@ -115,13 +121,13 @@ export default function PropuestaEducativa() {
                 transition={{ duration: 0.6 }}
                 viewport={{ once: true }}
               />
-              <motion.div
+              <MotionDiv
                 initial={{ opacity: 0, x: 20 }}
                 whileInView={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.6 }}
                 viewport={{ once: true }}
               >
-                <h3 className="text-3xl font-bold text-[#0A2342] mb-4">{tab.heading}</h3>
+                <h3 className="mb-4 text-2xl font-bold text-[#0A2342] sm:text-3xl">{tab.heading}</h3>
                 <p className="text-gray-700 mb-6 leading-relaxed">{tab.description}</p>
                 <ul className="space-y-2 text-gray-700">
                   {tab.features.map((f, i) => (
@@ -130,7 +136,7 @@ export default function PropuestaEducativa() {
                     </li>
                   ))}
                 </ul>
-              </motion.div>
+              </MotionDiv>
             </div>
           )}
         </div>

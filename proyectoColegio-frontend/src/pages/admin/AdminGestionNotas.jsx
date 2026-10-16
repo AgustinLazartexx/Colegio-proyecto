@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-toastify';
-import { Filter, GraduationCap, Loader2, Search, BookOpen, Users } from 'lucide-react';
+import { Filter, GraduationCap, Loader2, Search, BookOpen, Users, ListChecks } from 'lucide-react';
 import CargarNotas from '../profesor/CargarNotas';
 import { getMaterias } from '../../api/api';
 
@@ -10,6 +10,8 @@ const AdminGestionNotas = () => {
   const [allMaterias, setAllMaterias] = useState([]);
   const [filteredMaterias, setFilteredMaterias] = useState([]);
   const [selectedAnio, setSelectedAnio] = useState('');
+  const [selectedDivision, setSelectedDivision] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const [selectedMateriaId, setSelectedMateriaId] = useState('');
   const [loadingMaterias, setLoadingMaterias] = useState(false);
 
@@ -35,15 +37,16 @@ const AdminGestionNotas = () => {
   }, [token]);
 
   useEffect(() => {
-    if (!selectedAnio) {
-      setFilteredMaterias(allMaterias);
-    } else {
-      setFilteredMaterias(allMaterias.filter(m => String(m.anio) === selectedAnio));
-    }
+    setFilteredMaterias(allMaterias.filter((materia) =>
+      (!selectedAnio || String(materia.anio) === selectedAnio) &&
+      (!selectedDivision || String(materia.division || '').toUpperCase() === selectedDivision) &&
+      (!searchTerm || materia.nombre.toLowerCase().includes(searchTerm.trim().toLowerCase()))
+    ));
     setSelectedMateriaId('');
-  }, [selectedAnio, allMaterias]);
+  }, [selectedAnio, selectedDivision, searchTerm, allMaterias]);
 
   const materiaActiva = allMaterias.find(m => m._id === selectedMateriaId);
+  const hasActiveFilters = Boolean(selectedAnio || selectedDivision || searchTerm.trim());
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
@@ -95,7 +98,22 @@ const AdminGestionNotas = () => {
                 <p className="text-gray-500 text-sm">Cargando materias...</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Buscar materia
+                  </label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                    <input
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      placeholder="Nombre de materia..."
+                      className="w-full rounded-xl border-2 border-gray-200 py-3 pl-10 pr-3 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
                 {/* Selector Año */}
                 <div className="space-y-2">
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -107,7 +125,7 @@ const AdminGestionNotas = () => {
                       onChange={(e) => setSelectedAnio(e.target.value)}
                       className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 appearance-none cursor-pointer hover:border-gray-300 text-gray-700 font-medium"
                     >
-                      <option value=""> Todos los años</option>
+                      <option value="">Todos los años</option>
                       {aniosDisponibles.map(a => (
                         <option key={a} value={a}>{a}° Año</option>
                       ))}
@@ -126,6 +144,25 @@ const AdminGestionNotas = () => {
                   )}
                 </div>
 
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    División
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={selectedDivision}
+                      onChange={(e) => setSelectedDivision(e.target.value)}
+                      className="w-full appearance-none rounded-xl border-2 border-gray-200 bg-white px-4 py-3 font-medium text-gray-700 outline-none transition-all hover:border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Todas las divisiones</option>
+                      {[...new Set(allMaterias.map((materia) => String(materia.division || '').toUpperCase()).filter(Boolean))].sort().map((division) => (
+                        <option key={division} value={division}>División {division}</option>
+                      ))}
+                    </select>
+                    <ListChecks className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={18} />
+                  </div>
+                </div>
+
                 {/* Selector Materia */}
                 <div className="space-y-2">
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -136,7 +173,7 @@ const AdminGestionNotas = () => {
                       value={selectedMateriaId}
                       onChange={(e) => setSelectedMateriaId(e.target.value)}
                       className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 appearance-none cursor-pointer hover:border-gray-300 disabled:bg-gray-50 disabled:cursor-not-allowed disabled:text-gray-400 text-gray-700 font-medium"
-                      disabled={filteredMaterias.length === 0}
+                      disabled={!hasActiveFilters || filteredMaterias.length === 0}
                     >
                       <option value=""> Seleccionar materia</option>
                       {filteredMaterias.map(m => (
@@ -158,6 +195,11 @@ const AdminGestionNotas = () => {
                     </p>
                   )}
                 </div>
+                {hasActiveFilters && (
+                  <p className="lg:col-span-3 text-sm text-blue-600 animate-in fade-in duration-300" aria-live="polite">
+                    {filteredMaterias.length} materia{filteredMaterias.length === 1 ? '' : 's'} encontrada{filteredMaterias.length === 1 ? '' : 's'}
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -190,6 +232,20 @@ const AdminGestionNotas = () => {
                 division={materiaActiva.division}
               />
             </div>
+          </div>
+        ) : !hasActiveFilters ? (
+          <div className="bg-white rounded-2xl shadow-md border-2 border-dashed border-indigo-200 overflow-hidden animate-in fade-in zoom-in duration-500">
+            <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+              <div className="mb-5 rounded-full bg-gradient-to-br from-blue-50 to-indigo-50 p-5">
+                <Search className="h-12 w-12 animate-pulse text-indigo-500" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-800">Busca una materia</h3>
+              <p className="mt-2 max-w-md text-sm text-gray-500">Filtra por nombre, año o división y selecciona una materia para revisar sus notas.</p>
+            </div>
+          </div>
+        ) : filteredMaterias.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-12 text-center text-gray-500 animate-in fade-in duration-300">
+            No hay materias que coincidan con esos filtros.
           </div>
         ) : (
           <div className="bg-white rounded-2xl shadow-md border-2 border-dashed border-gray-300 overflow-hidden">

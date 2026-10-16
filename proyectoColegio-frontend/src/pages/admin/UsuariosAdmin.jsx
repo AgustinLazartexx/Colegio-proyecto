@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { createElement, useEffect, useState } from "react";
 import Swal from "sweetalert2";
+import { useAuth } from "../../context/AuthContext";
 import {
-  User, Mail, Shield, Edit3, Trash2, X, Plus, Users, Loader2, Save, Hash, ListChecks, Search, DollarSign, Filter, GraduationCap, Briefcase
+  User, Mail, Shield, Edit3, X, Plus, Users, Loader2, Save, Hash, ListChecks, Search, DollarSign, Filter, GraduationCap, Briefcase, Ban, UserCheck
 } from "lucide-react";
 
 import AdminGestionCuotas from "../../pages/admin/AdminGestionCuotas";
@@ -10,10 +11,10 @@ import {
   getUsuarios, 
   crearUsuario, 
   actualizarUsuario, 
-  eliminarUsuario 
 } from "../../api/api";
 
 const UsuariosAdmin = () => {
+  const { usuario: usuarioActual } = useAuth();
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
   
@@ -33,8 +34,7 @@ const UsuariosAdmin = () => {
 
   // Formulario inicial
   const initialForm = {
-      nombre: "", email: "", rol: "alumno", dni: "",
-      anio: "", division: "", isActive: true
+      nombre: "", email: "", rol: "alumno", dni: "", anio: "", division: ""
   };
   const [form, setForm] = useState(initialForm);
 
@@ -101,8 +101,7 @@ const UsuariosAdmin = () => {
         rol: usuario.rol || "alumno",
         dni: usuario.dni || "",
         anio: usuario.anio || "",
-        division: usuario.division || "",
-        isActive: usuario.isActive !== undefined ? usuario.isActive : true
+        division: usuario.division || ""
     });
     setShowModal(true);
   };
@@ -124,7 +123,6 @@ const UsuariosAdmin = () => {
         email: form.email,
         rol: form.rol,
         dni: form.dni,
-        isActive: form.isActive,
     };
 
     if (form.rol === 'alumno') {
@@ -151,29 +149,40 @@ const UsuariosAdmin = () => {
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleToggleUserAccess = async (usuario) => {
+      const habilitar = !usuario.isActive;
       const result = await Swal.fire({
-        title: "¿Estás seguro?",
-        text: "Esta acción es irreversible.",
-        icon: "warning",
+        title: habilitar ? "¿Reactivar usuario?" : "¿Bloquear usuario?",
+        text: habilitar
+          ? `Se permitirá nuevamente el acceso de ${usuario.nombre}.`
+          : `Se impedirá que ${usuario.nombre} vuelva a iniciar sesión hasta reactivarlo.`,
+        icon: habilitar ? "question" : "warning",
         showCancelButton: true,
-        confirmButtonColor: "#d33",
-        confirmButtonText: "Sí, eliminar"
+        confirmButtonColor: habilitar ? "#059669" : "#d97706",
+        confirmButtonText: habilitar ? "Sí, reactivar" : "Sí, bloquear",
+        cancelButtonText: "Cancelar",
       });
 
       if (result.isConfirmed) {
           try {
-              await eliminarUsuario(id);
-              Swal.fire("Eliminado", "Usuario eliminado.", "success");
-              fetchUsuarios();
+              await actualizarUsuario(usuario._id, { isActive: habilitar });
+              setUsuarios((actuales) => actuales.map((actual) =>
+                actual._id === usuario._id ? { ...actual, isActive: habilitar } : actual
+              ));
+              Swal.fire(
+                habilitar ? "Usuario reactivado" : "Usuario bloqueado",
+                habilitar ? "El usuario puede volver a iniciar sesión." : "El usuario ya no puede iniciar sesión.",
+                "success"
+              );
           } catch (error) {
-              Swal.fire("Error", "No se pudo eliminar.", "error");
+              console.error("No se pudo cambiar el acceso del usuario:", error);
+              Swal.fire("Error", error.response?.data?.msg || "No se pudo cambiar el acceso del usuario.", "error");
           }
       }
   };
 
   // --- RENDERIZADO DE PESTAÑAS ---
-  const TabButton = ({ id, label, icon: Icon, color }) => (
+  const TabButton = ({ id, label, icon, color }) => (
       <button
         onClick={() => { setActiveTab(id); setSearchTerm(""); }}
         className={`flex items-center gap-2 px-6 py-3 font-medium transition-all border-b-2 ${
@@ -182,7 +191,7 @@ const UsuariosAdmin = () => {
             : "border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50"
         }`}
       >
-        <Icon size={18} />
+        {createElement(icon, { size: 18 })}
         {label}
         <span className="ml-2 text-xs bg-gray-200 px-2 py-0.5 rounded-full text-gray-700">
             {usuarios.filter(u => u.rol === id).length}
@@ -327,7 +336,7 @@ const UsuariosAdmin = () => {
 
                                         {/* Columna Acciones */}
                                         <td className="px-6 py-4 text-center">
-                                            <div className="flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <div className="flex justify-center gap-2">
                                                 {/* Botón Cobrar (Solo alumnos) */}
                                                 {activeTab === 'alumno' && (
                                                     <button
@@ -342,8 +351,14 @@ const UsuariosAdmin = () => {
                                                 <button onClick={() => abrirModalEditar(u)} className="p-2 bg-white text-gray-600 rounded-lg hover:bg-gray-100 border border-gray-200 transition" title="Editar">
                                                     <Edit3 size={16}/>
                                                 </button>
-                                                <button onClick={() => handleDelete(u._id)} className="p-2 bg-white text-red-500 rounded-lg hover:bg-red-50 border border-gray-200 transition" title="Eliminar">
-                                                    <Trash2 size={16}/>
+                                                <button
+                                                    onClick={() => handleToggleUserAccess(u)}
+                                                    disabled={u.isActive && usuarioActual?._id === u._id}
+                                                    className={`p-2 bg-white rounded-lg border transition disabled:cursor-not-allowed disabled:opacity-40 ${u.isActive ? "text-amber-600 hover:bg-amber-50 border-amber-200" : "text-emerald-600 hover:bg-emerald-50 border-emerald-200"}`}
+                                                    title={u.isActive && usuarioActual?._id === u._id ? "No puedes bloquear tu propia sesión" : u.isActive ? "Bloquear usuario" : "Reactivar usuario"}
+                                                    aria-label={u.isActive ? `Bloquear a ${u.nombre}` : `Reactivar a ${u.nombre}`}
+                                                >
+                                                    {u.isActive ? <Ban size={16} /> : <UserCheck size={16} />}
                                                 </button>
                                             </div>
                                         </td>
@@ -428,11 +443,6 @@ const UsuariosAdmin = () => {
                                 </div>
                             </div>
                         )}
-
-                        <div className="flex items-center gap-2 pt-2">
-                            <input type="checkbox" id="isActive" name="isActive" checked={form.isActive} onChange={handleInputChange} className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500" />
-                            <label htmlFor="isActive" className="text-sm text-gray-700 select-none">Cuenta Activa (Permitir acceso)</label>
-                        </div>
 
                         <div className="flex justify-end gap-3 pt-4 border-t">
                             <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition">Cancelar</button>

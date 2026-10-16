@@ -1,228 +1,358 @@
-// src/controllers/notas.controller.js
-import NotaTrimestral from "../models/notaTrimestral.model.js";
-import AuditoriaNota from "../models/auditoriaNota.model.js";
-import Materia from "../models/materia.model.js";
+import {
+  databaseId,
+  executeSql,
+  isDatabaseId,
+  queryRows,
+  sequelize,
+} from "../services/relationalData.service.js";
 
-// --- HELPER DE SEGURIDAD ---
-const assertProfesorDeLaMateria = async (materiaId, usuario) => {
-  if (!usuario || !usuario.id) {
-    const e = new Error("Error interno de autenticación");
-    e.status = 500;
-    throw e;
-  }
-
-  if (usuario.rol === 'admin') return; // Admin pase libre
-
-  const materia = await Materia.findById(materiaId).select('profesor').lean();
-  if (!materia) {
-    const e = new Error("Materia no encontrada");
-    e.status = 404;
-    throw e;
-  }
-
-  if (!materia.profesor || materia.profesor.toString() !== usuario.id.toString()) {
-    const e = new Error("No autorizado para esta materia");
-    e.status = 403;
-    throw e;
-  }
+const camposPermitidos = new Set(["orientadora", "proceso", "integradora", "recuperacion"]);
+const columnasNota = {
+  orientadora: "orientadora",
+  proceso: "proceso",
+  integradora: "integradora",
+  recuperacion: "recuperacion",
 };
 
-/**
- * Endpoint: POST /api/notas/guardar-una
- * LOGICA CORREGIDA:
- * 1. El profesor puede editar siempre, EXCEPTO si isBloqueada es true.
- * 2. El admin siempre puede editar (y genera auditoría).
- */
+const verificarProfesorMateria = async (materiaId, usuario) => {
+  if (usuario.rol === "admin") return true;
+  const rows = await queryRows(
+    `SELECT m.id FROM materias m
+     LEFT JOIN clases c ON c.materia_id = m.id
+     LEFT JOIN clase_profesores cp ON cp.clase_id = c.id AND cp.profesor_id = UNHEX(:profesorId)
+     WHERE m.id = UNHEX(:materiaId)
+       AND (m.profesor_id = UNHEX(:profesorId) OR cp.profesor_id IS NOT NULL)
+     LIMIT 1`,
+    { materiaId: databaseId(materiaId), profesorId: databaseId(usuario.id) },
+  );
+  if (!rows.length) {
+    const exists = await queryRows(
+      "SELECT id FROM materias WHERE id = UNHEX(:materiaId) LIMIT 1",
+      { materiaId: databaseId(materiaId) },
+    );
+    const error = new Error(exists.length ? "No autorizado para esta materia." : "Materia no encontrada.");
+    error.status = exists.length ? 403 : 404;
+    throw error;
+  }
+  return true;
+};
+
+const notaPublica = (row) => ({
+  _id: row._id,
+  materia: row.materiaId,
+  alumno: row.alumnoId,
+  trimestre: Number(row.trimestre),
+  orientadora: row.orientadora === null ? null : Number(row.orientadora),
+  proceso: row.proceso === null ? null : Number(row.proceso),
+  integradora: row.integradora === null ? null : Number(row.integradora),
+  recuperacion: row.recuperacion === null ? null : Number(row.recuperacion),
+  promedioPonderado: row.promedioPonderado === null ? null : Number(row.promedioPonderado),
+  notaFinalTrimestre: row.notaFinalTrimestre === null ? null : Number(row.notaFinalTrimestre),
+  observacion: row.observacion,
+  isAprobadaAdmin: Boolean(row.isAprobadaAdmin),
+  isBloqueada: Boolean(row.isBloqueada),
+  actualizadoPor: row.actualizadoPor,
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
+});
+
+const calcularNotas = ({ orientadora, proceso, integradora, recuperacion }) => {
+  let promedioPonderado = null;
+  let notaFinalTrimestre = null;
+  if ([orientadora, proceso, integradora].every((value) => value !== null && value !== undefined)) {
+    promedioPonderado = orientadora * 0.15 + proceso * 0.25 + integradora * 0.6;
+  }
+  if (recuperacion !== null && recuperacion !== undefined) {
+    notaFinalTrimestre = recuperacion >= 6 ? Math.min(recuperacion, 7) : 5;
+  } else if (promedioPonderado !== null) {
+    notaFinalTrimestre = promedioPonderado;
+  }
+  return { promedioPonderado, notaFinalTrimestre };
+};
+
 export const guardarNota = async (req, res) => {
+  const { materiaId, alumnoId, trimestre, tipoNota, nota } = req.body;
+  if (!isDatabaseId(materiaId) || !isDatabaseId(alumnoId) || !camposPermitidos.has(tipoNota)) {
+    return res.status(400).json({ msg: "Materia, alumno o tipo de nota inválido." });
+  }
+  const trimestreNum = Number(trimestre);
+  if (!Number.isInteger(trimestreNum) || trimestreNum < 1 || trimestreNum > 3 || nota === undefined) {
+    return res.status(400).json({ msg: "Debe indicar un trimestre entre 1 y 3 y una nota." });
+  }
+  const notaNueva = nota === "" || nota === null ? null : Number(nota);
+  if (notaNueva !== null && (!Number.isFinite(notaNueva) || notaNueva < 0 || notaNueva > 10)) {
+    return res.status(400).json({ msg: "La nota debe ser un número entre 0 y 10 o quedar vacía." });
+  }
+
+  const materiaKey = databaseId(materiaId);
+  const alumnoKey = databaseId(alumnoId);
   try {
-    const { materiaId, alumnoId, trimestre, tipoNota, nota } = req.body;
-    const usuario = req.user;
+    await verificarProfesorMateria(materiaKey, req.user);
+    const inscripto = await queryRows(
+      `SELECT ca.alumno_id FROM clase_alumnos ca
+       JOIN clases c ON c.id = ca.clase_id
+       WHERE c.materia_id = UNHEX(:materiaId) AND ca.alumno_id = UNHEX(:alumnoId)
+       LIMIT 1`,
+      { materiaId: materiaKey, alumnoId: alumnoKey },
+    );
+    if (!inscripto.length) return res.status(400).json({ msg: "El alumno no está inscripto en esta materia." });
 
-    // Validar campos permitidos para evitar inyección de datos en otros campos
-    const camposPermitidos = ["orientadora", "proceso", "integradora", "recuperacion"];
-    if (!camposPermitidos.includes(tipoNota)) {
-      return res.status(400).json({ msg: "Tipo de nota no válido" });
-    }
+    const result = await sequelize.transaction(async (transaction) => {
+      const rows = await queryRows(
+        `SELECT HEX(id) AS _id, HEX(materia_id) AS materiaId, HEX(alumno_id) AS alumnoId,
+                trimestre, orientadora, proceso, integradora, recuperacion,
+                promedio_ponderado AS promedioPonderado, nota_final_trimestre AS notaFinalTrimestre,
+                observacion, is_aprobada_admin AS isAprobadaAdmin, is_bloqueada AS isBloqueada,
+                HEX(actualizado_por) AS actualizadoPor, createdAt, updatedAt
+         FROM school_notas_trimestrales
+         WHERE materia_id = UNHEX(:materiaId) AND alumno_id = UNHEX(:alumnoId) AND trimestre = :trimestre
+         FOR UPDATE`,
+        { materiaId: materiaKey, alumnoId: alumnoKey, trimestre: trimestreNum },
+        transaction,
+      );
+      let current = rows[0];
+      if (current?.isBloqueada && req.user.rol !== "admin") {
+        const error = new Error("El trimestre está cerrado y aprobado por administración.");
+        error.status = 403;
+        throw error;
+      }
+      if (!current) {
+        await executeSql(
+          `INSERT INTO school_notas_trimestrales (id, materia_id, alumno_id, trimestre, actualizado_por)
+           VALUES (UNHEX(REPLACE(UUID(), '-', '')), UNHEX(:materiaId), UNHEX(:alumnoId), :trimestre, UNHEX(:userId))`,
+          { materiaId: materiaKey, alumnoId: alumnoKey, trimestre: trimestreNum, userId: databaseId(req.user.id) },
+          transaction,
+        );
+        [current] = await queryRows(
+          `SELECT HEX(id) AS _id, HEX(materia_id) AS materiaId, HEX(alumno_id) AS alumnoId,
+                  trimestre, orientadora, proceso, integradora, recuperacion,
+                  promedio_ponderado AS promedioPonderado, nota_final_trimestre AS notaFinalTrimestre,
+                  observacion, is_aprobada_admin AS isAprobadaAdmin, is_bloqueada AS isBloqueada,
+                  HEX(actualizado_por) AS actualizadoPor, createdAt, updatedAt
+           FROM school_notas_trimestrales
+           WHERE materia_id = UNHEX(:materiaId) AND alumno_id = UNHEX(:alumnoId) AND trimestre = :trimestre
+           FOR UPDATE`,
+          { materiaId: materiaKey, alumnoId: alumnoKey, trimestre: trimestreNum },
+          transaction,
+        );
+      }
 
-    if (!materiaId || !alumnoId || !trimestre || nota === undefined) {
-      return res.status(400).json({ msg: "Datos incompletos" });
-    }
+      const field = columnasNota[tipoNota];
+      const anterior = current[field] === null ? null : Number(current[field]);
+      if (anterior === notaNueva) return { row: current, changed: false };
 
-    // 1. Verificar permisos (Profesor de la materia o Admin)
-    await assertProfesorDeLaMateria(materiaId, usuario);
+      if (req.user.rol === "admin" && anterior !== null) {
+        await executeSql(
+          `INSERT INTO school_auditoria_notas
+            (id, nota_id, materia_id, alumno_id, trimestre, campo_modificado, valor_anterior, valor_nuevo, modificado_por)
+           VALUES (UNHEX(REPLACE(UUID(), '-', '')), UNHEX(:notaId), UNHEX(:materiaId), UNHEX(:alumnoId),
+             :trimestre, :campo, :valorAnterior, :valorNuevo, UNHEX(:userId))`,
+          {
+            notaId: current._id,
+            materiaId: materiaKey,
+            alumnoId: alumnoKey,
+            trimestre: trimestreNum,
+            campo: tipoNota,
+            valorAnterior: String(anterior),
+            valorNuevo: notaNueva === null ? "" : String(notaNueva),
+            userId: databaseId(req.user.id),
+          },
+          transaction,
+        );
+      }
 
-    // 2. Buscar o crear el documento de notas
-    let doc = await NotaTrimestral.findOne({
-      materia: materiaId,
-      alumno: alumnoId,
-      trimestre: trimestre
+      const valores = {
+        orientadora: current.orientadora === null ? null : Number(current.orientadora),
+        proceso: current.proceso === null ? null : Number(current.proceso),
+        integradora: current.integradora === null ? null : Number(current.integradora),
+        recuperacion: current.recuperacion === null ? null : Number(current.recuperacion),
+        [tipoNota]: notaNueva,
+      };
+      const calculadas = calcularNotas(valores);
+      await executeSql(
+        `UPDATE school_notas_trimestrales
+         SET \`${field}\` = :nota, promedio_ponderado = :promedio,
+             nota_final_trimestre = :notaFinal, actualizado_por = UNHEX(:userId)
+         WHERE id = UNHEX(:notaId)`,
+        {
+          nota: notaNueva,
+          promedio: calculadas.promedioPonderado,
+          notaFinal: calculadas.notaFinalTrimestre,
+          userId: databaseId(req.user.id),
+          notaId: current._id,
+        },
+        transaction,
+      );
+      [current] = await queryRows(
+        `SELECT HEX(id) AS _id, HEX(materia_id) AS materiaId, HEX(alumno_id) AS alumnoId,
+                trimestre, orientadora, proceso, integradora, recuperacion,
+                promedio_ponderado AS promedioPonderado, nota_final_trimestre AS notaFinalTrimestre,
+                observacion, is_aprobada_admin AS isAprobadaAdmin, is_bloqueada AS isBloqueada,
+                HEX(actualizado_por) AS actualizadoPor, createdAt, updatedAt
+         FROM school_notas_trimestrales WHERE id = UNHEX(:notaId)`,
+        { notaId: current._id },
+        transaction,
+      );
+      return { row: current, changed: true };
     });
 
-    if (!doc) {
-      doc = new NotaTrimestral({
-        materia: materiaId,
-        alumno: alumnoId,
-        trimestre: trimestre,
-        actualizadoPor: usuario.id,
-      });
-    }
-
-    // 3. VERIFICACIÓN DE BLOQUEO (Admin vs Profesor)
-    // Si el trimestre está bloqueado/cerrado y el usuario NO es admin, rechazar.
-    if (doc.isBloqueada && usuario.rol !== 'admin') {
-      return res.status(403).json({ 
-        msg: "El trimestre está cerrado y aprobado por administración. No se pueden modificar las notas." 
-      });
-    }
-
-    // 4. LÓGICA DE AUDITORÍA Y CAMBIO
-    const valorActual = doc[tipoNota];
-    const notaNueva = nota === "" ? null : Number(nota);
-
-    // Solo actuamos si el valor es diferente
-    if (String(valorActual) !== String(notaNueva)) {
-        
-        // Si es ADMIN modificando una nota existente, generamos auditoría
-        if (usuario.rol === 'admin' && valorActual !== null && valorActual !== undefined) {
-            try {
-                await AuditoriaNota.create({
-                  notaOriginalId: doc._id,
-                  materia: materiaId,
-                  alumno: alumnoId,
-                  trimestre: trimestre,
-                  campoModificado: tipoNota,
-                  valorAnterior: String(valorActual),
-                  valorNuevo: String(notaNueva),
-                  modificadoPor: usuario.id
-                });
-            } catch (auditErr) {
-                console.error("Error guardando auditoría:", auditErr);
-                // No detenemos el flujo, pero logueamos el error
-            }
-        }
-
-        // Aplicamos el cambio
-        doc[tipoNota] = notaNueva;
-        doc.actualizadoPor = usuario.id;
-
-        // Si el admin toca la nota, podríamos querer desbloquear o mantener aprobado,
-        // por seguridad, si se edita una nota, se podría quitar la aprobación:
-        // doc.isAprobadaAdmin = false; // Descomentar si quieres que requiera re-aprobación
-
-        await doc.save();
-        return res.json({ msg: "Nota actualizada correctamente", nota: doc });
-    } 
-    
-    // Si no hubo cambios
-    res.json({ msg: "Sin cambios", nota: doc });
-
-  } catch (err) {
-    console.error("Error en guardarNota:", err);
-    res.status(err.status || 500).json({ msg: err.message || "Error al guardar la nota" });
+    return res.json({
+      msg: result.changed ? "Nota actualizada correctamente." : "Sin cambios.",
+      nota: notaPublica(result.row),
+    });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ msg: error.message });
+    console.error("Error guardando nota trimestral:", error);
+    return res.status(500).json({ msg: "Error al guardar la nota." });
   }
 };
 
-/**
- * Endpoint: POST /api/notas/cambiar-estado
- * NUEVO: Permite al ADMIN aprobar o bloquear el trimestre de un alumno.
- */
 export const cambiarEstadoTrimestre = async (req, res) => {
-    try {
-        const { notaId, isAprobadaAdmin, isBloqueada, observacion } = req.body;
-        const usuario = req.user;
+  const { notaId, isAprobadaAdmin, isBloqueada, observacion } = req.body;
+  if (!isDatabaseId(notaId)) return res.status(400).json({ msg: "ID de nota inválido." });
+  if (
+    (isAprobadaAdmin !== undefined && typeof isAprobadaAdmin !== "boolean") ||
+    (isBloqueada !== undefined && typeof isBloqueada !== "boolean") ||
+    (observacion !== undefined && typeof observacion !== "string")
+  ) {
+    return res.status(400).json({ msg: "Los valores de estado u observación no son válidos." });
+  }
+  const fields = [];
+  const replacements = { notaId: databaseId(notaId), userId: databaseId(req.user.id) };
+  if (isAprobadaAdmin !== undefined) {
+    fields.push("is_aprobada_admin = :isAprobadaAdmin");
+    replacements.isAprobadaAdmin = isAprobadaAdmin;
+  }
+  if (isBloqueada !== undefined) {
+    fields.push("is_bloqueada = :isBloqueada");
+    replacements.isBloqueada = isBloqueada;
+  }
+  if (observacion !== undefined) {
+    fields.push("observacion = :observacion");
+    replacements.observacion = observacion.trim();
+  }
+  if (!fields.length) return res.status(400).json({ msg: "No se recibieron cambios." });
 
-        // Solo Admins pueden hacer esto
-        if (usuario.rol !== 'admin') {
-            return res.status(403).json({ msg: "Acceso denegado. Requiere rol Administrador." });
-        }
-
-        const doc = await NotaTrimestral.findById(notaId);
-        if (!doc) {
-            return res.status(404).json({ msg: "Documento de notas no encontrado" });
-        }
-
-        // Actualizamos campos si vienen en el body
-        if (isAprobadaAdmin !== undefined) doc.isAprobadaAdmin = isAprobadaAdmin;
-        if (isBloqueada !== undefined) doc.isBloqueada = isBloqueada;
-        if (observacion !== undefined) doc.observacion = observacion;
-        
-        doc.actualizadoPor = usuario.id;
-        
-        await doc.save();
-
-        res.json({ msg: "Estado del trimestre actualizado", doc });
-
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ msg: "Error al cambiar estado" });
-    }
+  try {
+    const [result] = await executeSql(
+      `UPDATE school_notas_trimestrales SET ${fields.join(", ")}, actualizado_por = UNHEX(:userId)
+       WHERE id = UNHEX(:notaId)`,
+      replacements,
+    );
+    if (!result.affectedRows) return res.status(404).json({ msg: "Documento de notas no encontrado." });
+    const [row] = await queryRows(
+      `SELECT HEX(id) AS _id, HEX(materia_id) AS materiaId, HEX(alumno_id) AS alumnoId,
+              trimestre, orientadora, proceso, integradora, recuperacion,
+              promedio_ponderado AS promedioPonderado, nota_final_trimestre AS notaFinalTrimestre,
+              observacion, is_aprobada_admin AS isAprobadaAdmin, is_bloqueada AS isBloqueada,
+              HEX(actualizado_por) AS actualizadoPor, createdAt, updatedAt
+       FROM school_notas_trimestrales WHERE id = UNHEX(:notaId)`,
+      { notaId: databaseId(notaId) },
+    );
+    return res.json({ msg: "Estado del trimestre actualizado.", doc: notaPublica(row) });
+  } catch (error) {
+    console.error("Error cambiando el estado del trimestre:", error);
+    return res.status(500).json({ msg: "Error al cambiar estado." });
+  }
 };
-
-// ... (Mantén getNotasPorMateriaTrimestre, getAuditoriaNotas, misNotasAlumno igual que antes)
 
 export const getNotasPorMateriaTrimestre = async (req, res) => {
+  const { id } = req.params;
+  const trimestre = Number(req.query.trimestre);
+  if (!isDatabaseId(id)) return res.status(400).json({ msg: "ID de materia inválido." });
+  if (!Number.isInteger(trimestre) || trimestre < 1 || trimestre > 3) {
+    return res.status(400).json({ msg: "Debe especificar un trimestre entre 1 y 3." });
+  }
   try {
-    const { id } = req.params; // materiaId
-    const { trimestre } = req.query;
-    const usuario = req.user;
-
-    if (!trimestre) return res.status(400).json({ msg: "Debe especificar un trimestre." });
-
-    await assertProfesorDeLaMateria(id, usuario);
-
-    const notasDocs = await NotaTrimestral.find({ materia: id, trimestre: Number(trimestre) });
-
-    const notasObjeto = notasDocs.reduce((acc, doc) => {
-      acc[doc.alumno] = {
-        _id: doc._id,
-        orientadora: doc.orientadora,
-        proceso: doc.proceso,
-        integradora: doc.integradora,
-        recuperacion: doc.recuperacion,
-        promedioPonderado: doc.promedioPonderado,
-        notaFinalTrimestre: doc.notaFinalTrimestre,
-        // Enviamos estado al front para que el profesor vea si está bloqueado
-        isAprobadaAdmin: doc.isAprobadaAdmin, 
-        isBloqueada: doc.isBloqueada,
-        observacion: doc.observacion
-      };
-      return acc;
-    }, {});
-
-    res.json(notasObjeto);
-  } catch (err) {
-    res.status(err.status || 500).json({ msg: err.message });
+    await verificarProfesorMateria(id, req.user);
+    const rows = await queryRows(
+      `SELECT HEX(id) AS _id, HEX(materia_id) AS materiaId, HEX(alumno_id) AS alumnoId,
+              trimestre, orientadora, proceso, integradora, recuperacion,
+              promedio_ponderado AS promedioPonderado, nota_final_trimestre AS notaFinalTrimestre,
+              observacion, is_aprobada_admin AS isAprobadaAdmin, is_bloqueada AS isBloqueada,
+              HEX(actualizado_por) AS actualizadoPor, createdAt, updatedAt
+       FROM school_notas_trimestrales
+       WHERE materia_id = UNHEX(:materiaId) AND trimestre = :trimestre`,
+      { materiaId: databaseId(id), trimestre },
+    );
+    return res.json(Object.fromEntries(rows.map((row) => [row.alumnoId, notaPublica(row)])));
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ msg: error.message });
+    console.error("Error consultando notas de materia:", error);
+    return res.status(500).json({ msg: "Error al obtener las notas." });
   }
 };
 
-// ... el resto de funciones (getAuditoriaNotas, misNotasAlumno) se mantienen igual.
 export const getAuditoriaNotas = async (req, res) => {
-    try {
-      const { materiaId, trimestre } = req.query;
-      const query = {};
-      if (materiaId) query.materia = materiaId;
-      if (trimestre) query.trimestre = trimestre;
-  
-      const logs = await AuditoriaNota.find(query)
-        .populate("modificadoPor", "nombre")
-        .populate("alumno", "nombre") // Asumiendo que tienes referencia a Alumno en el modelo Auditoria
-        .sort({ createdAt: -1 });
-  
-      res.json(logs);
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ msg: "Error al obtener auditoría" });
-    }
-  };
+  const replacements = {};
+  let where = "1 = 1";
+  if (req.query.materiaId) {
+    if (!isDatabaseId(req.query.materiaId)) return res.status(400).json({ msg: "ID de materia inválido." });
+    where += " AND a.materia_id = UNHEX(:materiaId)";
+    replacements.materiaId = databaseId(req.query.materiaId);
+  }
+  if (req.query.trimestre) {
+    const trimestre = Number(req.query.trimestre);
+    if (!Number.isInteger(trimestre) || trimestre < 1 || trimestre > 3) return res.status(400).json({ msg: "Trimestre inválido." });
+    where += " AND a.trimestre = :trimestre";
+    replacements.trimestre = trimestre;
+  }
+  try {
+    const rows = await queryRows(
+      `SELECT HEX(a.id) AS _id, HEX(a.nota_id) AS notaOriginalId,
+              HEX(a.materia_id) AS materiaId, HEX(a.alumno_id) AS alumnoId,
+              a.trimestre, a.campo_modificado AS campoModificado,
+              a.valor_anterior AS valorAnterior, a.valor_nuevo AS valorNuevo,
+              HEX(a.modificado_por) AS modificadoPorId, a.createdAt,
+              materia.nombre AS materiaNombre, alumno.nombre AS alumnoNombre,
+              admin.nombre AS modificadoPorNombre
+       FROM school_auditoria_notas a
+       JOIN materias materia ON materia.id = a.materia_id
+       JOIN users alumno ON alumno.id = a.alumno_id
+       JOIN users admin ON admin.id = a.modificado_por
+       WHERE ${where} ORDER BY a.createdAt DESC`,
+      replacements,
+    );
+    return res.json(rows.map((row) => ({
+      _id: row._id,
+      notaOriginalId: row.notaOriginalId,
+      materia: { _id: row.materiaId, nombre: row.materiaNombre },
+      alumno: { _id: row.alumnoId, nombre: row.alumnoNombre },
+      trimestre: Number(row.trimestre),
+      campoModificado: row.campoModificado,
+      valorAnterior: row.valorAnterior,
+      valorNuevo: row.valorNuevo,
+      modificadoPor: { _id: row.modificadoPorId, nombre: row.modificadoPorNombre },
+      createdAt: row.createdAt,
+    })));
+  } catch (error) {
+    console.error("Error consultando auditoría de notas:", error);
+    return res.status(500).json({ msg: "Error al obtener auditoría." });
+  }
+};
 
-  export const misNotasAlumno = async (req, res) => {
-    try {
-      const data = await NotaTrimestral.find({ alumno: req.user.id })
-        .populate("materia", "nombre")
-        .sort({ materia: 1, trimestre: 1 });
-  
-      res.json({ total: data.length, notas: data });
-    } catch (err) {
-      res.status(500).json({ msg: "Error al obtener notas" });
-    }
-  };
+export const misNotasAlumno = async (req, res) => {
+  try {
+    const rows = await queryRows(
+      `SELECT HEX(n.id) AS _id, HEX(n.materia_id) AS materiaId, HEX(n.alumno_id) AS alumnoId,
+              n.trimestre, n.orientadora, n.proceso, n.integradora, n.recuperacion,
+              n.promedio_ponderado AS promedioPonderado,
+              n.nota_final_trimestre AS notaFinalTrimestre,
+              n.observacion, n.is_aprobada_admin AS isAprobadaAdmin,
+              n.is_bloqueada AS isBloqueada, HEX(n.actualizado_por) AS actualizadoPor,
+              n.createdAt, n.updatedAt, m.nombre AS materiaNombre
+       FROM school_notas_trimestrales n
+       JOIN materias m ON m.id = n.materia_id
+       WHERE n.alumno_id = UNHEX(:alumnoId)
+       ORDER BY m.nombre, n.trimestre`,
+      { alumnoId: databaseId(req.user.id) },
+    );
+    return res.json({
+      total: rows.length,
+      notas: rows.map((row) => ({ ...notaPublica(row), materia: { _id: row.materiaId, nombre: row.materiaNombre } })),
+    });
+  } catch (error) {
+    console.error("Error consultando boletín:", error);
+    return res.status(500).json({ msg: "Error al obtener notas." });
+  }
+};

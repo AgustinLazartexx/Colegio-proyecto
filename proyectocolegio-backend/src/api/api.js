@@ -1,0 +1,139 @@
+import axios from 'axios';
+
+const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
+// 1. Configuración inicial
+const api = axios.create({
+  baseURL: `${BACKEND_URL}/api`
+});
+
+// 2. Interceptor de Token
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers['Authorization'] = `Bearer ${token}`;
+  }
+  return config;
+});
+
+export const getUploadUrl = (path) => `${BACKEND_URL}/${path}`;
+export const getBackendUrl = () => BACKEND_URL;
+export const BACKEND_API_URL = `${BACKEND_URL}/api`;
+export const solicitarRecuperacion = (email) => api.post('/auth/forgot-password', { email });
+export const restablecerPassword = (token, password) => api.post('/auth/reset-password', { token, password });
+export { BACKEND_URL };
+export default api;
+
+// ==========================================
+//       FUNCIONES DE USUARIOS
+// ==========================================
+export const getAdminStats = () => api.get('/admin/stats');
+export const getUsuarios = (filtros = {}) => api.get('/usuarios', { params: filtros });
+export const crearUsuario = (userData) => api.post('/usuarios/admin/crear', userData);
+export const actualizarUsuario = (id, userData) => api.put(`/usuarios/${id}`, userData);
+export const eliminarUsuario = (id) => api.delete(`/usuarios/${id}`);
+export const getProfesores = () => api.get('/usuarios', { params: { rol: 'profesor' } });
+
+// ==========================================
+//       MATERIAS
+// ==========================================
+export const getMaterias = (params = {}) => api.get('/materias', { params });
+export const getMateriaById = (id) => api.get(`/materias/${id}`);
+export const createMateria = (data) => api.post('/materias', data);
+export const updateMateria = (id, data) => api.put(`/materias/${id}`, data);
+export const deleteMateria = (id) => api.delete(`/materias/${id}`);
+export const getMateriasProfesor = () => api.get('/materias/profesor/listado');
+
+// ==========================================
+//       CLASES (Gestión y Profesor)
+// ==========================================
+export const crearClase = (data) => api.post('/clases', data);
+export const actualizarClase = (id, data) => api.put(`/clases/${id}`, data);
+export const eliminarClase = (id) => api.delete(`/clases/${id}`);
+
+// Admin: Todas las clases
+export const getTodasLasClases = () => api.get('/clases'); 
+
+// Profesor: Solo mis clases
+export const getMisClases = () => api.get('/clases/misclases');
+
+// Detalle y Alumnos de CLASE
+export const getClaseById = (id) => api.get(`/clases/${id}`);
+export const getAlumnosDeClase = (claseId) => api.get(`/clases/${claseId}/alumnos`);
+export const getMisClasesAlumno = () => api.get('/clases/alumno/mis-clases');
+
+// ==========================================
+//    FUNCIONES "VIEJAS" O DE MATERIAS 
+//    (Necesarias para CargarNotas.jsx)
+// ==========================================
+export const getAlumnosDeMateria = (materiaId) => {
+  return api.get(`/materias/${materiaId}/alumnos`);
+};
+
+export const getNotasDeMateria = (materiaId, trimestre) => {
+  return api.get(`/notas/materia/${materiaId}`, {
+    params: { trimestre }
+  });
+};
+
+// ==========================================
+//       GESTIÓN ALUMNOS (Admin)
+// ==========================================
+export const getAlumnosPorCurso = (anio, division) => {
+    const params = { rol: 'alumno' };
+    if (anio) params.anio = anio;
+    if (division) params.division = division;
+    return api.get('/usuarios', { params }); 
+};
+export const asignarAlumnoAClase = (claseId, alumnoId) => api.post(`/clases/${claseId}/alumnos`, { alumnoId });
+export const desasignarAlumnoDeClase = (claseId, alumnoId) => api.delete(`/clases/${claseId}/alumnos/${alumnoId}`);
+
+// ==========================================
+//       ASISTENCIA
+// ==========================================
+export const registrarAsistencias = (data) => api.post('/asistencias', data);
+// Esta función puede usarse para consultar si ya se tomó asistencia hoy
+export const obtenerAsistenciaFecha = (claseId, fecha) => api.get('/asistencias', { params: { claseId, fecha } });
+export const obtenerAsistenciasPorClaseYFecha = (claseId, fecha) => api.get('/asistencias', { params: { claseId, fecha } });
+export const getReporteAsistencias = (claseId, fecha) => api.get('/asistencias/reporte-detallado', { params: { claseId, fecha } });
+export const getMisAsistenciasAlumno = () => api.get('/asistencias/alumno/mis-asistencias');
+
+// ==========================================
+//       NOTAS Y TAREAS
+// ==========================================
+export const getNotasPorClase = (claseId) => api.get(`/notas/clase/${claseId}`);
+export const crearNota = (data) => api.post('/notas', data);
+export const updateNota = (id, data) => api.put(`/notas/${id}`, data);
+export const deleteNota = (id) => api.delete(`/notas/${id}`);
+export const getAuditoriaNotas = () => api.get('/notas/auditoria');
+export const guardarNota = (data) => api.post('/notas/guardar-una', data);
+
+export const crearTarea = (data) => api.post('/tareas', data);
+export const getTareasProfesor = () => api.get('/tareas/profesor');
+export const getTareasClase = (claseId) => api.get(`/tareas/clase/${claseId}`);
+export const eliminarTarea = (id) => api.delete(`/tareas/${id}`);
+export const getEntregasTarea = (tareaId) => api.get(`/entregas/tarea/${tareaId}`);
+export const calificarEntrega = (id, data) => api.put(`/entregas/${id}/calificar`, data);
+// --- NUEVO: Para que el alumno vea su boletín ---
+export const getMisNotasAlumno = () => api.get('/notas/mias');
+
+// ==========================================
+//       ANUNCIOS
+// ==========================================
+export const getMisAnuncios = () => api.get('/anuncios/profesor/mis-anuncios');
+export const crearAnuncio = (data) => api.post('/anuncios', data);
+export const actualizarAnuncio = (id, data) => api.put(`/anuncios/${id}`, data);
+export const eliminarAnuncio = (id) => api.delete(`/anuncios/${id}`);
+// --- NUEVO: Función para el alumno ---
+export const getAnunciosAlumno = () => api.get('/anuncios/alumno/mis-anuncios');
+
+// ==========================================
+//       GESTIÓN DE CUOTAS (FINANZAS)
+// ==========================================
+export const getCuotasDeAlumno = (alumnoId) => api.get(`/cuotas/alumno/${alumnoId}`);
+export const generarCuota = (data) => api.post('/cuotas/generar', data);
+export const registrarPagoCuota = (cuotaId, metodoPago) => api.put(`/cuotas/pagar/${cuotaId}`, { metodoPago });
+export const marcarCuotaVencida = (cuotaId) => api.put(`/cuotas/vencer/${cuotaId}`);
+
+// Para el alumno
+export const getMisCuotasAlumno = () => api.get('/cuotas/mis-cuotas');

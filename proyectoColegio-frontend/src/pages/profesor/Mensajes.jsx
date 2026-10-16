@@ -1,6 +1,6 @@
 // src/pages/comunicaciones/Mensajes.jsx
 import { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../../api/api";
 import { useAuth } from "../../context/AuthContext";
 import { 
   Send, 
@@ -29,10 +29,8 @@ const Mensajes = () => {
     setLoading(true);
 
     if (usuario.rol === "profesor") {
-      axios
-        .get("http://localhost:5000/api/materias/profesor/materias", {
-          headers: { Authorization: `Bearer ${token}` },
-        })
+      api
+        .get("/materias/profesor/materias")
         .then((res) => {
           setMaterias(res.data);
           setLoading(false);
@@ -42,10 +40,8 @@ const Mensajes = () => {
           setLoading(false);
         });
     } else if (usuario.rol === "alumno") {
-      axios
-        .get(`http://localhost:5000/api/anuncios/alumno/${usuario.id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        })
+      api
+        .get(`/anuncios/alumno/${usuario.id}`)
         .then((res) => {
           setAnuncios(res.data);
           setLoading(false);
@@ -62,9 +58,7 @@ const Mensajes = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      await axios.post("http://localhost:5000/api/anuncios", form, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await api.post("/anuncios", form);
       setForm({ materia: "", titulo: "", mensaje: "" });
       setSelectedMateria(null);
       // Aquí podrías agregar una notificación toast en lugar de alert

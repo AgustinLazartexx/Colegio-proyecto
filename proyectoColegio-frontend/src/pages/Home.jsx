@@ -8,21 +8,25 @@ import Comunidad from "../sections/Comunidad";
 import TipoEducacion from "../sections/TipoEducacion";
 import Contacto from "../sections/Contacto";
 import Footer from "../components/Footer";
+import { MotionConfig } from "framer-motion";
 
 const Home = () => {
   return (
-    <div className="bg-primary text-accent">
-      
-      <Hero />
-      <QuienesSomos />
-      <PropuestaEducativa />
-      <Valores />
-      <Fotos />
-      <Comunidad />
-      <TipoEducacion />
-      <Contacto />
-      <Footer />
-    </div>
+    <MotionConfig reducedMotion="user">
+      <div className="bg-primary text-accent">
+        <main id="contenido">
+          <Hero />
+          <QuienesSomos />
+          <PropuestaEducativa />
+          <Valores />
+          <Fotos />
+          <Comunidad />
+          <TipoEducacion />
+          <Contacto />
+        </main>
+        <Footer />
+      </div>
+    </MotionConfig>
   );
 };
 

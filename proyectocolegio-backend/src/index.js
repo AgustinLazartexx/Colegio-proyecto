@@ -5,7 +5,7 @@ import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from 'url';
 
-import connectMongo from "./config/mongo.js";
+import { DB_DIALECT, testConnection } from "./config/mariadb.js";
 
 // --- Importaciones de Rutas ---
 import userRoutes from "./routes/user.routes.js";
@@ -28,7 +28,17 @@ const app = express();
 
 // --- CONFIGURACIÓN DE MIDDLEWARES ---
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:5173", // Ajustado para Render
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    const allowedOrigins = (process.env.FRONTEND_URL || "http://localhost:5173")
+      .split(",")
+      .map((value) => {
+        const trimmed = value.trim();
+        return trimmed.startsWith("http") ? new URL(trimmed).origin : `https://${trimmed}`;
+      });
+    if (allowedOrigins.includes(new URL(origin).origin)) return callback(null, true);
+    return callback(new Error("Origen no permitido por CORS."));
+  },
   credentials: true
 }));
 
@@ -40,29 +50,40 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// --- CONEXIÓN ÚNICA A MONGO ---
-connectMongo();
+// --- CONEXIÓN A MARIADB ---
+const startServer = async () => {
+  try {
+    await testConnection();
 
-// --- RUTAS DE LA API ---
-app.use("/api/usuarios", userRoutes);
-app.use("/api/auth", authRoutes);
-app.use("/api/materias", materiaRoutes);
-app.use("/api/calificaciones", calificacionRoutes);
-app.use("/api/tareas", tareaRoutes);
-app.use("/api/entregas", entregaRoutes);
-app.use("/api/tareas/alumno", tareasAlumnoRoutes);
-app.use("/api/admin", adminRoutes);
-app.use("/api/anuncios", anuncioRoutes);
-app.use("/api/clases", claseRoutes);
-app.use("/api/asistencias", asistenciasRoutes);
-app.use("/api/notas", notasRoutes);
-app.use("/api/cuotas", cuotaRoutes);
+    // --- RUTAS DE LA API ---
+    app.use("/api/usuarios", userRoutes);
+    app.use("/api/auth", authRoutes);
+    app.use("/api/materias", materiaRoutes);
+    app.use("/api/calificaciones", calificacionRoutes);
+    app.use("/api/tareas", tareaRoutes);
+    app.use("/api/entregas", entregaRoutes);
+    app.use("/api/tareas/alumno", tareasAlumnoRoutes);
+    app.use("/api/admin", adminRoutes);
+    app.use("/api/anuncios", anuncioRoutes);
+    app.use("/api/clases", claseRoutes);
+    app.use("/api/asistencias", asistenciasRoutes);
+    app.use("/api/notas", notasRoutes);
+    app.use("/api/cuotas", cuotaRoutes);
 
-app.get("/", (req, res) => {
-  res.send("API Colegio funcionando con MongoDB 🏫");
-});
+    app.get("/", (req, res) => {
+      const database = DB_DIALECT === "postgres" ? "PostgreSQL" : "MariaDB";
+      res.send(`API Colegio funcionando con ${database} 🏫`);
+    });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 Servidor en puerto ${PORT}`);
-});
+    const PORT = process.env.PORT || 5000;
+    app.listen(PORT, () => {
+      console.log(`🚀 Servidor en puerto ${PORT}`);
+      console.log(`📦 BD activa: ${DB_DIALECT === "postgres" ? "PostgreSQL" : "MariaDB"}`);
+    });
+  } catch (error) {
+    console.error("❌ Error al iniciar la aplicación:", error);
+    process.exit(1);
+  }
+};
+
+startServer();

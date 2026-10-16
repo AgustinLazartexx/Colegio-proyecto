@@ -1,246 +1,224 @@
-import React, { useEffect, useState } from "react";
+import { createElement, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { useAuth } from "../../context/AuthContext";
-import { 
-  Users, 
-  BookOpen, 
-  Calendar, 
-  TrendingUp, 
-  UserPlus, 
-  ClipboardCheck, 
-  School,
-  Bell,
-  ArrowRight
+import {
+  ArrowRight,
+  BookOpen,
+  CalendarDays,
+  ClipboardCheck,
+  FileClock,
+  GraduationCap,
+  Layers3,
+  ShieldCheck,
+  Users,
 } from "lucide-react";
-// Importamos las funciones de API para llenar los datos reales
-import { getUsuarios, getMaterias, getTodasLasClases } from "../../api/api";
+import { useAuth } from "../../context/AuthContext";
+import { getAdminStats, getAuditoriaNotas } from "../../api/api";
+
+const quickLinks = [
+  {
+    to: "/admin/usuarios",
+    label: "Usuarios",
+    detail: "Crear cuentas y administrar accesos.",
+    icon: Users,
+    color: "bg-blue-50 text-blue-700",
+  },
+  {
+    to: "/admin/materias",
+    label: "Materias",
+    detail: "Organizar el catálogo académico.",
+    icon: BookOpen,
+    color: "bg-violet-50 text-violet-700",
+  },
+  {
+    to: "/admin/CrearClases",
+    label: "Clases y horarios",
+    detail: "Configurar cursos, aulas y docentes.",
+    icon: CalendarDays,
+    color: "bg-amber-50 text-amber-700",
+  },
+  {
+    to: "/admin/clasesAdminAlumnos",
+    label: "Inscripciones",
+    detail: "Administrar alumnos por clase.",
+    icon: Layers3,
+    color: "bg-emerald-50 text-emerald-700",
+  },
+  {
+    to: "/admin/GestionNotas",
+    label: "Notas",
+    detail: "Consultar y supervisar calificaciones.",
+    icon: GraduationCap,
+    color: "bg-indigo-50 text-indigo-700",
+  },
+  {
+    to: "/admin/AsistenciaGestion",
+    label: "Asistencia",
+    detail: "Registrar y revisar presentismo.",
+    icon: ClipboardCheck,
+    color: "bg-rose-50 text-rose-700",
+  },
+];
 
 const DashboardAdmin = () => {
   const { usuario } = useAuth();
-  
-  // Estados para los contadores (KPIs)
-  const [stats, setStats] = useState({
-    totalAlumnos: 0,
-    totalProfesores: 0,
-    totalMaterias: 0,
-    totalClases: 0
-  });
+  const [stats, setStats] = useState(null);
+  const [activity, setActivity] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const today = new Intl.DateTimeFormat("es-AR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date());
 
   useEffect(() => {
-    const cargarEstadisticas = async () => {
-      try {
-        // Hacemos las peticiones en paralelo para que cargue rápido
-        const [resUsers, resMaterias, resClases] = await Promise.all([
-          getUsuarios(),       // Trae todos los usuarios
-          getMaterias(),       // Trae todas las materias
-          getTodasLasClases()  // Trae todas las clases
-        ]);
+    let active = true;
+    const loadDashboard = async () => {
+      const [statsResult, auditResult] = await Promise.allSettled([
+        getAdminStats(),
+        getAuditoriaNotas(),
+      ]);
 
-        // Filtramos los usuarios para contar por rol
-        const alumnos = resUsers.data.filter(u => u.rol === 'alumno').length;
-        const profesores = resUsers.data.filter(u => u.rol === 'profesor').length;
-
-        setStats({
-          totalAlumnos: alumnos,
-          totalProfesores: profesores,
-          totalMaterias: resMaterias.data.length || 0,
-          totalClases: resClases.data.length || 0
-        });
-
-      } catch (error) {
-        console.error("Error cargando stats:", error);
-      } finally {
-        setLoading(false);
+      if (!active) return;
+      if (statsResult.status === "fulfilled") {
+        setStats(statsResult.value.data);
+      } else {
+        console.error("Error al cargar estadísticas del panel:", statsResult.reason);
+        setLoadError(true);
       }
+      if (auditResult.status === "fulfilled") {
+        setActivity(Array.isArray(auditResult.value.data) ? auditResult.value.data.slice(0, 4) : []);
+      } else {
+        console.error("Error al cargar la auditoría del panel:", auditResult.reason);
+        setLoadError(true);
+      }
+      setLoading(false);
     };
 
-    cargarEstadisticas();
+    loadDashboard();
+    return () => {
+      active = false;
+    };
   }, []);
 
-  const fechaHoy = new Date().toLocaleDateString('es-ES', { 
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
-  });
+  const metrics = [
+    { label: "Alumnos registrados", value: stats?.alumnos, icon: Users, color: "bg-blue-600" },
+    { label: "Docentes", value: stats?.profesores, icon: GraduationCap, color: "bg-emerald-600" },
+    { label: "Materias", value: stats?.materias, icon: BookOpen, color: "bg-violet-600" },
+    { label: "Clases", value: stats?.clases, icon: CalendarDays, color: "bg-amber-600" },
+  ];
 
   return (
-    <div className="p-6 min-h-screen bg-gray-50/50 space-y-8">
-      
-      {/* --- 1. HEADER --- */}
-      <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-800">
-            Panel de Administración
-          </h1>
-          <p className="text-gray-500 mt-1 capitalize">
-            {fechaHoy} • Hola, {usuario?.nombre}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-            <Link to="/admin/crud-anuncios" className="flex items-center gap-2 bg-white border border-gray-200 text-gray-600 px-4 py-2 rounded-lg shadow-sm hover:bg-gray-50 transition">
-                <Bell size={18} /> Anuncios
-            </Link>
-            <button className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-medium">
-                Generar Reporte
-            </button>
-        </div>
-      </div>
-
-      {/* --- 2. KPIs (Tarjetas de Estadísticas) --- */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard 
-          title="Alumnos Activos" 
-          value={loading ? "..." : stats.totalAlumnos} 
-          icon={<Users size={24}/>} 
-          color="bg-blue-500" 
-          subtext="Registrados en el sistema"
-        />
-        <StatCard 
-          title="Profesores" 
-          value={loading ? "..." : stats.totalProfesores} 
-          icon={<School size={24}/>} 
-          color="bg-emerald-500" 
-          subtext="Docentes asignados"
-        />
-        <StatCard 
-          title="Materias" 
-          value={loading ? "..." : stats.totalMaterias} 
-          icon={<BookOpen size={24}/>} 
-          color="bg-purple-500" 
-          subtext="Plan de estudios"
-        />
-        <StatCard 
-          title="Clases Creadas" 
-          value={loading ? "..." : stats.totalClases} 
-          icon={<Calendar size={24}/>} 
-          color="bg-amber-500" 
-          subtext="Horarios configurados"
-        />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* --- 3. ACCESOS RÁPIDOS (Gestión) --- */}
-        <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-          <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-            <TrendingUp className="text-blue-600"/> Gestión Rápida
-          </h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Tarjeta de Acción: Usuarios */}
-            <ActionCard 
-              to="/admin/usuarios"
-              title="Gestionar Usuarios"
-              desc="Crear, editar o eliminar alumnos y profesores."
-              icon={<UserPlus size={20} />}
-              color="text-blue-600 bg-blue-50"
-            />
-
-            {/* Tarjeta de Acción: Materias */}
-            <ActionCard 
-              to="/admin/materias"
-              title="Catálogo de Materias"
-              desc="Administrar asignaturas y programas."
-              icon={<BookOpen size={20} />}
-              color="text-purple-600 bg-purple-50"
-            />
-
-            {/* Tarjeta de Acción: Clases */}
-            <ActionCard 
-              to="/admin/CrearClases"
-              title="Configurar Clases"
-              desc="Asignar horarios, aulas y profesores."
-              icon={<Calendar size={20} />}
-              color="text-amber-600 bg-amber-50"
-            />
-
-            {/* Tarjeta de Acción: Asistencia */}
-            <ActionCard 
-              to="/admin/AsistenciaGestion"
-              title="Control de Asistencia"
-              desc="Supervisar o tomar asistencia manualmente."
-              icon={<ClipboardCheck size={20} />}
-              color="text-emerald-600 bg-emerald-50"
-            />
+    <div className="mx-auto w-full max-w-7xl space-y-7">
+      <header className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-900 p-6 text-white shadow-xl sm:p-9">
+        <div className="absolute -right-12 -top-20 h-64 w-64 rounded-full bg-blue-400/10 blur-3xl" />
+        <div className="relative flex flex-col justify-between gap-6 sm:flex-row sm:items-end">
+          <div>
+            <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-blue-100">
+              <ShieldCheck size={14} /> Administración escolar
+            </p>
+            <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
+              Hola{usuario?.nombre ? `, ${usuario.nombre.split(" ")[0]}` : ""}
+            </h1>
+            <p className="mt-2 max-w-xl text-sm text-blue-100 sm:text-base">
+              Una vista clara de la actividad y las herramientas de gestión de tu colegio.
+            </p>
           </div>
+          <p className="capitalize text-sm text-blue-100">{today}</p>
         </div>
+      </header>
 
-        {/* --- 4. PANEL LATERAL (Estado del Sistema) --- */}
-        <div className="space-y-6">
-          
-          {/* Estado de cuotas (Mockup por ahora) */}
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-            <h3 className="font-bold text-gray-800 mb-4">Estado Financiero</h3>
-            <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Cuotas al día</span>
-                    <span className="text-sm font-bold text-green-600">85%</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2.5">
-                    <div className="bg-green-500 h-2.5 rounded-full" style={{ width: '85%' }}></div>
-                </div>
-                <div className="pt-2 border-t border-gray-50">
-                    <p className="text-xs text-gray-400">Actualizado hace 10 min</p>
-                </div>
+      {loadError && (
+        <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Algunas estadísticas o actividades no pudieron cargarse. Puedes seguir usando los accesos de gestión.
+        </div>
+      )}
+
+      <section aria-label="Resumen del colegio" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {metrics.map(({ label, value, icon, color }) => (
+          <article key={label} className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-slate-500">{label}</p>
+                <p className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
+                  {loading ? <span className="inline-block h-8 w-12 animate-pulse rounded bg-slate-100" /> : value ?? "—"}
+                </p>
+              </div>
+              <span className={`rounded-xl p-3 text-white ${color}`}>{createElement(icon, { size: 21 })}</span>
             </div>
-          </div>
+            <p className="mt-4 border-t border-slate-100 pt-3 text-xs text-slate-400">Datos registrados en el sistema</p>
+          </article>
+        ))}
+      </section>
 
-          {/* Auditoría reciente (Ejemplo visual) */}
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-             <h3 className="font-bold text-gray-800 mb-4">Actividad Reciente</h3>
-             <ul className="space-y-3">
-                <ActivityItem text="Prof. Gomez subió notas de 5to A" time="Hace 5 min" />
-                <ActivityItem text="Nuevo alumno registrado: Juan P." time="Hace 20 min" />
-                <ActivityItem text="Asistencia 3ro B completada" time="Hace 1h" />
-             </ul>
-             <div className="mt-4 pt-2 border-t border-gray-50 text-center">
-                <Link to="/admin/AuditoriaNotas" className="text-sm text-blue-600 font-medium hover:underline">
-                    Ver auditoría completa
-                </Link>
-             </div>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(300px,0.8fr)]">
+        <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
+          <div className="mb-5 flex items-end justify-between gap-4">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-blue-600">Accesos directos</p>
+              <h2 className="mt-1 text-xl font-bold text-slate-900">Gestión del colegio</h2>
+            </div>
+            <span className="hidden text-sm text-slate-400 sm:inline">Elige una sección para empezar</span>
           </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {quickLinks.map(({ to, label, detail, icon, color }) => (
+              <Link
+                key={to}
+                to={to}
+                className="group flex min-h-24 items-center gap-4 rounded-xl border border-slate-100 p-4 transition hover:border-blue-200 hover:bg-blue-50/50"
+              >
+                <span className={`shrink-0 rounded-xl p-3 ${color}`}>{createElement(icon, { size: 20 })}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-semibold text-slate-800">{label}</span>
+                  <span className="mt-1 block text-xs leading-relaxed text-slate-500">{detail}</span>
+                </span>
+                <ArrowRight size={17} className="shrink-0 text-slate-300 transition group-hover:translate-x-1 group-hover:text-blue-600" />
+              </Link>
+            ))}
+          </div>
+        </section>
 
-        </div>
+        <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
+          <div className="mb-5 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-indigo-600">Trazabilidad</p>
+              <h2 className="mt-1 text-xl font-bold text-slate-900">Cambios recientes</h2>
+            </div>
+            <span className="rounded-xl bg-indigo-50 p-2.5 text-indigo-600"><FileClock size={19} /></span>
+          </div>
+          {loading ? (
+            <div className="space-y-3" aria-label="Cargando actividad">
+              {[0, 1, 2].map((item) => <div key={item} className="h-14 animate-pulse rounded-xl bg-slate-50" />)}
+            </div>
+          ) : activity.length ? (
+            <ul className="divide-y divide-slate-100">
+              {activity.map((item) => (
+                <li key={item._id} className="py-3 first:pt-0 last:pb-0">
+                  <p className="text-sm font-medium text-slate-800">
+                    {item.campoModificado} actualizado en {item.materia?.nombre || "una materia"}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {item.alumno?.nombre || "Alumno"} · {item.trimestre}° trimestre ·{" "}
+                    {item.createdAt ? new Date(item.createdAt).toLocaleDateString("es-AR") : ""}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="rounded-xl bg-slate-50 px-4 py-8 text-center">
+              <FileClock size={26} className="mx-auto text-slate-300" />
+              <p className="mt-3 text-sm font-medium text-slate-700">Aún no hay cambios auditados</p>
+              <p className="mt-1 text-xs text-slate-500">Las modificaciones administrativas aparecerán aquí.</p>
+            </div>
+          )}
+          <Link to="/admin/AuditoriaNotas" className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:text-blue-900">
+            Abrir auditoría <ArrowRight size={15} />
+          </Link>
+        </section>
       </div>
     </div>
   );
 };
-
-// --- Subcomponentes ---
-
-const StatCard = ({ title, value, icon, color, subtext }) => (
-  <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex items-start justify-between hover:shadow-md transition-shadow">
-    <div>
-      <p className="text-gray-500 text-sm font-medium">{title}</p>
-      <h3 className="text-2xl font-bold text-gray-800 mt-1">{value}</h3>
-      <p className="text-xs text-gray-400 mt-1">{subtext}</p>
-    </div>
-    <div className={`p-3 rounded-lg text-white shadow-sm ${color}`}>
-      {icon}
-    </div>
-  </div>
-);
-
-const ActionCard = ({ to, title, desc, icon, color }) => (
-  <Link to={to} className="flex items-start gap-4 p-4 rounded-xl border border-gray-100 hover:border-blue-300 hover:bg-blue-50/30 transition-all group">
-    <div className={`p-3 rounded-lg ${color}`}>
-        {icon}
-    </div>
-    <div className="flex-1">
-        <h4 className="font-bold text-gray-800 group-hover:text-blue-700 transition-colors">{title}</h4>
-        <p className="text-sm text-gray-500 mt-1">{desc}</p>
-    </div>
-    <ArrowRight className="text-gray-300 group-hover:text-blue-500 transition-colors" size={18} />
-  </Link>
-);
-
-const ActivityItem = ({ text, time }) => (
-    <li className="flex items-start gap-3 text-sm">
-        <div className="w-2 h-2 mt-1.5 rounded-full bg-blue-400 flex-shrink-0"></div>
-        <div>
-            <p className="text-gray-700">{text}</p>
-            <span className="text-xs text-gray-400">{time}</span>
-        </div>
-    </li>
-);
 
 export default DashboardAdmin;

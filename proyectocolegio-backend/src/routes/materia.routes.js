@@ -42,6 +42,12 @@ router.get(
   checkRole("profesor"), 
   obtenerMateriasDelProfesor
 );
+router.get(
+  "/profesor/materias",
+  checkAuth,
+  checkRole("profesor"),
+  obtenerMateriasDelProfesor
+);
 
 // 2. (GENERAL/ADMIN) Obtener todas (con opción de filtros ?anio=X)
 // Fusionamos las dos rutas GET / anteriores en esta sola
@@ -56,8 +62,8 @@ router.post("/inscribirse/:id", checkAuth, checkRole("alumno"), inscribirseAMate
 
 // --- RUTAS CON PARÁMETRO ID (Siempre al final) ---
 router.get("/:id", checkAuth, obtenerMateria);
-router.put("/:id", checkAuth, actualizarMateria);
-router.delete("/:id", checkAuth, eliminarMateria);
-router.get("/:id/alumnos", checkAuth, verAlumnosMateria);
+router.put("/:id", checkAuth, checkRole("admin"), actualizarMateria);
+router.delete("/:id", checkAuth, checkRole("admin"), eliminarMateria);
+router.get("/:id/alumnos", checkAuth, checkRole("admin", "profesor"), verAlumnosMateria);
 
 export default router;

@@ -1,5 +1,5 @@
 import jwt from "jsonwebtoken";
-import User from "../models/User.js"; // O la ruta correcta a tu modelo User
+import { findUserById, toPublicUser } from "../services/userAuth.service.js";
 
 export const checkAuth = async (req, res, next) => {
   let token;
@@ -13,19 +13,18 @@ export const checkAuth = async (req, res, next) => {
 
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      // Buscamos al usuario por ID y nos aseguramos de traer el ROL
-      req.user = await User.findById(decoded.id).select("-password -confirmado -token -__v");
+      const user = await findUserById(decoded.id);
 
-      if (!req.user) {
-        return res.status(404).json({ msg: "Usuario no encontrado" });
+      if (!user || !user.isActive) {
+        return res.status(401).json({ msg: "Sesión inválida o usuario deshabilitado." });
       }
-      
-      // console.log("Usuario autenticado:", req.user.nombre, "| Rol:", req.user.rol); 
+
+      req.user = toPublicUser(user);
       return next();
 
     } catch (error) {
-      console.error("Error en checkAuth:", error.message);
-      return res.status(404).json({ msg: "Hubo un error con la sesión" });
+      console.error("Error verificando sesión:", error);
+      return res.status(401).json({ msg: "No se pudo verificar la sesión." });
     }
   }
 
@@ -36,9 +35,9 @@ export const checkAuth = async (req, res, next) => {
 
   next();
 };
-// Middleware para verificar si es admin
+
 export const esAdmin = (req, res, next) => {
-  if (req.rol !== "admin") {
+  if (req.user?.rol !== "admin") {
     return res.status(403).json({ msg: "Acceso denegado: solo para administradores" });
   }
   next();

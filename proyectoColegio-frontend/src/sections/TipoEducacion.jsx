@@ -1,6 +1,8 @@
 import { motion } from "framer-motion";
 import { BookOpenCheck, Calculator, BriefcaseBusiness, ClipboardList, GraduationCap } from "lucide-react";
 
+const MotionDiv = motion.div;
+
 const educacionSteps = [
   {
     icon: <BookOpenCheck className="w-8 h-8 text-secondary" />,
@@ -45,27 +47,27 @@ const itemVariants = {
 
 const TipoEducacion = () => {
   return (
-    <section className="bg-white py-20 px-6 md:px-20 text-accent">
-      <h2 className="text-3xl font-bold text-center mb-16">Tipo de Educación</h2>
-      <motion.div
-        className="flex flex-col md:flex-row items-center justify-between gap-12"
+    <section id="tipo-educacion" className="scroll-mt-20 bg-white px-4 py-14 text-accent sm:px-6 sm:py-20 lg:px-20">
+      <h2 className="mb-10 text-center text-3xl font-bold sm:mb-16">Tipo de Educación</h2>
+      <MotionDiv
+        className="mx-auto grid max-w-7xl grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"
         initial="hidden"
         whileInView="visible"
         viewport={{ once: true }}
         variants={containerVariants}
       >
         {educacionSteps.map((step, index) => (
-          <motion.div
+          <MotionDiv
             key={index}
             variants={itemVariants}
-            className="flex flex-col items-center text-center max-w-xs"
+            className="flex flex-col items-center text-center"
           >
-            <div className="mb-4 bg-primary rounded-full p-4 shadow">{step.icon}</div>
+            <div className="mb-4 rounded-full bg-primary p-4 shadow">{step.icon}</div>
             <h3 className="font-semibold text-lg mb-2">{step.title}</h3>
             <p className="text-sm text-gray-700">{step.text}</p>
-          </motion.div>
+          </MotionDiv>
         ))}
-      </motion.div>
+      </MotionDiv>
     </section>
   );
 };

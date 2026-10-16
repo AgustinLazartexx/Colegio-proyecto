@@ -1,6 +1,8 @@
 import { Briefcase, TrendingUp, Users, GraduationCap } from "lucide-react";
 import { motion } from "framer-motion";
 
+const MotionDiv = motion.div;
+
 const valores = [
   {
     icon: <GraduationCap className="w-10 h-10 text-secondary" />,
@@ -39,11 +41,11 @@ const fadeUp = {
 
 const Valores = () => {
   return (
-    <section className="py-16 px-6 md:px-12 bg-white text-accent">
-      <h2 className="text-3xl font-bold text-center mb-12">Nuestros Valores</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-10">
+    <section id="valores" className="scroll-mt-20 bg-white px-4 py-14 text-accent sm:px-6 sm:py-16 lg:px-12">
+      <h2 className="mb-10 text-center text-3xl font-bold sm:mb-12">Nuestros Valores</h2>
+      <div className="mx-auto grid max-w-7xl grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-7 xl:grid-cols-4">
         {valores.map((valor, index) => (
-          <motion.div
+          <MotionDiv
             key={index}
             className="bg-primary p-6 rounded-xl shadow hover:shadow-lg transition duration-300"
             variants={fadeUp}
@@ -55,7 +57,7 @@ const Valores = () => {
             <div className="flex justify-center mb-4">{valor.icon}</div>
             <h3 className="text-xl font-semibold text-center mb-2">{valor.title}</h3>
             <p className="text-center text-sm text-gray-700">{valor.description}</p>
-          </motion.div>
+          </MotionDiv>
         ))}
       </div>
     </section>

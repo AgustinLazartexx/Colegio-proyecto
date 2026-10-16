@@ -1,6 +1,6 @@
 /// src/pages/profesor/VerAlumnosMateria.jsx
 import { useEffect, useState } from "react";
-import axios from "axios";
+import api from "../../api/api";
 import { useAuth } from "../../context/AuthContext";
 import { toast } from "react-toastify";
 import { 
@@ -28,9 +28,7 @@ const VerAlumnosMateria = () => {
     const fetchMaterias = async () => {
       setLoading(true);
       try {
-        const res = await axios.get("http://localhost:5000/api/materias/profesor/materias", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await api.get("/materias/profesor/materias");
         setMaterias(res.data);
       } catch (err) {
         toast.error("Error al cargar materias");
@@ -68,9 +66,7 @@ const VerAlumnosMateria = () => {
 
     setLoadingAlumnos(true);
     try {
-      const res = await axios.get(`http://localhost:5000/api/materias/${materiaId}/alumnos`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await api.get(`/materias/${materiaId}/alumnos`);
       setAlumnos(res.data);
       setAlumnosFiltrados(res.data);
     } catch (err) {

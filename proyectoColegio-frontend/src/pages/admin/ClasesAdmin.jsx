@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../../context/AuthContext"; 
 import {
-  Edit3, Trash2, X, Loader2, AlertCircle, Save, GraduationCap, Plus, Filter, Clock, MapPin, Users, Hash, Calendar
+  Edit3, Trash2, X, Loader2, AlertCircle, Save, GraduationCap, Plus, Filter, Clock, MapPin, Users, Hash, Calendar, Search
 } from "lucide-react";
 import Swal from "sweetalert2"; 
 
@@ -46,8 +46,7 @@ const ClasesAdmin = () => {
   });
 
   const [showModal, setShowModal] = useState(false);
-  const [filter, setFilter] = useState({ anio: "", diaSemana: "", division: "" });
-  const [showFilters, setShowFilters] = useState(false);
+  const [filter, setFilter] = useState({ anio: "", diaSemana: "", division: "", search: "" });
 
   useEffect(() => {
     const initData = async () => {
@@ -104,7 +103,8 @@ const ClasesAdmin = () => {
   };
 
   const handleFilterChange = (e) => {
-    setFilter({ ...filter, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setFilter((current) => ({ ...current, [name]: value }));
   };
 
   const resetForm = () => {
@@ -196,7 +196,7 @@ const ClasesAdmin = () => {
           await eliminarClase(id);
           Swal.fire("¡Eliminado!", "Clase eliminada.", "success");
           fetchClases();
-        } catch (err) {
+        } catch {
           Swal.fire("Error", "No se pudo eliminar.", "error");
         }
     }
@@ -207,13 +207,15 @@ const ClasesAdmin = () => {
       const matchAnio = !filter.anio || String(c.anio) === String(filter.anio);
       const matchDiv = !filter.division || (c.division && c.division.toUpperCase() === filter.division.toUpperCase());
       const matchDia = !filter.diaSemana || c.diaSemana === filter.diaSemana;
-      return matchAnio && matchDiv && matchDia;
+      const materiaNombre = c.materia?.nombre || "";
+      const matchSearch = !filter.search || materiaNombre.toLowerCase().includes(filter.search.trim().toLowerCase());
+      return matchAnio && matchDiv && matchDia && matchSearch;
   });
 
   const diasSemana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
   const aniosAcademicos = [1, 2, 3, 4, 5, 6];
   const divisionesEjemplo = ["A", "B", "C", "D"];
-  const hasActiveFilters = filter.anio || filter.division || filter.diaSemana;
+  const hasActiveFilters = filter.anio || filter.division || filter.diaSemana || filter.search.trim();
 
   return (
      <div className="min-h-screen bg-gray-50 p-6">
@@ -239,6 +241,17 @@ const ClasesAdmin = () => {
                 <div className="flex items-center gap-2 text-gray-500 min-w-[80px]">
                     <Filter size={18} /> <span className="text-sm font-medium">Filtrar:</span>
                 </div>
+
+                <div className="relative w-full md:flex-1">
+                    <Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      name="search"
+                      value={filter.search}
+                      onChange={handleFilterChange}
+                      placeholder="Buscar por materia..."
+                      className="w-full p-2 pl-9 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                </div>
                 
                 <select name="anio" value={filter.anio} onChange={handleFilterChange} className="p-2 border rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-indigo-500 outline-none w-full md:w-auto">
                     <option value="">Todos los Años</option>
@@ -256,22 +269,35 @@ const ClasesAdmin = () => {
                 </select>
 
                 {hasActiveFilters && (
-                    <button onClick={() => setFilter({ anio: "", diaSemana: "", division: "" })} className="text-red-500 hover:text-red-700 text-sm font-medium ml-auto">
+                    <button onClick={() => setFilter({ anio: "", diaSemana: "", division: "", search: "" })} className="text-red-500 hover:text-red-700 text-sm font-medium ml-auto">
                         Borrar filtros
                     </button>
                 )}
             </div>
+            {hasActiveFilters && (
+              <p className="mt-3 text-sm text-indigo-600 animate-in fade-in duration-300">
+                {clasesFiltradas.length} clase{clasesFiltradas.length === 1 ? "" : "s"} encontrada{clasesFiltradas.length === 1 ? "" : "s"}
+              </p>
+            )}
          </div>
 
          {/* TABLA DETALLADA */}
          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
            {loading ? (
              <div className="p-12 flex justify-center"><Loader2 size={40} className="animate-spin text-indigo-600" /></div>
+           ) : !hasActiveFilters ? (
+             <div className="p-12 text-center flex flex-col items-center animate-in fade-in zoom-in duration-500">
+               <div className="mb-5 rounded-full bg-gradient-to-br from-indigo-100 to-sky-100 p-5">
+                 <Search size={38} className="text-indigo-500 animate-pulse" />
+               </div>
+               <p className="text-lg font-semibold text-gray-900">Encuentra una clase</p>
+               <p className="mt-2 max-w-md text-sm text-gray-500">Usa el buscador o combina año, división y día para consultar el cronograma.</p>
+             </div>
            ) : clasesFiltradas.length === 0 ? (
              <div className="p-12 text-center flex flex-col items-center">
                <AlertCircle size={48} className="text-gray-300 mb-4" />
-               <p className="text-lg font-medium text-gray-900">No hay clases configuradas</p>
-               <p className="text-gray-500 text-sm">Intenta cambiar los filtros o crea una nueva clase.</p>
+               <p className="text-lg font-medium text-gray-900">No encontramos clases con esos filtros</p>
+               <p className="text-gray-500 text-sm">Prueba con otros criterios o crea una nueva clase.</p>
              </div>
            ) : (
              <div className="overflow-x-auto">
@@ -286,7 +312,7 @@ const ClasesAdmin = () => {
                  </thead>
                  <tbody className="divide-y divide-gray-100">
                    {clasesFiltradas.map((c) => (
-                     <tr key={c._id} className="hover:bg-indigo-50/30 transition group">
+                     <tr key={c._id} className="hover:bg-indigo-50/30 transition group animate-in fade-in slide-in-from-bottom-2 duration-300">
                        
                        {/* COLUMNA 1: MATERIA Y CURSO */}
                        <td className="px-6 py-4">

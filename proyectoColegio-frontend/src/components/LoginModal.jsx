@@ -137,6 +137,19 @@ const LoginModal = ({ isOpen, onClose }) => {
             {loading ? "Ingresando..." : "Iniciar Sesión"}
           </button>
         </form>
+
+        <div className="mt-4 text-center">
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              navigate("/forgot-password");
+            }}
+            className="text-sm text-accent hover:underline font-medium"
+          >
+            ¿Olvidaste tu contraseña?
+          </button>
+        </div>
       </div>
     </div>
   );

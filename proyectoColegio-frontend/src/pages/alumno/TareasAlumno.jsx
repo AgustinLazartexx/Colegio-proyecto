@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { useAuth, apiClient } from "../../context/AuthContext";
+import { useAuth } from "../../context/AuthContext";
+import api, { BACKEND_URL, getMisClasesAlumno } from "../../api/api";
 import EntregarTarea from "../../components/alumno/EntregarTarea";
 import { BookOpen, Calendar, Download, FileText, Loader2, AlertTriangle, Inbox } from "lucide-react";
 
@@ -20,7 +21,7 @@ const TareaItem = ({ tarea }) => {
         </div>
         {tarea.archivo && (
           <a
-            href={`http://localhost:5000/uploads/${tarea.archivo}`}
+            href={`${BACKEND_URL}/uploads/${tarea.archivo}`}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 font-semibold text-sm transition-colors"
@@ -42,17 +43,20 @@ const TareasAlumno = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
- const fetchTareas = useCallback(async (userId) => {
+ const fetchTareas = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const resMaterias = await apiClient.get(`/materias/alumno/${userId}`);
-      
-      const materiasAlumno = resMaterias.data.filter(materia => 
-        // CAMBIO AQUÍ: Añadimos 'alumnoId &&' para evitar el error con valores nulos
-      materia.alumnos?.some(alumnoId => alumnoId && alumnoId.toString() === userId.toString())
-      );
+      const resClases = await getMisClasesAlumno();
+      const materiasMap = new Map();
+      const clases = Array.isArray(resClases.data) ? resClases.data : resClases.data.clases || [];
+      for (const clase of clases) {
+        if (clase.materia?._id && !materiasMap.has(clase.materia._id)) {
+          materiasMap.set(clase.materia._id, clase.materia);
+        }
+      }
+      const materiasAlumno = [...materiasMap.values()];
 
       if (materiasAlumno.length === 0) {
         setTareasPorMateria([]);
@@ -61,7 +65,7 @@ const TareasAlumno = () => {
       }
 
       const promesasTareas = materiasAlumno.map(materia =>
-        apiClient.get(`/tareas/alumno/materia/${materia._id}`)
+        api.get(`/tareas/alumno/materia/${materia._id}`)
           .then(res => ({ ...materia, tareas: res.data || [] }))
           .catch(err => {
             console.error(`Error al cargar tareas de ${materia.nombre}:`, err);
@@ -73,7 +77,7 @@ const TareasAlumno = () => {
       setTareasPorMateria(materiasConTareas);
 
     } catch (err) {
-      console.error("Error al cargar las materias del alumno:", err);
+      console.error("Error al cargar las clases del alumno:", err);
       setError("No se pudieron cargar tus materias y tareas. Intentá de nuevo más tarde.");
     } finally {
       setLoading(false);
@@ -86,7 +90,7 @@ const TareasAlumno = () => {
     }
     const userId = usuario?.id;
     if (userId) {
-      fetchTareas(userId);
+      fetchTareas();
     } else {
       setLoading(false);
       setError("No se pudo identificar al usuario.");
@@ -129,7 +133,7 @@ const TareasAlumno = () => {
           <div className="text-center bg-white p-12 rounded-lg shadow-md">
             <Inbox size={52} className="mx-auto text-gray-400 mb-4" />
             <h2 className="text-2xl font-semibold text-gray-700">¡Todo en orden!</h2>
-            <p className="text-gray-500 mt-2">No tenés tareas pendientes o aún no estás inscrito en ninguna materia.</p>
+            <p className="text-gray-500 mt-2">No tenés tareas pendientes o aún no estás inscripto en ninguna materia.</p>
           </div>
         ) : (
           <div className="space-y-8">

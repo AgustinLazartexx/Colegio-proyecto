@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import axios from "axios";
+import api from "../api/api";
 import MateriaCard from "./MateriaCard"; // podemos crear este
 
 const DashboardProfesor = () => {
@@ -11,7 +11,7 @@ const DashboardProfesor = () => {
   useEffect(() => {
     const fetchMaterias = async () => {
       try {
-        const res = await axios.get(`/api/materias/profesor/${user._id}`);
+        const res = await api.get(`/materias/profesor/${user._id}`);
         setMaterias(res.data);
       } catch (error) {
         console.error("Error cargando materias del profesor", error);

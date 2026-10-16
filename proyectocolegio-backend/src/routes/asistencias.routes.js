@@ -6,7 +6,10 @@ import {
   obtenerAsistenciasPorClaseYFecha,
   obtenerAsistenciasPorAlumno,
   getReporteAsistencias,
-  getMisAsistencias
+  getMisAsistencias,
+  obtenerAsistenciaGeneral,
+  registrarAsistenciaGeneral,
+  compararAsistencias,
 } from "../controllers/asistencia.controller.js";
 
 const router = Router();
@@ -14,6 +17,9 @@ const router = Router();
 // RUTA NUEVA PARA EL ALUMNO
 router.get("/alumno/mis-asistencias", checkAuth, getMisAsistencias);
 
+router.get("/general", checkAuth, checkRole("admin"), obtenerAsistenciaGeneral);
+router.post("/general", checkAuth, checkRole("admin"), registrarAsistenciaGeneral);
+router.get("/comparacion", checkAuth, checkRole("admin"), compararAsistencias);
 
 // Registrar (Tomar) asistencia
 router.post('/', checkAuth, checkRole(['admin', 'profesor']), registrarAsistencias);

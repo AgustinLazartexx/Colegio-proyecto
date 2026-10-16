@@ -1,6 +1,6 @@
 // src/pages/profesor/AlumnosInscriptos.jsx
 import { useEffect, useState } from "react";
-import axios from "axios";
+import api from "../api/api";
 
 const AlumnosInscriptos = () => {
   const [datos, setDatos] = useState([]);
@@ -10,11 +10,7 @@ const AlumnosInscriptos = () => {
     const obtenerAlumnos = async () => {
       const token = localStorage.getItem("token");
       try {
-        const res = await axios.get("http://localhost:5000/api/materias/profesor/alumnos", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+        const res = await api.get("/materias/profesor/alumnos");
         setDatos(res.data); // Espera que el back devuelva algo como [{ materia: ..., alumnos: [...] }, ...]
       } catch (error) {
         console.error("Error al obtener alumnos:", error.response || error.message);

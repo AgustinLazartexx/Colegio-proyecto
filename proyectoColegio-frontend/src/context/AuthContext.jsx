@@ -1,12 +1,7 @@
 // src/context/AuthContext.jsx
 import { createContext, useContext, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
-
-// Creamos una instancia de Axios para usar en toda la app.
-const apiClient = axios.create({
-  baseURL: "https://colegio-proyecto-backend.onrender.com/api",
-});
+import api from "../api/api";
 
 export const AuthContext = createContext();
 
@@ -30,15 +25,15 @@ export const AuthProvider = ({ children }) => {
         // La cabecera se pasa explícitamente en la llamada `get` de abajo,
         // que es la forma más segura para esta verificación inicial.
         
-        const res = await apiClient.get("/auth/verify", {
+        const res = await api.get("/auth/verify", {
           headers: {
-            'Authorization': `Bearer ${storedToken}`
+            Authorization: `Bearer ${storedToken}`
           }
         });
 
-        // Si la verificación fue exitosa, AHORA SÍ configuramos el
-        // token por defecto para todas las futuras peticiones.
-        apiClient.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+        // Si la verificación fue exitosa, el interceptor de api.js
+        // ya usará el token guardado en localStorage.
+        api.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
         setUsuario(res.data.user);
         setToken(storedToken);
 
@@ -58,7 +53,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
-      const res = await apiClient.post("/auth/login", { email, password });
+      const res = await api.post("/auth/login", { email, password });
       const { token, user: loggedUser } = res.data;
 
       localStorage.setItem("token", token);
@@ -67,7 +62,7 @@ export const AuthProvider = ({ children }) => {
       setUsuario(loggedUser);
       setToken(token);
       
-      apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       return loggedUser;
     } catch (error) {
       throw new Error(error.response?.data?.msg || "Error en el login");
@@ -79,7 +74,7 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem("usuario");
     setUsuario(null);
     setToken(null);
-    delete apiClient.defaults.headers.common['Authorization'];
+    delete api.defaults.headers.common['Authorization'];
     navigate("/");
   };
 
@@ -100,4 +95,4 @@ export const AuthProvider = ({ children }) => {
 
 export const useAuth = () => useContext(AuthContext);
 
-export { apiClient };
+export { api };

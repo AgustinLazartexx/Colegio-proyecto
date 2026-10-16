@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../../api/api";
 import { toast } from "react-toastify";
 import {
   FileText,
@@ -30,11 +30,7 @@ const CargarTarea = () => {
       const token = localStorage.getItem("token");
       setLoadingMaterias(true);
       try {
-        const res = await axios.get("http://localhost:5000/api/materias/profesor/materias", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+        const res = await api.get("/materias/profesor/materias");
         setMaterias(res.data);
       } catch (error) {
         console.error("Error al obtener materias", error);
@@ -70,10 +66,9 @@ const CargarTarea = () => {
     }
 
     try {
-      await axios.post("http://localhost:5000/api/tareas", formData, {
+      await api.post("/tareas", formData, {
         headers: {
           "Content-Type": "multipart/form-data",
-          Authorization: `Bearer ${token}`,
         },
       });
       toast.success(

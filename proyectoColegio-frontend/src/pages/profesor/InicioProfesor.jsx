@@ -1,218 +1,179 @@
-import React, { useState, useEffect } from "react";
+import { createElement, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { 
-  CalendarDays, 
-  ClipboardCheck, 
-  BookOpen, 
-  Mail, 
-  Clock, 
-  MapPin, 
-  Users, 
+import {
   ArrowRight,
-  GraduationCap 
+  BookOpen,
+  CalendarCheck2,
+  CalendarDays,
+  ClipboardCheck,
+  Clock3,
+  FilePlus2,
+  GraduationCap,
+  Megaphone,
+  Users,
 } from "lucide-react";
-
-// Puedes usar tu hook de auth si quieres el nombre real
-// import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/AuthContext";
+import { getMisClases, getTareasProfesor } from "../../api/api";
 
 const InicioProfesor = () => {
-  // const { usuario } = useAuth(); // Si tienes el contexto
-  const [fechaHoy, setFechaHoy] = useState("");
+  const { usuario } = useAuth();
+  const [clases, setClases] = useState([]);
+  const [tareas, setTareas] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const fechaHoy = useMemo(
+    () => new Intl.DateTimeFormat("es-AR", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date()),
+    [],
+  );
+  const diaHoy = useMemo(
+    () => new Intl.DateTimeFormat("es-AR", { weekday: "long" }).format(new Date()).toLocaleLowerCase("es-AR"),
+    [],
+  );
 
   useEffect(() => {
-    const opciones = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-    setFechaHoy(new Date().toLocaleDateString('es-ES', opciones));
+    let active = true;
+    const loadDashboard = async () => {
+      const [classesResult, tasksResult] = await Promise.allSettled([
+        getMisClases(),
+        getTareasProfesor(),
+      ]);
+      if (!active) return;
+
+      if (classesResult.status === "fulfilled") {
+        const response = classesResult.value.data;
+        setClases(Array.isArray(response) ? response : response.clases || []);
+      } else {
+        console.error("Error al cargar las clases del profesor:", classesResult.reason);
+      }
+      if (tasksResult.status === "fulfilled" && Array.isArray(tasksResult.value.data)) {
+        setTareas(tasksResult.value.data);
+      } else if (tasksResult.status === "rejected") {
+        console.error("Error al cargar las tareas del profesor:", tasksResult.reason);
+      }
+      setLoadError(classesResult.status === "rejected" || tasksResult.status === "rejected");
+      setLoading(false);
+    };
+
+    loadDashboard();
+    return () => {
+      active = false;
+    };
   }, []);
 
+  const clasesHoy = clases
+    .filter((clase) => clase.diaSemana?.toLocaleLowerCase("es-AR") === diaHoy)
+    .sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
+  const materiasUnicas = new Set(clases.map((clase) => clase.materia?._id).filter(Boolean)).size;
+  const metricas = [
+    { label: "Clases de hoy", value: clasesHoy.length, icon: CalendarDays, color: "bg-blue-600" },
+    { label: "Clases asignadas", value: clases.length, icon: BookOpen, color: "bg-indigo-600" },
+    { label: "Materias", value: materiasUnicas, icon: GraduationCap, color: "bg-violet-600" },
+    { label: "Tareas publicadas", value: tareas.length, icon: ClipboardCheck, color: "bg-emerald-600" },
+  ];
+
   return (
-    <div className="p-8 min-h-screen bg-gray-50/50 space-y-8 animate-in fade-in duration-500">
-      
-      {/* --- 1. HEADER CON FECHA --- */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
-        <div>
-          <h1 className="text-3xl font-extrabold text-gray-800 tracking-tight">
-            Hola, <span className="text-indigo-600">Profesor/a</span> 👋
-          </h1>
-          <p className="text-gray-500 mt-2 text-lg capitalize font-medium">
-            {fechaHoy}
-          </p>
+    <div className="mx-auto w-full max-w-7xl space-y-7">
+      <header className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-950 via-indigo-900 to-blue-800 p-6 text-white shadow-xl sm:p-9">
+        <div className="absolute -right-8 -top-16 h-56 w-56 rounded-full bg-cyan-300/10 blur-3xl" />
+        <div className="relative flex flex-col justify-between gap-6 sm:flex-row sm:items-end">
+          <div>
+            <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-indigo-100">
+              <GraduationCap size={14} /> Portal docente
+            </p>
+            <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
+              ¡Buen día{usuario?.nombre ? `, ${usuario.nombre.split(" ")[0]}` : ""}!
+            </h1>
+            <p className="mt-2 text-sm capitalize text-indigo-100 sm:text-base">{fechaHoy}</p>
+          </div>
+          <Link to="/profesor/tomar-asistencia" className="inline-flex items-center justify-center gap-2 self-start rounded-xl bg-white px-4 py-3 text-sm font-semibold text-indigo-900 shadow-sm transition hover:bg-indigo-50 sm:self-auto">
+            <CalendarCheck2 size={17} /> Tomar asistencia
+          </Link>
         </div>
-        <div className="bg-white px-4 py-2 rounded-full shadow-sm border border-gray-200 text-sm text-gray-600 font-medium">
-            Ciclo Lectivo 2024
+      </header>
+
+      {loadError && (
+        <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          No se pudo actualizar alguna sección. Revisa tu conexión e inténtalo nuevamente.
         </div>
-      </div>
+      )}
 
-      {/* --- 2. KPIs (Indicadores Clave) --- */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard
-          icon={<BookOpen size={24} />}
-          label="Clases de hoy"
-          value="3"
-          color="bg-blue-500"
-          subtext="2 por la mañana"
-        />
-        <StatCard
-          icon={<ClipboardCheck size={24} />}
-          label="Por Corregir"
-          value="12"
-          color="bg-amber-500"
-          subtext="Tareas pendientes"
-        />
-        <StatCard
-          icon={<CalendarDays size={24} />}
-          label="Eventos"
-          value="1"
-          color="bg-purple-500"
-          subtext="Próx: Reunión de padres"
-        />
-        <StatCard
-          icon={<Mail size={24} />}
-          label="Mensajes"
-          value="4"
-          color="bg-emerald-500"
-          subtext="2 sin leer"
-        />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* --- 3. SECCIÓN PRINCIPAL: PRÓXIMA CLASE --- */}
-        <div className="lg:col-span-2">
-            <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <Clock className="text-indigo-600" size={22}/> En Agenda
-            </h2>
-            
-            {/* Tarjeta Hero de Próxima Clase */}
-            <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden relative group">
-                <div className="absolute top-0 left-0 w-2 h-full bg-indigo-500"></div>
-                <div className="p-6 md:p-8">
-                    <div className="flex justify-between items-start mb-4">
-                        <span className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
-                            En 20 minutos
-                        </span>
-                        <Link to="/profesor/clases" className="text-gray-400 hover:text-indigo-600 transition">
-                            <ArrowRight size={24} />
-                        </Link>
-                    </div>
-
-                    <h3 className="text-2xl md:text-3xl font-bold text-gray-800 mb-2 group-hover:text-indigo-700 transition-colors">
-                        Lengua y Literatura
-                    </h3>
-                    
-                    <div className="flex flex-wrap gap-4 md:gap-8 mt-6">
-                        <div className="flex items-center gap-3 text-gray-600">
-                            <div className="p-2 bg-gray-100 rounded-lg text-indigo-600">
-                                <Clock size={20} />
-                            </div>
-                            <div>
-                                <p className="text-xs text-gray-400 uppercase font-bold">Horario</p>
-                                <p className="font-semibold">11:00 - 12:30</p>
-                            </div>
-                        </div>
-
-                        <div className="flex items-center gap-3 text-gray-600">
-                            <div className="p-2 bg-gray-100 rounded-lg text-indigo-600">
-                                <MapPin size={20} />
-                            </div>
-                            <div>
-                                <p className="text-xs text-gray-400 uppercase font-bold">Ubicación</p>
-                                <p className="font-semibold">Aula 3°B - Piso 1</p>
-                            </div>
-                        </div>
-
-                         <div className="flex items-center gap-3 text-gray-600">
-                            <div className="p-2 bg-gray-100 rounded-lg text-indigo-600">
-                                <Users size={20} />
-                            </div>
-                            <div>
-                                <p className="text-xs text-gray-400 uppercase font-bold">Alumnos</p>
-                                <p className="font-semibold">24 Inscritos</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {/* Botón de acción rápida dentro de la tarjeta */}
-                <div className="bg-gray-50 px-6 py-4 border-t border-gray-100 flex justify-end">
-                    <Link to="/profesor/tomar-asistencia" className="text-sm font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
-                        Iniciar Clase y Tomar Asistencia <ArrowRight size={16}/>
-                    </Link>
-                </div>
+      <section aria-label="Resumen docente" className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+        {metricas.map(({ label, value, icon, color }) => (
+          <article key={label} className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md sm:p-5">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-xs font-medium text-slate-500 sm:text-sm">{label}</p>
+                <p className="mt-2 text-2xl font-bold text-slate-900 sm:text-3xl">
+                  {loading ? <span className="inline-block h-8 w-10 animate-pulse rounded bg-slate-100" /> : value}
+                </p>
+              </div>
+              <span className={`rounded-xl p-2.5 text-white sm:p-3 ${color}`}>{createElement(icon, { size: 19 })}</span>
             </div>
-        </div>
+          </article>
+        ))}
+      </section>
 
-        {/* --- 4. ACCESOS RÁPIDOS --- */}
-        <div>
-            <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <GraduationCap className="text-indigo-600" size={22}/> Gestión Rápida
-            </h2>
-            <div className="grid gap-4">
-                <ActionCard 
-                    to="/profesor/clases" 
-                    label="Mis Clases" 
-                    desc="Ver cronograma semanal"
-                    icon={<CalendarDays size={20}/>} 
-                />
-                <ActionCard 
-                    to="/profesor/tomar-asistencia" 
-                    label="Asistencia" 
-                    desc="Registrar presentes y ausentes"
-                    icon={<ClipboardCheck size={20}/>} 
-                />
-                <ActionCard 
-                    to="/profesor/cargar-tarea" 
-                    label="Nueva Tarea" 
-                    desc="Crear actividad para alumnos"
-                    icon={<BookOpen size={20}/>} 
-                />
-                 <ActionCard 
-                    to="/profesor/mensajes" 
-                    label="Comunicados" 
-                    desc="Enviar avisos al curso"
-                    icon={<Mail size={20}/>} 
-                />
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(290px,0.8fr)]">
+        <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
+          <div className="mb-5 flex items-end justify-between gap-4">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-indigo-600">Agenda real</p>
+              <h2 className="mt-1 text-xl font-bold text-slate-900">Tus clases de hoy</h2>
             </div>
-        </div>
+            <Link to="/profesor/Clases" className="text-sm font-semibold text-indigo-700 hover:text-indigo-900">Ver horario</Link>
+          </div>
+          {loading ? (
+            <div className="space-y-3" aria-label="Cargando clases">
+              {[0, 1].map((item) => <div key={item} className="h-20 animate-pulse rounded-xl bg-slate-50" />)}
+            </div>
+          ) : clasesHoy.length ? (
+            <ul className="space-y-3">
+              {clasesHoy.map((clase) => (
+                <li key={clase._id} className="flex flex-col gap-3 rounded-xl border border-slate-100 p-4 sm:flex-row sm:items-center">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700"><BookOpen size={20} /></span>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-semibold text-slate-900">{clase.materia?.nombre || "Clase asignada"}</h3>
+                    <p className="mt-1 text-sm text-slate-500">{clase.anio}° {clase.division}</p>
+                  </div>
+                  <div className="flex items-center gap-1 text-sm font-semibold text-slate-600">
+                    <Clock3 size={15} className="text-indigo-500" />{clase.horaInicio}–{clase.horaFin}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="rounded-xl bg-slate-50 px-4 py-9 text-center">
+              <CalendarDays size={28} className="mx-auto text-slate-300" />
+              <p className="mt-3 font-semibold text-slate-700">No tienes clases asignadas para hoy</p>
+              <p className="mt-1 text-sm text-slate-500">Consulta el horario semanal para planificar tus próximas clases.</p>
+            </div>
+          )}
+        </section>
 
+        <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
+          <p className="text-xs font-bold uppercase tracking-widest text-blue-600">Herramientas</p>
+          <h2 className="mt-1 text-xl font-bold text-slate-900">Accesos docentes</h2>
+          <div className="mt-4 space-y-3">
+            <QuickLink to="/profesor/Clases" icon={Users} label="Mis clases" detail="Cursos y alumnos asignados" />
+            <QuickLink to="/profesor/cargar-notas" icon={GraduationCap} label="Cargar notas" detail="Actualizar el seguimiento académico" />
+            <QuickLink to="/profesor/cargar-tarea" icon={FilePlus2} label="Crear tarea" detail="Publicar una actividad nueva" />
+            <QuickLink to="/profesor/crud-anuncios" icon={Megaphone} label="Anuncios" detail="Compartir novedades con tus cursos" />
+          </div>
+        </section>
       </div>
     </div>
   );
 };
 
-// --- Subcomponentes Estilizados ---
-
-const StatCard = ({ icon, label, value, color, subtext }) => (
-  <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all duration-300 hover:-translate-y-1">
-    <div className="flex justify-between items-start">
-        <div>
-             <p className="text-sm font-semibold text-gray-500">{label}</p>
-             <h3 className="text-3xl font-bold text-gray-800 mt-1">{value}</h3>
-        </div>
-        <div className={`p-3 rounded-xl text-white shadow-sm ${color}`}>
-            {icon}
-        </div>
-    </div>
-    <div className="mt-4 pt-3 border-t border-gray-50">
-        <p className="text-xs text-gray-400 font-medium">{subtext}</p>
-    </div>
-  </div>
-);
-
-const ActionCard = ({ to, label, desc, icon }) => (
-    <Link 
-        to={to} 
-        className="group flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/30 transition-all shadow-sm hover:shadow"
-    >
-        <div className="p-3 bg-gray-50 text-gray-600 rounded-lg group-hover:bg-white group-hover:text-indigo-600 transition-colors shadow-sm">
-            {icon}
-        </div>
-        <div className="flex-1">
-            <h4 className="font-bold text-gray-800 group-hover:text-indigo-700 transition-colors">{label}</h4>
-            <p className="text-xs text-gray-500">{desc}</p>
-        </div>
-        <div className="text-gray-300 group-hover:text-indigo-400 transition-transform group-hover:translate-x-1">
-            <ArrowRight size={18} />
-        </div>
-    </Link>
+const QuickLink = ({ to, icon, label, detail }) => (
+  <Link to={to} className="group flex items-center gap-3 rounded-xl border border-slate-100 p-3 transition hover:border-indigo-200 hover:bg-indigo-50/50">
+    <span className="rounded-xl bg-slate-50 p-2.5 text-slate-500 transition group-hover:bg-white group-hover:text-indigo-700">{createElement(icon, { size: 19 })}</span>
+    <span className="min-w-0 flex-1">
+      <span className="block text-sm font-semibold text-slate-800">{label}</span>
+      <span className="mt-0.5 block text-xs text-slate-500">{detail}</span>
+    </span>
+    <ArrowRight size={16} className="shrink-0 text-slate-300 transition group-hover:translate-x-1 group-hover:text-indigo-700" />
+  </Link>
 );
 
 export default InicioProfesor;

@@ -1,0 +1,48 @@
+services:
+  - type: web
+    name: colegio-demo-api
+    runtime: node
+    plan: free
+    rootDir: proyectocolegio-backend
+    buildCommand: npm ci
+    startCommand: npm run deploy:demo
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DB_DIALECT
+        value: postgres
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DEMO_SEED_ENABLED
+        value: "true"
+      - key: DEMO_ADMIN_EMAIL
+        sync: false
+      - key: DEMO_ADMIN_PASSWORD
+        sync: false
+      - key: DEMO_USER_PASSWORD
+        sync: false
+      - key: FRONTEND_URL
+        fromService:
+          type: web
+          name: colegio-demo-web
+          property: host
+
+  - type: web
+    name: colegio-demo-web
+    runtime: static
+    rootDir: proyectoColegio-frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: colegio-demo-api
+          property: host

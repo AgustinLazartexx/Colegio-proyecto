@@ -1,10 +1,12 @@
 import { motion } from "framer-motion";
 
+const MotionDiv = motion.div;
+
 const QuienesSomos = () => {
   return (
-    <section className="bg-secondary text-white py-20 px-6 md:px-20" id="quienes-somos">
-      <motion.div
-        className="max-w-4xl mx-auto text-center"
+    <section className="scroll-mt-20 bg-secondary px-4 py-14 text-white sm:px-6 sm:py-20 md:px-20" id="quienes-somos">
+      <MotionDiv
+        className="mx-auto max-w-4xl text-center"
         initial={{ opacity: 0, scale: 0.95 }}
         whileInView={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.6, ease: "easeOut" }}
@@ -15,7 +17,7 @@ const QuienesSomos = () => {
           Somos una institución educativa con más de <strong className="text-primary">30 años</strong> de trayectoria. Brindamos una educación con valores humanos,
           excelencia académica y orientación al mundo real. Nuestro compromiso es formar personas <span className="text-primary font-semibold">íntegras y capaces</span> de afrontar los desafíos del futuro.
         </p>
-      </motion.div>
+      </MotionDiv>
     </section>
   );
 };

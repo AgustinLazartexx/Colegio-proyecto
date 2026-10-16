@@ -1,116 +1,157 @@
-import Anuncio from "../models/Anuncio.js";
-import Materia from "../models/materia.model.js";
+import { randomUUID } from "node:crypto";
+import {
+  databaseId,
+  executeSql,
+  isDatabaseId,
+  queryRows,
+} from "../services/relationalData.service.js";
+
+const anuncioSelect = `SELECT HEX(a.id) AS _id, HEX(a.profesor_id) AS profesorId,
+  HEX(a.materia_id) AS materiaId, a.titulo, a.mensaje, a.fecha, a.createdAt, a.updatedAt,
+  p.nombre AS profesorNombre, p.email AS profesorEmail, m.nombre AS materiaNombre`;
+const anuncioJoins = `FROM school_anuncios a
+  JOIN users p ON p.id = a.profesor_id
+  JOIN materias m ON m.id = a.materia_id`;
+
+const anuncioPublico = (row) => ({
+  _id: row._id,
+  profesor: { _id: row.profesorId, nombre: row.profesorNombre, email: row.profesorEmail },
+  materia: { _id: row.materiaId, nombre: row.materiaNombre },
+  titulo: row.titulo,
+  mensaje: row.mensaje,
+  fecha: row.fecha,
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
+});
+
+const tieneAccesoMateria = async (materiaId, profesorId) => {
+  const rows = await queryRows(
+    `SELECT m.id FROM materias m
+     LEFT JOIN clases c ON c.materia_id = m.id
+     LEFT JOIN clase_profesores cp ON cp.clase_id = c.id AND cp.profesor_id = UNHEX(:profesorId)
+     WHERE m.id = UNHEX(:materiaId)
+       AND (m.profesor_id = UNHEX(:profesorId) OR cp.profesor_id IS NOT NULL)
+     LIMIT 1`,
+    { materiaId: databaseId(materiaId), profesorId: databaseId(profesorId) },
+  );
+  return rows.length > 0;
+};
 
 export const crearAnuncio = async (req, res) => {
+  const { materia, titulo, mensaje } = req.body;
+  if (!isDatabaseId(materia) || !titulo?.trim() || !mensaje?.trim()) {
+    return res.status(400).json({ msg: "Materia, título y mensaje son obligatorios." });
+  }
   try {
-    console.log("📩 Datos recibidos en crearAnuncio:", req.body);
-    console.log("👤 Usuario autenticado:", req.user);
-
-    const anuncio = new Anuncio({
-      profesor: req.user.id,
-      materia: req.body.materia, // ahora coincide con el frontend
-      titulo: req.body.titulo,
-      mensaje: req.body.mensaje   // ahora coincide con el frontend
-    });
-
-    await anuncio.save();
-    res.status(201).json({ msg: "Anuncio creado con éxito", anuncio });
+    if (!(await tieneAccesoMateria(materia, req.user.id))) {
+      return res.status(403).json({ msg: "No puedes publicar en esta materia." });
+    }
+    const id = randomUUID().replaceAll("-", "").toUpperCase();
+    await executeSql(
+      `INSERT INTO school_anuncios (id, profesor_id, materia_id, titulo, mensaje)
+       VALUES (UNHEX(:id), UNHEX(:profesorId), UNHEX(:materiaId), :titulo, :mensaje)`,
+      {
+        id,
+        profesorId: databaseId(req.user.id),
+        materiaId: databaseId(materia),
+        titulo: titulo.trim(),
+        mensaje: mensaje.trim(),
+      },
+    );
+    const [row] = await queryRows(`${anuncioSelect} ${anuncioJoins} WHERE a.id = UNHEX(:id) LIMIT 1`, { id });
+    return res.status(201).json({ msg: "Anuncio creado con éxito.", anuncio: anuncioPublico(row) });
   } catch (error) {
-    console.error("❌ Error en crearAnuncio:", error);
-    res.status(500).json({ msg: "Error al crear anuncio", error });
+    console.error("Error creando anuncio:", error);
+    return res.status(500).json({ msg: "Error al crear anuncio." });
   }
 };
 
-// Obtener todos los anuncios de un profesor
 export const obtenerAnunciosProfesor = async (req, res) => {
   try {
-    const profesorId = req.user.id; // viene del token
-    const anuncios = await Anuncio.find({ profesor: profesorId })
-      .populate("materia", "nombre")
-      .sort({ fecha: -1 });
-
-    res.json(anuncios);
-  } catch (err) {
-    console.error("❌ Error en obtenerAnunciosProfesor:", err);
-    res.status(500).json({ msg: "Error al obtener anuncios del profesor", error: err.message });
+    const rows = await queryRows(
+      `${anuncioSelect} ${anuncioJoins}
+       WHERE a.profesor_id = UNHEX(:profesorId) ORDER BY a.fecha DESC`,
+      { profesorId: databaseId(req.user.id) },
+    );
+    return res.json(rows.map(anuncioPublico));
+  } catch (error) {
+    console.error("Error consultando anuncios del profesor:", error);
+    return res.status(500).json({ msg: "Error al obtener anuncios." });
   }
 };
 
-// Actualizar anuncio (solo si es del profesor que lo creó)
 export const actualizarAnuncio = async (req, res) => {
+  const { id } = req.params;
+  const { titulo, mensaje, materia } = req.body;
+  if (!isDatabaseId(id)) return res.status(400).json({ msg: "ID de anuncio inválido." });
+  if (titulo !== undefined && (typeof titulo !== "string" || !titulo.trim())) return res.status(400).json({ msg: "El título no puede estar vacío." });
+  if (mensaje !== undefined && (typeof mensaje !== "string" || !mensaje.trim())) return res.status(400).json({ msg: "El mensaje no puede estar vacío." });
+  if (materia !== undefined && !isDatabaseId(materia)) return res.status(400).json({ msg: "ID de materia inválido." });
   try {
-    const { id } = req.params;
-
-    let anuncio = await Anuncio.findById(id);
-    if (!anuncio) {
-      return res.status(404).json({ msg: "Anuncio no encontrado" });
+    const [existing] = await queryRows(
+      `SELECT HEX(profesor_id) AS profesorId, HEX(materia_id) AS materiaId, titulo, mensaje
+       FROM school_anuncios WHERE id = UNHEX(:id) LIMIT 1`,
+      { id: databaseId(id) },
+    );
+    if (!existing) return res.status(404).json({ msg: "Anuncio no encontrado." });
+    if (existing.profesorId !== databaseId(req.user.id)) {
+      return res.status(403).json({ msg: "No autorizado para modificar este anuncio." });
     }
-
-    // Verificar que el profesor sea el dueño del anuncio
-    if (anuncio.profesor.toString() !== req.user.id) {
-      return res.status(403).json({ msg: "No autorizado para modificar este anuncio" });
+    const materiaId = materia || existing.materiaId;
+    if (!(await tieneAccesoMateria(materiaId, req.user.id))) {
+      return res.status(403).json({ msg: "No puedes publicar en esta materia." });
     }
-
-    anuncio.titulo = req.body.titulo || anuncio.titulo;
-    anuncio.mensaje = req.body.mensaje || anuncio.mensaje;
-    anuncio.materia = req.body.materia || anuncio.materia;
-
-    await anuncio.save();
-    res.json({ msg: "Anuncio actualizado con éxito", anuncio });
-  } catch (err) {
-    console.error("❌ Error en actualizarAnuncio:", err);
-    res.status(500).json({ msg: "Error al actualizar anuncio", error: err.message });
+    await executeSql(
+      `UPDATE school_anuncios SET titulo = :titulo, mensaje = :mensaje, materia_id = UNHEX(:materiaId)
+       WHERE id = UNHEX(:id)`,
+      {
+        id: databaseId(id),
+        titulo: titulo === undefined ? existing.titulo : titulo.trim(),
+        mensaje: mensaje === undefined ? existing.mensaje : mensaje.trim(),
+        materiaId: databaseId(materiaId),
+      },
+    );
+    const [row] = await queryRows(`${anuncioSelect} ${anuncioJoins} WHERE a.id = UNHEX(:id) LIMIT 1`, { id: databaseId(id) });
+    return res.json({ msg: "Anuncio actualizado con éxito.", anuncio: anuncioPublico(row) });
+  } catch (error) {
+    console.error("Error actualizando anuncio:", error);
+    return res.status(500).json({ msg: "Error al actualizar anuncio." });
   }
 };
 
-// Eliminar anuncio (solo si es del profesor que lo creó)
 export const eliminarAnuncio = async (req, res) => {
+  const { id } = req.params;
+  if (!isDatabaseId(id)) return res.status(400).json({ msg: "ID de anuncio inválido." });
   try {
-    const { id } = req.params;
-
-    const anuncio = await Anuncio.findById(id);
-    if (!anuncio) {
-      return res.status(404).json({ msg: "Anuncio no encontrado" });
+    const [existing] = await queryRows(
+      "SELECT HEX(profesor_id) AS profesorId FROM school_anuncios WHERE id = UNHEX(:id) LIMIT 1",
+      { id: databaseId(id) },
+    );
+    if (!existing) return res.status(404).json({ msg: "Anuncio no encontrado." });
+    if (existing.profesorId !== databaseId(req.user.id)) {
+      return res.status(403).json({ msg: "No autorizado para eliminar este anuncio." });
     }
-
-    if (anuncio.profesor.toString() !== req.user.id) {
-      return res.status(403).json({ msg: "No autorizado para eliminar este anuncio" });
-    }
-
-    await anuncio.deleteOne();
-    res.json({ msg: "Anuncio eliminado con éxito" });
-  } catch (err) {
-    console.error("❌ Error en eliminarAnuncio:", err);
-    res.status(500).json({ msg: "Error al eliminar anuncio", error: err.message });
+    await executeSql("DELETE FROM school_anuncios WHERE id = UNHEX(:id)", { id: databaseId(id) });
+    return res.json({ msg: "Anuncio eliminado con éxito." });
+  } catch (error) {
+    console.error("Error eliminando anuncio:", error);
+    return res.status(500).json({ msg: "Error al eliminar anuncio." });
   }
 };
 
 export const obtenerAnunciosAlumno = async (req, res) => {
   try {
-    // CAMBIO: Obtenemos el ID del token, no de los parámetros de la URL
-    const idAlumno = req.user.id; 
-
-    console.log(`--- Buscando anuncios para alumno: ${idAlumno} ---`);
-
-    // 1. Buscar todas las materias donde este alumno está inscrito
-    // (Asumiendo que tu modelo Materia tiene un array 'alumnos')
-    const materias = await Materia.find({ alumnos: idAlumno }).select("_id");
-    
-    const materiaIds = materias.map(m => m._id);
-
-    if (materiaIds.length === 0) {
-      return res.json([]); // No cursa materias, no hay anuncios
-    }
-
-    // 2. Buscar anuncios que pertenezcan a esas materias
-    const anuncios = await Anuncio.find({ materia: { $in: materiaIds } })
-      .populate("profesor", "nombre email") // Traemos datos del profe
-      .populate("materia", "nombre")        // Traemos nombre de la materia
-      .sort({ fecha: -1 });                 // Más nuevos primero
-
-    res.json(anuncios);
-  } catch (err) {
-    console.error("❌ Error en obtenerAnunciosAlumno:", err);
-    res.status(500).json({ message: "Error al obtener anuncios", error: err.message });
+    const rows = await queryRows(
+      `${anuncioSelect.replace("SELECT ", "SELECT DISTINCT ")} ${anuncioJoins}
+       JOIN clases c ON c.materia_id = a.materia_id
+       JOIN clase_alumnos ca ON ca.clase_id = c.id
+       WHERE ca.alumno_id = UNHEX(:alumnoId)
+       ORDER BY a.fecha DESC`,
+      { alumnoId: databaseId(req.user.id) },
+    );
+    return res.json(rows.map(anuncioPublico));
+  } catch (error) {
+    console.error("Error consultando anuncios del alumno:", error);
+    return res.status(500).json({ msg: "Error al obtener anuncios." });
   }
 };

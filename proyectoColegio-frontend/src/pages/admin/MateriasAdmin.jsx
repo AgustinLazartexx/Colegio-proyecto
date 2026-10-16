@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { toast } from "react-toastify";
-import { Plus, Search, Edit2, Trash2, BookOpen, X, Loader2, User, GraduationCap, Users, Filter, Book } from "lucide-react";
+import { Plus, Search, Edit2, Trash2, BookOpen, X, Loader2, User, GraduationCap, Users, Filter, Book, ListChecks } from "lucide-react";
 import Swal from "sweetalert2";
 import { 
   getMaterias, 
@@ -16,6 +16,7 @@ const MateriasAdmin = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterAnio, setFilterAnio] = useState("");
+  const [filterDivision, setFilterDivision] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editingMateria, setEditingMateria] = useState(null);
   const [formData, setFormData] = useState({
@@ -100,7 +101,7 @@ const MateriasAdmin = () => {
           await deleteMateria(materia._id);
           setMaterias(prev => prev.filter(m => m._id !== materia._id));
           Swal.fire("¡Eliminada!", "La materia ha sido eliminada.", "success");
-        } catch (error) {
+        } catch {
           toast.error("Error al eliminar la materia");
         }
       }
@@ -108,10 +109,12 @@ const MateriasAdmin = () => {
   };
 
   const filteredMaterias = materias.filter(m => {
-    const matchSearch = m.nombre.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchSearch = m.nombre.toLowerCase().includes(searchTerm.trim().toLowerCase());
     const matchAnio = !filterAnio || String(m.anio) === filterAnio;
-    return matchSearch && matchAnio;
+    const matchDivision = !filterDivision || String(m.division || "").toUpperCase() === filterDivision;
+    return matchSearch && matchAnio && matchDivision;
   });
+  const hasActiveFilters = Boolean(searchTerm.trim() || filterAnio || filterDivision);
 
   if (loading) {
     return (
@@ -180,7 +183,7 @@ const MateriasAdmin = () => {
           <div className="p-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Búsqueda por nombre */}
-              <div className="lg:col-span-2">
+              <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Buscar por nombre
                 </label>
@@ -193,6 +196,23 @@ const MateriasAdmin = () => {
                     onChange={e => setSearchTerm(e.target.value)}
                     className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                   />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Filtrar por división
+                </label>
+                <div className="relative">
+                  <select
+                    value={filterDivision}
+                    onChange={e => setFilterDivision(e.target.value)}
+                    className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 appearance-none cursor-pointer hover:border-gray-300 font-medium text-gray-700"
+                  >
+                    <option value="">Todas las divisiones</option>
+                    {divisiones.map(d => <option key={d} value={d}>División {d}</option>)}
+                  </select>
+                  <ListChecks className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={18} />
                 </div>
               </div>
 
@@ -220,7 +240,7 @@ const MateriasAdmin = () => {
             </div>
 
             {/* Contador de resultados */}
-            {(searchTerm || filterAnio) && (
+            {hasActiveFilters && (
               <div className="mt-4 flex items-center gap-2 text-sm text-blue-600">
                 <span className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></span>
                 <span className="font-medium">
@@ -232,7 +252,17 @@ const MateriasAdmin = () => {
         </div>
 
         {/* Grid de Materias */}
-        {filteredMaterias.length === 0 ? (
+        {!hasActiveFilters ? (
+          <div className="bg-white rounded-2xl shadow-md border-2 border-dashed border-indigo-200 p-16 text-center animate-in fade-in zoom-in duration-500">
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Search className="w-12 h-12 text-indigo-400 animate-pulse" />
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Busca una materia</h3>
+            <p className="text-gray-500 max-w-lg mx-auto">
+              Escribe su nombre o selecciona año y división para ver las materias que necesitas.
+            </p>
+          </div>
+        ) : filteredMaterias.length === 0 ? (
           <div className="bg-white rounded-2xl shadow-md border-2 border-dashed border-gray-300 p-16 text-center">
             <div className="bg-gradient-to-br from-blue-50 to-indigo-50 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6">
               <BookOpen className="w-12 h-12 text-blue-400" />
@@ -241,24 +271,15 @@ const MateriasAdmin = () => {
               No se encontraron materias
             </h3>
             <p className="text-gray-500 mb-6">
-              {searchTerm || filterAnio ? 'Intenta ajustar los filtros de búsqueda' : 'Comienza creando tu primera materia'}
+              Intenta ajustar los filtros de búsqueda
             </p>
-            {!searchTerm && !filterAnio && (
-              <button 
-                onClick={() => handleOpenModal()} 
-                className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition-all duration-200 inline-flex items-center gap-2 font-semibold"
-              >
-                <Plus size={20} />
-                Crear Primera Materia
-              </button>
-            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {filteredMaterias.map(materia => (
               <div 
                 key={materia._id} 
-                className="bg-white rounded-2xl shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100 overflow-hidden group hover:scale-[1.02]"
+                className="bg-white rounded-2xl shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100 overflow-hidden group hover:scale-[1.02] animate-in fade-in slide-in-from-bottom-2"
               >
                 {/* Header de la tarjeta */}
                 <div className="bg-gradient-to-r from-blue-500 to-indigo-600 p-5 relative">

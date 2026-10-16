@@ -1,8 +1,13 @@
 import axios from 'axios';
 
+const configuredBackendUrl = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const BACKEND_URL = configuredBackendUrl.startsWith("http")
+  ? configuredBackendUrl.replace(/\/+$/, "")
+  : `https://${configuredBackendUrl.replace(/\/+$/, "")}`;
+
 // 1. Configuración inicial
 const api = axios.create({
-  baseURL: "https://colegio-proyecto-backend.onrender.com/api"
+  baseURL: `${BACKEND_URL}/api`
 });
 
 // 2. Interceptor de Token
@@ -14,6 +19,12 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+export const getUploadUrl = (path) => `${BACKEND_URL}/${path}`;
+export const getBackendUrl = () => BACKEND_URL;
+export const BACKEND_API_URL = `${BACKEND_URL}/api`;
+export const solicitarRecuperacion = (email) => api.post('/auth/forgot-password', { email });
+export const restablecerPassword = (token, password) => api.post('/auth/reset-password', { token, password });
+export { BACKEND_URL };
 export default api;
 
 // ==========================================
@@ -89,6 +100,9 @@ export const obtenerAsistenciaFecha = (claseId, fecha) => api.get('/asistencias'
 export const obtenerAsistenciasPorClaseYFecha = (claseId, fecha) => api.get('/asistencias', { params: { claseId, fecha } });
 export const getReporteAsistencias = (claseId, fecha) => api.get('/asistencias/reporte-detallado', { params: { claseId, fecha } });
 export const getMisAsistenciasAlumno = () => api.get('/asistencias/alumno/mis-asistencias');
+export const getAsistenciaGeneral = (anio, division, fecha) => api.get('/asistencias/general', { params: { anio, division, fecha } });
+export const registrarAsistenciaGeneral = (data) => api.post('/asistencias/general', data);
+export const compararAsistencias = (anio, division, fecha) => api.get('/asistencias/comparacion', { params: { anio, division, fecha } });
 
 // ==========================================
 //       NOTAS Y TAREAS

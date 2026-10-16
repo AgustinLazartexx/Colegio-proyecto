@@ -1,7 +1,7 @@
 // src/components/CrearTareaModal.jsx
 import { useState } from "react";
 import { X } from "lucide-react";
-import axios from "axios";
+import api from "../api/api";
 import { toast } from "react-toastify";
 
 const CrearTareaModal = ({ materiaId, onClose }) => {
@@ -37,10 +37,10 @@ const CrearTareaModal = ({ materiaId, onClose }) => {
 
     try {
       setLoading(true);
-      await axios.post("http://localhost:5000/api/tareas", formData, {
+      await api.post("/tareas", formData, {
         headers: {
-    "Content-Type": "multipart/form-data",
-    Authorization: `Bearer ${token}`,},
+          "Content-Type": "multipart/form-data",
+        },
       });
       toast.success("Tarea creada correctamente");
       onClose(); // Cierra el modal

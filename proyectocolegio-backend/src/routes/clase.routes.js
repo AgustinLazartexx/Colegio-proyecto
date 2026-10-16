@@ -25,7 +25,7 @@ const profesorSolo = [checkAuth, checkRole("profesor")];
 router.get("/", adminSolo, obtenerTodasLasClases);
 router.get("/misclases", profesorSolo, obtenerClasesProfesor);
 router.post("/", adminSolo, crearClase);
-router.get("/alumno/mis-clases", checkAuth, getMisClasesAlumno);
+router.get("/alumno/mis-clases", checkAuth, checkRole("alumno"), getMisClasesAlumno);
 
 // --- Rutas Específicas por ID ---
 // NOTA: Tu controlador lee 'req.params.claseId', así que usamos ':claseId'

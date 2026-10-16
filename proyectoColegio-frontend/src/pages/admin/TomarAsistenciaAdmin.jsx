@@ -1,129 +1,54 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { toast } from 'react-toastify';
 import { CalendarCheck, UserCheck, Save, School, Loader2, Users } from 'lucide-react';
-
-
-
-// 🔹 CORRECCIÓN: Importar todo desde 'api.js'
 import {
-  getAlumnosPorCurso,
-  obtenerAsistenciasPorClaseYFecha,
-  registrarAsistencias,
-  getTodasLasClases // Importar la función correcta
-} from '../../api/api'; // <-- Apuntar al archivo api.js
+getAsistenciaGeneral,
+registrarAsistenciaGeneral,
+} from '../../api/api';
 
 const TomarAsistenciaAdmin = () => {
-  const [anio, setAnio] = useState('');
-  const [division, setDivision] = useState('');
-  const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
-  const [alumnos, setAlumnos] = useState([]);
-  const [asistencias, setAsistencias] = useState({});
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [allClases, setAllClases] = useState([]);
+const [anio, setAnio] = useState('');
+const [division, setDivision] = useState('');
+const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
+const [alumnos, setAlumnos] = useState([]);
+const [asistencias, setAsistencias] = useState({});
+const [loading, setLoading] = useState(false);
+const [saving, setSaving] = useState(false);
+const [filtrosCargados, setFiltrosCargados] = useState(null);
 
-  const aniosDisponibles = ['1', '2', '3', '4', '5', '6'];
-  const divisionesDisponibles = ['A', 'B', 'C'];
+const aniosDisponibles = ['1', '2', '3', '4', '5', '6'];
+const divisionesDisponibles = ['A', 'B', 'C'];
 
-  // 1. Cargar la lista de TODAS las clases
-  useEffect(() => {
-    const loadClases = async () => {
-      try {
-        // 🔹 CORRECCIÓN: Usar la función importada 'getTodasLasClases'
-        const res = await getTodasLasClases(); 
-        
-        // 🔹 CORRECCIÓN: El error estaba aquí. 'res.data' sí existe ahora.
-        setAllClases(res.data.clases || []);
-        
-        console.log("CLASES CARGADAS DESDE LA API:", res.data.clases);
+const fetchAlumnosYAsistencia = async () => {
+  if (!anio || !division || !fecha) {
+    toast.info('Selecciona año, división y fecha para cargar la lista.');
+    return;
+  }
+  setLoading(true);
+  setAlumnos([]);
+  setAsistencias({});
+  setFiltrosCargados(null);
+  try {
+    const { data } = await getAsistenciaGeneral(anio, division, fecha);
+    setAlumnos(data);
+    setAsistencias(Object.fromEntries(data.map(({ _id, estado }) => [_id, estado || 'presente'])));
+    setFiltrosCargados({ anio, division, fecha });
+    if (data.length === 0) toast.warn(`No se encontraron alumnos para ${anio}° ${division}.`);
+  } catch (err) {
+    console.error(err);
+    toast.error(err.response?.data?.msg || 'Error al cargar alumnos o asistencias.');
+  } finally {
+    setLoading(false);
+  }
+};
 
-      } catch (e) {
-        toast.error('Error: No se pudo cargar la lista de clases.');
-        console.error("Error cargando clases:", e);
-      }
-    };
-    loadClases();
-  }, []);
-
-  // 2. (Esta función está bien)
-  const findGeneralClaseId = () => {
-    if (!anio || !division) return null;
-    console.log(`Buscando clase con Año: "${anio}" y División: "${division}"`);
-
-    const generalClass = allClases.find((c) => {
-      const anioMatch = String(c.anio) === String(anio);
-      const divisionMatch = String(c.division).toUpperCase() === String(division).toUpperCase();
-      const materiaMatch = c.materia && c.materia.nombre.toLowerCase().includes('asistencia general');
-      return anioMatch && divisionMatch && materiaMatch;
-    });
-    console.log('Clase "General" encontrada:', generalClass);
-    return generalClass ? generalClass.id : null; 
-  };
-
-  // 3. Cargar alumnos y asistencias previas
-  const fetchAlumnosYAsistencia = async () => {
-    if (!anio || !division || !fecha) {
-      toast.info('Selecciona año, división y fecha para cargar la lista.');
-      return;
-    }
-    setLoading(true);
-    setAlumnos([]);
-    setAsistencias({});
-    const claseId = findGeneralClaseId(); 
-
-    if (!claseId) {
-      toast.error(
-        `No se encontró una clase de "Asistencia General" para ${anio}° ${division}.`
-      );
-      toast.info('Asegúrate de crearla en el panel "Gestionar Clases".');
-      setLoading(false);
-      return;
-    }
-
-    try {
-      // 3b. Cargar alumnos
-      // 🔹 CORRECCIÓN: 'getAlumnosPorCurso' ahora devuelve la respuesta de Axios
-      const resAlumnos = await getAlumnosPorCurso(anio, division);
-      const alumnosEncontrados = resAlumnos.data || []; // La data está en .data
-      setAlumnos(alumnosEncontrados);
-
-      if (alumnosEncontrados.length === 0) {
-        toast.warn(`No se encontraron alumnos para ${anio}° ${division}.`);
-        setLoading(false);
-        return;
-      }
-
-      // 3c. Cargar asistencias (Esta función ya devuelve la data)
-      const asistenciasGuardadas = await obtenerAsistenciasPorClaseYFecha(
-        claseId,
-        fecha
-      );
-
-      // 3d. Mezclar
-      const inicial = {};
-      alumnosEncontrados.forEach((a) => {
-        inicial[a._id] = asistenciasGuardadas[a._id] || 'presente';
-      });
-      setAsistencias(inicial);
-    } catch (err) {
-      console.error(err);
-      toast.error('Error al cargar alumnos o asistencias.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // (El resto de las funciones no necesitan cambios)
-
-  // 🔹 Cambiar estado de asistencia (sin cambios)
-  const cambiarEstadoAsistencia = (alumnoId, estado) => {
+const cambiarEstadoAsistencia = (alumnoId, estado) => {
     setAsistencias((prev) => ({
       ...prev,
       [alumnoId]: estado,
     }));
   };
 
-  // 🔹 Marcar todos como... (sin cambios)
   const marcarTodos = (estado) => {
     if (alumnos.length === 0) return;
     const nuevoEstado = {};
@@ -133,35 +58,26 @@ const TomarAsistenciaAdmin = () => {
     setAsistencias(nuevoEstado);
   };
 
-  // 4. 🔹 Guardar asistencia (LÓGICA Y RUTA CORREGIDAS)
   const guardarAsistencia = async () => {
     if (alumnos.length === 0) {
       toast.error('No hay alumnos en la lista para guardar.');
       return;
     }
 
-    const claseId = findGeneralClaseId();
-    if (!claseId) {
-      toast.error(
-        `Error: No se pudo encontrar la clase "Asistencia General" para ${anio}° ${division}.`
-      );
+    if (!filtrosCargados || filtrosCargados.anio !== anio || filtrosCargados.division !== division || filtrosCargados.fecha !== fecha) {
+      toast.error('Vuelve a cargar los alumnos para el curso y fecha seleccionados.');
       return;
     }
 
     setSaving(true);
     try {
-      const payload = {
-        claseId: claseId, 
-        fecha: fecha,
-        asistencias: Object.entries(asistencias).map(([alumno, estado]) => ({
-          alumno,
-          estado,
-        })),
-      };
-
-      await registrarAsistencias(payload); 
-
-      toast.success('Asistencia registrada correctamente 🎯');
+      await registrarAsistenciaGeneral({
+        anio,
+        division,
+        fecha,
+        asistencias: Object.entries(asistencias).map(([alumno, estado]) => ({ alumno, estado })),
+      });
+      toast.success('Asistencia general registrada correctamente.');
     } catch (err) {
       console.error(err);
       toast.error(err.response?.data?.msg || 'Error al guardar asistencia');
@@ -170,14 +86,12 @@ const TomarAsistenciaAdmin = () => {
     }
   };
 
-  // --- Constantes de Estilo (sin cambios) ---
   const inputStyle = 'w-full border border-gray-300 p-3 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white shadow-sm disabled:bg-gray-50';
   const btnPrimaryStyle = 'inline-flex items-center justify-center bg-blue-600 text-white font-bold px-4 py-3 rounded-lg text-sm shadow hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6 md:p-8">
       <div className="max-w-4xl mx-auto space-y-6">
-        {/* Header (sin cambios) */}
         <div className="text-center mb-6">
           <div className="flex items-center justify-center gap-3 mb-4">
             <div className="p-3 bg-blue-600 rounded-full shadow-md">
@@ -192,7 +106,6 @@ const TomarAsistenciaAdmin = () => {
           </p>
         </div>
 
-        {/* Selección de curso (sin cambios) */}
         <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-200">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <input
@@ -225,7 +138,6 @@ const TomarAsistenciaAdmin = () => {
                 </option>
               ))}
             </select>
-            {/* El botón ahora llama a la nueva función */}
             <button
               onClick={fetchAlumnosYAsistencia}
               disabled={loading}
@@ -241,7 +153,6 @@ const TomarAsistenciaAdmin = () => {
           </div>
         </div>
 
-        {/* Lista de alumnos (sin cambios estéticos) */}
         {loading ? (
           <div className="text-center py-10">
             <Loader2 className="animate-spin h-10 w-10 text-blue-600 mx-auto" />

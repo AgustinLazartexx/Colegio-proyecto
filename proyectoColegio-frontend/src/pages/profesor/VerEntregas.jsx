@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import axios from "axios";
+import api, { BACKEND_URL } from "../../api/api";
 import { useAuth } from "../../context/AuthContext";
 import { toast } from "react-toastify";
 import {
@@ -65,7 +65,7 @@ const EntregaCard = ({ entrega, onCorregir }) => {
 
         <div className="mt-4 mb-6">
           {entrega.archivo ? (
-            <a href={`http://localhost:5000/uploads/${entrega.archivo}`} target="_blank" rel="noopener noreferrer"
+            <a href={`${BACKEND_URL}/uploads/${entrega.archivo}`} target="_blank" rel="noopener noreferrer"
               className="inline-flex items-center gap-2 text-blue-600 font-medium hover:underline transition-colors">
               <Download size={20} /> Descargar archivo
             </a>
@@ -131,9 +131,7 @@ const VerEntregas = () => {
       setLoadingTareas(true);
       setError(null);
       // CAMBIO: Se usa la ruta correcta y única del backend. No más doble 'try/catch'.
-      const res = await axios.get(`http://localhost:5000/api/tareas/by-profesor/${userId}`, {
-        headers: { Authorization: `Bearer ${authToken}` },
-      });
+      const res = await api.get(`/tareas/by-profesor/${userId}`);
       setTareas(res.data || []);
     } catch (err) {
       console.error("Error al cargar tareas:", err.response?.data || err.message);
@@ -187,9 +185,7 @@ const VerEntregas = () => {
     setLoadingEntregas(true); // Usar el loader específico
     try {
       // CAMBIO: Se usa la ruta correcta y única del backend.
-      const res = await axios.get(`http://localhost:5000/api/entregas/tarea/${tareaId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await api.get(`/entregas/tarea/${tareaId}`);
       setEntregas(res.data || []);
     } catch (err) {
       console.error("Error al cargar entregas:", err.response?.data || err.message);
@@ -203,10 +199,9 @@ const VerEntregas = () => {
   // CAMBIO: La lógica de corregir se pasa como prop al componente hijo 'EntregaCard'.
   const handleCorregir = async (entregaId, nota, comentario) => {
     try {
-      await axios.put(
-        `http://localhost:5000/api/entregas/${entregaId}`,
-        { nota: nota === "" ? null : nota, comentario }, // Enviar null si la nota está vacía
-        { headers: { Authorization: `Bearer ${token}` } }
+      await api.put(
+        `/entregas/${entregaId}`,
+        { nota: nota === "" ? null : nota, comentario }
       );
       toast.success("Entrega corregida con éxito.");
       // Actualizar el estado local para reflejar el cambio instantáneamente

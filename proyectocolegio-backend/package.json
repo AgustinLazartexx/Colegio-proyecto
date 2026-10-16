@@ -4,8 +4,19 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon src/index.js"
+    "test": "node --test",
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "migrate": "sequelize db:migrate",
+    "migrate:undo": "sequelize db:migrate:undo:all",
+    "migrate:auth": "node src/scripts/migrateAuthColumns.js",
+    "seed:local": "node src/scripts/seedLocalUsers.js",
+    "db:create:local": "node src/scripts/createLocalDatabase.js",
+    "migrate:academics": "node src/scripts/migrateAcademicRelations.js",
+    "seed:academics": "node src/scripts/seedLocalAcademics.js",
+    "seed:demo": "node src/scripts/seedDemoData.js",
+    "deploy:demo": "npm run migrate:academics && npm run seed:demo && npm start",
+    "test:postgres-compat": "node --test src/database/postgresCompat.test.js"
   },
   "keywords": [],
   "author": "",
@@ -25,9 +36,13 @@
     "morgan": "^1.10.1",
     "multer": "^2.0.1",
     "mysql2": "^3.14.1",
-    "path": "^0.12.7"
+    "nodemailer": "^10.1.1",
+    "path": "^0.12.7",
+    "pg": "^8.23.1",
+    "sequelize": "^6.37.8"
   },
   "devDependencies": {
-    "nodemon": "^3.1.10"
+    "nodemon": "^3.1.10",
+    "sequelize-cli": "^6.6.5"
   }
 }

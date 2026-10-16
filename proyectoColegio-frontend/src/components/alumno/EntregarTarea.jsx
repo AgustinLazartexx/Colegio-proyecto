@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import axios from "axios";
+import api from "../../api/api";
 
 const EntregarTarea = ({ tareaId, alumnoId, token }) => {
   const [archivo, setArchivo] = useState(null);
@@ -26,10 +26,9 @@ const EntregarTarea = ({ tareaId, alumnoId, token }) => {
 
     try {
       setLoading(true);
-      const res = await axios.post("http://localhost:5000/api/entregas", formData, {
+      const res = await api.post("/entregas", formData, {
         headers: {
           "Content-Type": "multipart/form-data",
-          Authorization: `Bearer ${token}`,
         },
       });
       setMensaje("✅ Entrega enviada correctamente.");

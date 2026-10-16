@@ -1,6 +1,6 @@
 // src/components/ListaAlumnos.jsx
 import { useEffect, useState } from "react";
-import axios from "axios";
+import api from "../api/api";
 import { X } from "lucide-react";
 
 const ListaAlumnos = ({ materiaId, onClose }) => {
@@ -10,7 +10,7 @@ const ListaAlumnos = ({ materiaId, onClose }) => {
   useEffect(() => {
     const fetchAlumnos = async () => {
       try {
-        const res = await axios.get(`/api/inscripciones/materia/${materiaId}`);
+        const res = await api.get(`/inscripciones/materia/${materiaId}`);
         setAlumnos(res.data);
       } catch (error) {
         console.error("Error al obtener los alumnos:", error);

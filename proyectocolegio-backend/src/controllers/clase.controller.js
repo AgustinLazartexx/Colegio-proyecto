@@ -1,374 +1,514 @@
-import Clase from "../models/Clases.js";
-import Materia from "../models/materia.model.js";
-import mongoose from "mongoose";
-import User from "../models/User.js"; // <-- CORRECCIÓN: Importación añadida
+import { randomUUID } from "node:crypto";
+import { QueryTypes } from "sequelize";
+import { databaseId, isDatabaseId, sequelize } from "../services/academicData.service.js";
 
-const handleNotFoundError = (res, type) => res.status(404).json({ msg: `${type} no encontrada` });
-const handleInvalidIdError = (res, type, id) => res.status(400).json({ msg: `ID de ${type} inválido: ${id}` });
+const validDays = new Set(["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]);
+const validId = (id) => typeof id === "string" && /^[\da-f]{32}$/i.test(String(id).replaceAll("-", ""));
+
+const classSelect = `
+  SELECT
+    HEX(c.id) AS _id,
+    HEX(c.id) AS id,
+    c.anio,
+    c.division,
+    c.diaSemana,
+    TIME_FORMAT(c.horaInicio, '%H:%i') AS horaInicio,
+    TIME_FORMAT(c.horaFin, '%H:%i') AS horaFin,
+    c.aula,
+    HEX(m.id) AS materiaId,
+    m.nombre AS materiaNombre,
+    m.anio AS materiaAnio,
+    m.division AS materiaDivision,
+    HEX(mp.id) AS materiaProfesorId,
+    mp.nombre AS materiaProfesorNombre,
+    mp.email AS materiaProfesorEmail,
+    HEX(p.id) AS profesorId,
+    p.nombre AS profesorNombre,
+    p.email AS profesorEmail
+  FROM clases c
+  JOIN materias m ON m.id = c.materia_id
+  LEFT JOIN users mp ON mp.id = m.profesor_id
+  LEFT JOIN clase_profesores cp ON cp.clase_id = c.id
+  LEFT JOIN users p ON p.id = cp.profesor_id
+`;
+
+const formatClasses = (rows) => {
+  const classes = new Map();
+  for (const row of rows) {
+    let current = classes.get(row._id);
+    if (!current) {
+      current = {
+        _id: row._id,
+        id: row.id,
+        anio: row.anio,
+        division: row.division,
+        diaSemana: row.diaSemana,
+        dia: row.diaSemana,
+        horaInicio: row.horaInicio,
+        horaFin: row.horaFin,
+        horarioInicio: row.horaInicio,
+        horarioFin: row.horaFin,
+        horario: `${row.horaInicio} - ${row.horaFin}`,
+        aula: row.aula,
+        materia: {
+          _id: row.materiaId,
+          id: row.materiaId,
+          nombre: row.materiaNombre,
+          anio: row.materiaAnio,
+          division: row.materiaDivision,
+          profesor: row.materiaProfesorId
+            ? {
+                _id: row.materiaProfesorId,
+                id: row.materiaProfesorId,
+                nombre: row.materiaProfesorNombre,
+                email: row.materiaProfesorEmail,
+              }
+            : null,
+        },
+        profesores: [],
+      };
+      classes.set(row._id, current);
+    }
+    if (row.profesorId && !current.profesores.some((teacher) => teacher._id === row.profesorId)) {
+      current.profesores.push({
+        _id: row.profesorId,
+        id: row.profesorId,
+        nombre: row.profesorNombre,
+        email: row.profesorEmail,
+      });
+    }
+  }
+  return [...classes.values()];
+};
+
+const getClasses = async ({ filters = [], replacements = {}, orderBy = "c.anio, c.division, c.diaSemana, c.horaInicio" } = {}) => {
+  const where = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+  const rows = await sequelize.query(
+    `${classSelect} ${where} ORDER BY ${orderBy}`,
+    { replacements, type: QueryTypes.SELECT },
+  );
+  return formatClasses(rows);
+};
+
+const validateTime = (time) =>
+  typeof time === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(time);
+
+const normalizeTeachers = (teacherIds) => {
+  if (!Array.isArray(teacherIds) || !teacherIds.length) return null;
+  const uniqueIds = [...new Set(teacherIds.map((id) => String(id)))];
+  if (uniqueIds.some((id) => !isDatabaseId(id))) return null;
+  return uniqueIds.map(databaseId);
+};
+
+const getTeacherIds = async (teacherIds, transaction) => {
+  const replacements = {};
+  const placeholders = teacherIds.map((id, index) => {
+    const key = `teacher${index}`;
+    replacements[key] = id;
+    return `UNHEX(:${key})`;
+  });
+  const teachers = await sequelize.query(
+    `SELECT HEX(id) AS id FROM users
+     WHERE id IN (${placeholders.join(", ")}) AND rol = 'profesor' AND isActive = TRUE`,
+    { replacements, type: QueryTypes.SELECT, transaction },
+  );
+  return teachers.length === teacherIds.length;
+};
+
+const getConflict = async ({ teacherIds, diaSemana, horaInicio, horaFin, excludeId, transaction }) => {
+  if (!teacherIds.length) return null;
+  const replacements = { diaSemana, horaInicio, horaFin };
+  const teacherParameters = teacherIds.map((id, index) => {
+    const key = `teacher${index}`;
+    replacements[key] = id;
+    return `UNHEX(:${key})`;
+  });
+  const excludeClause = excludeId ? "AND c.id <> UNHEX(:excludeId)" : "";
+  if (excludeId) replacements.excludeId = databaseId(excludeId);
+
+  const [conflict] = await sequelize.query(
+    `SELECT c.diaSemana, TIME_FORMAT(c.horaInicio, '%H:%i') AS horaInicio,
+            TIME_FORMAT(c.horaFin, '%H:%i') AS horaFin, u.nombre AS profesorNombre
+     FROM clases c
+     JOIN clase_profesores cp ON cp.clase_id = c.id
+     JOIN users u ON u.id = cp.profesor_id
+     WHERE c.diaSemana = :diaSemana
+       AND c.horaInicio < :horaFin AND c.horaFin > :horaInicio
+       AND cp.profesor_id IN (${teacherParameters.join(", ")})
+       ${excludeClause}
+     LIMIT 1`,
+    { replacements, type: QueryTypes.SELECT, transaction },
+  );
+  return conflict ?? null;
+};
+
+const getClassId = (id) => {
+  if (!validId(id)) return null;
+  return databaseId(id);
+};
+
+const findClassById = async (id, transaction) => {
+  const classes = await getClasses({
+    filters: ["c.id = UNHEX(:id)"],
+    replacements: { id: databaseId(id) },
+    orderBy: "c.diaSemana, c.horaInicio",
+  });
+  return classes[0] ?? null;
+};
 
 export const obtenerClasePorId = async (req, res) => {
-  try {
-    const { claseId } = req.params;
-
-    // --- MEJORA: Validación de ID ---
-    if (!mongoose.Types.ObjectId.isValid(claseId)) {
-      return handleInvalidIdError(res, "clase", claseId);
-    }
-    
-    // Usamos populate para traernos el nombre de la materia
-    const clase = await Clase.findById(claseId).populate('materia', 'nombre');
-
-    if (!clase) {
-      return res.status(404).json({ msg: "Clase no encontrada" });
-    }
-
-    res.json(clase);
-
-  } catch (error) {
-    console.error("Error al obtener clase por ID:", error);
-    res.status(500).json({ msg: "Error interno al obtener la clase" });
-  }
+  const id = getClassId(req.params.claseId);
+  if (!id) return res.status(400).json({ msg: "ID de clase inválido." });
+  try {
+    const clase = await findClassById(id);
+    if (!clase) return res.status(404).json({ msg: "Clase no encontrada." });
+    return res.json(clase);
+  } catch (error) {
+    console.error("Error al obtener clase:", error);
+    return res.status(500).json({ msg: "Error al obtener la clase." });
+  }
 };
 
-
-
-
-// Crear clase (solo admin)
 export const crearClase = async (req, res) => {
-  try {
-    const { materia, profesores, diaSemana, horaInicio, horaFin } = req.body;
+  const { materia, profesores, diaSemana, horaInicio, horaFin, aula } = req.body;
+  const materiaId = getClassId(materia);
+  const teacherIds = normalizeTeachers(profesores);
 
-    if (!materia || !profesores || !Array.isArray(profesores) || profesores.length === 0 || !diaSemana || !horaInicio || !horaFin) {
-       return res.status(400).json({ msg: "Faltan campos requeridos (materia, profesores, diaSemana, horaInicio, horaFin)" });
-    }
+  if (!materiaId || !teacherIds || !validDays.has(diaSemana) || !validateTime(horaInicio) || !validateTime(horaFin)) {
+    return res.status(400).json({
+      msg: "Materia, profesores, día y horarios válidos son obligatorios.",
+    });
+  }
+  if (horaInicio >= horaFin) {
+    return res.status(400).json({ msg: "La hora de inicio debe ser anterior a la hora de fin." });
+  }
 
-    if (!mongoose.Types.ObjectId.isValid(materia)) {
-        return handleInvalidIdError(res, "materia", materia);
-    }
-    for (const profId of profesores) {
-      if (!mongoose.Types.ObjectId.isValid(profId)) {
-        return handleInvalidIdError(res, "profesor", profId);
-      }
-    }
+  const classId = randomUUID().replaceAll("-", "").toUpperCase();
+  try {
+    await sequelize.transaction(async (transaction) => {
+      const [subject] = await sequelize.query(
+        `SELECT anio, division FROM materias WHERE id = UNHEX(:materiaId) LIMIT 1`,
+        { replacements: { materiaId }, type: QueryTypes.SELECT, transaction },
+      );
+      if (!subject) {
+        const error = new Error("MATERIA_NOT_FOUND");
+        throw error;
+      }
+      if (subject.anio == null || !subject.division) {
+        const error = new Error("MATERIA_COURSE_REQUIRED");
+        throw error;
+      }
+      if (!(await getTeacherIds(teacherIds, transaction))) {
+        const error = new Error("INVALID_TEACHER");
+        throw error;
+      }
 
-    const materiaExiste = await Materia.findById(materia);
-    if (!materiaExiste) { 
-        return handleNotFoundError(res, "Materia"); 
-    }
-    
-    const anioClase = materiaExiste.anio;
-    const divisionClase = materiaExiste.division;
-    
-    if (anioClase == null || divisionClase == null) { 
-         return res.status(400).json({ msg: "La materia seleccionada no tiene el año o división definidos." });
-    }
+      const conflict = await getConflict({
+        teacherIds,
+        diaSemana,
+        horaInicio,
+        horaFin,
+        transaction,
+      });
+      if (conflict) {
+        const error = new Error("SCHEDULE_CONFLICT");
+        error.conflict = conflict;
+        throw error;
+      }
 
-    const conflicto = await Clase.verificarConflictoHorario(
-      profesores, 
-      diaSemana,
-      horaInicio,
-      horaFin
- 	 );
+      await sequelize.query(
+        `INSERT INTO clases
+          (id, materia_id, diaSemana, horaInicio, horaFin, aula, anio, division)
+         VALUES (UNHEX(:classId), UNHEX(:materiaId), :diaSemana, :horaInicio, :horaFin, :aula, :anio, :division)`,
+        {
+          replacements: {
+            classId,
+            materiaId,
+            diaSemana,
+            horaInicio,
+            horaFin,
+            aula: typeof aula === "string" ? aula.trim() || null : null,
+            anio: subject.anio,
+            division: subject.division,
+          },
+          transaction,
+        },
+      );
 
- 	 if (conflicto) {
-      const nombresProfesoresConflicto = (conflicto.profesores || []).map(p => p.nombre).join(', ');
-      return res.status(400).json({
-     	 msg: `Conflicto de horario. ${nombresProfesoresConflicto} ya tiene una clase en ese horario.`,
-     	 claseExistente: conflicto 
-      });
-    }
+      for (const profesorId of teacherIds) {
+        await sequelize.query(
+          `INSERT INTO clase_profesores (clase_id, profesor_id)
+           VALUES (UNHEX(:classId), UNHEX(:profesorId))`,
+          { replacements: { classId, profesorId }, transaction },
+        );
+      }
+    });
 
- 	 const claseData = {
- 	   materia,
- 	   profesores, 
- 	   anio: anioClase, 
- 	   division: divisionClase, 
- 	   diaSemana,
- 	   horaInicio,
- 	   horaFin
- 	 };
-
- 	 const clase = new Clase(claseData);
- 	 await clase.save();
-
- 	 await clase.populate([
- 	 	 { path: "materia", select: "nombre codigo anio division" },
- 	 	 { path: "profesores", select: "nombre apellido email" }
- 	 ]);
-
- 	 res.status(201).json({
- 	 	 msg: "Clase creada correctamente",
- 	 	 clase: clase.obtenerInfoCompleta()
- 	 });
-
-  } catch (error) {
-     console.error("=== ERROR AL CREAR CLASE ===", error);
-     if (error.code === 11000) {
-        return res.status(400).json({ msg: "Error: Ya existe una clase con esos mismos datos (materia, día y hora)." });
-     }
-     if (error.name === 'ValidationError') {
-        return res.status(400).json({ msg: `Error de validación: ${error.message}` });
-     }
-     res.status(500).json({ msg: "Error interno del servidor", error: error.message });
-  }
+    const clase = await findClassById(classId);
+    return res.status(201).json({ msg: "Clase creada correctamente.", clase });
+  } catch (error) {
+    if (error.message === "MATERIA_NOT_FOUND") return res.status(404).json({ msg: "Materia no encontrada." });
+    if (error.message === "MATERIA_COURSE_REQUIRED") {
+      return res.status(400).json({ msg: "La materia seleccionada no tiene año o división definidos." });
+    }
+    if (error.message === "INVALID_TEACHER") {
+      return res.status(400).json({ msg: "Uno o más profesores no existen o no están activos." });
+    }
+    if (error.message === "SCHEDULE_CONFLICT") {
+      return res.status(409).json({
+        msg: `Conflicto de horario: ${error.conflict.profesorNombre} ya tiene una clase en ese horario.`,
+      });
+    }
+    if (error.original?.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({ msg: "Ya existe una clase para esa materia, curso y horario." });
+    }
+    console.error("Error al crear clase:", error);
+    return res.status(500).json({ msg: "Error interno al crear la clase." });
+  }
 };
 
-// Obtener todas las clases (admin)
 export const obtenerTodasLasClases = async (req, res) => {
-  try {
-    const { anio, materia, profesor, division, diaSemana } = req.query;
-    let filtros = {};
+  const { anio, materia, profesor, division, diaSemana } = req.query;
+  const filters = [];
+  const replacements = {};
 
-    if (anio) filtros.anio = parseInt(anio);
-    if (materia) filtros.materia = materia;
-    if (profesor) filtros.profesores = profesor; 
-    if (division) filtros.division = division.toUpperCase(); 
- 	 if (diaSemana) filtros.diaSemana = diaSemana;
+  if (anio) {
+    const year = Number(anio);
+    if (!Number.isInteger(year) || year < 1 || year > 6) return res.status(400).json({ msg: "Filtro de año inválido." });
+    filters.push("c.anio = :anio");
+    replacements.anio = year;
+  }
+  if (materia) {
+    if (!validId(materia)) return res.status(400).json({ msg: "ID de materia inválido." });
+    filters.push("c.materia_id = UNHEX(:materiaId)");
+    replacements.materiaId = databaseId(materia);
+  }
+  if (profesor) {
+    if (!validId(profesor)) return res.status(400).json({ msg: "ID de profesor inválido." });
+    filters.push("EXISTS (SELECT 1 FROM clase_profesores cp_filter WHERE cp_filter.clase_id = c.id AND cp_filter.profesor_id = UNHEX(:profesorId))");
+    replacements.profesorId = databaseId(profesor);
+  }
+  if (division) {
+    filters.push("c.division = :division");
+    replacements.division = String(division).trim().toUpperCase();
+  }
+  if (diaSemana) {
+    if (!validDays.has(diaSemana)) return res.status(400).json({ msg: "Filtro de día inválido." });
+    filters.push("c.diaSemana = :diaSemana");
+    replacements.diaSemana = diaSemana;
+  }
 
- 	 const clases = await Clase.find(filtros)
-      .populate("materia", "nombre codigo anio division")
-      .populate("profesores", "nombre apellido email")
-      .sort({ anio: 1, division: 1, diaSemana: 1, horaInicio: 1 });
-
- 	 res.json({
- 	   msg: "Clases obtenidas correctamente",
- 	   clases: clases.map(clase => clase.obtenerInfoCompleta()),
- 	   total: clases.length,
- 	   filtros: filtros
- 	 });
-
-  } catch (error) {
-    console.error("=== ERROR AL OBTENER CLASES ===", error);
-    res.status(500).json({ msg: "Error interno del servidor", error: error.message });
-	}
+  try {
+    const classes = await getClasses({ filters, replacements });
+    return res.json({
+      msg: "Clases obtenidas correctamente.",
+      clases: classes,
+      total: classes.length,
+    });
+  } catch (error) {
+    console.error("Error al obtener clases:", error);
+    return res.status(500).json({ msg: "Error al obtener las clases." });
+  }
 };
 
 export const obtenerClasesProfesor = async (req, res) => {
-  try {
-    const profesorId = req.user.id;
-    
-    const clases = await Clase.find({ profesores: profesorId }) 
-      .populate("materia", "nombre codigo anio division")
-      .populate("profesores", "nombre apellido email")
-      .sort({ diaSemana: 1, horaInicio: 1 });
-      
-    res.json({
-      msg: "Clases obtenidas correctamente",
-      clases: clases.map(clase => clase.obtenerInfoCompleta()),
-      total: clases.length,
- 	   profesor: { id: profesorId, nombre: req.user.nombre }
-    });
-      
-  } catch (error) { 
-    console.error("=== ERROR AL OBTENER CLASES PROFESOR ===", error);
-    res.status(500).json({ msg: "Error interno del servidor", error: error.message });
-	}
+  try {
+    const classes = await getClasses({
+      filters: ["EXISTS (SELECT 1 FROM clase_profesores cp_filter WHERE cp_filter.clase_id = c.id AND cp_filter.profesor_id = UNHEX(:profesorId))"],
+      replacements: { profesorId: databaseId(req.user.id) },
+      orderBy: "c.diaSemana, c.horaInicio",
+    });
+    return res.json({
+      msg: "Clases obtenidas correctamente.",
+      clases: classes,
+      total: classes.length,
+      profesor: { id: req.user.id, nombre: req.user.nombre },
+    });
+  } catch (error) {
+    console.error("Error al obtener clases del profesor:", error);
+    return res.status(500).json({ msg: "Error al obtener las clases del profesor." });
+  }
 };
 
 export const actualizarClase = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { diaSemana, horaInicio, horaFin, profesores } = req.body;
+  const id = getClassId(req.params.id);
+  if (!id) return res.status(400).json({ msg: "ID de clase inválido." });
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return handleInvalidIdError(res, "clase", id);
-    }
+  try {
+    const current = await findClassById(id);
+    if (!current) return res.status(404).json({ msg: "Clase no encontrada." });
 
-    const updatePayload = {};
+    const diaSemana = req.body.diaSemana ?? current.diaSemana;
+    const horaInicio = req.body.horaInicio ?? current.horaInicio;
+    const horaFin = req.body.horaFin ?? current.horaFin;
+    const aula = req.body.aula === undefined ? current.aula : String(req.body.aula).trim() || null;
+    const teacherIds = req.body.profesores === undefined
+      ? current.profesores.map((teacher) => databaseId(teacher._id))
+      : normalizeTeachers(req.body.profesores);
 
-    if (diaSemana) updatePayload.diaSemana = diaSemana;
-    if (horaInicio) updatePayload.horaInicio = horaInicio;
-    if (horaFin) updatePayload.horaFin = horaFin;
-    if (profesores && Array.isArray(profesores)) {
-      for (const profId of profesores) {
-        if (!mongoose.Types.ObjectId.isValid(profId)) {
-          return handleInvalidIdError(res, "profesor", profId);
-        }
-      }
-      updatePayload.profesores = profesores;
-    }
+    if (!validDays.has(diaSemana) || !validateTime(horaInicio) || !validateTime(horaFin) || !teacherIds) {
+      return res.status(400).json({ msg: "Día, horarios o profesores inválidos." });
+    }
+    if (horaInicio >= horaFin) {
+      return res.status(400).json({ msg: "La hora de inicio debe ser anterior a la hora de fin." });
+    }
 
-    if (Object.keys(updatePayload).length === 0) {
-      return res.status(400).json({
-        msg: "No se proporcionaron datos válidos para actualizar.",
-      });
-    }
+    await sequelize.transaction(async (transaction) => {
+      if (!(await getTeacherIds(teacherIds, transaction))) {
+        const error = new Error("INVALID_TEACHER");
+        throw error;
+      }
+      const conflict = await getConflict({
+        teacherIds,
+        diaSemana,
+        horaInicio,
+        horaFin,
+        excludeId: id,
+        transaction,
+      });
+      if (conflict) {
+        const error = new Error("SCHEDULE_CONFLICT");
+        error.conflict = conflict;
+        throw error;
+      }
 
-    const claseExistente = await Clase.findById(id);
-    if (!claseExistente) {
-      return handleNotFoundError(res, "Clase");
-    }
+      await sequelize.query(
+        `UPDATE clases
+         SET diaSemana = :diaSemana, horaInicio = :horaInicio, horaFin = :horaFin, aula = :aula
+         WHERE id = UNHEX(:id)`,
+        { replacements: { id, diaSemana, horaInicio, horaFin, aula }, transaction },
+      );
+      await sequelize.query(
+        "DELETE FROM clase_profesores WHERE clase_id = UNHEX(:id)",
+        { replacements: { id }, transaction },
+      );
+      for (const profesorId of teacherIds) {
+        await sequelize.query(
+          `INSERT INTO clase_profesores (clase_id, profesor_id)
+           VALUES (UNHEX(:id), UNHEX(:profesorId))`,
+          { replacements: { id, profesorId }, transaction },
+        );
+      }
+    });
 
-    const profesoresIds = updatePayload.profesores || claseExistente.profesores;
-    const diaSemanaCheck = updatePayload.diaSemana || claseExistente.diaSemana;
-    const horaInicioCheck = updatePayload.horaInicio || claseExistente.horaInicio;
-    const horaFinCheck = updatePayload.horaFin || claseExistente.horaFin;
-
-    if (updatePayload.horaInicio || updatePayload.horaFin) {
-        updatePayload.horaInicio = horaInicioCheck;
-        updatePayload.horaFin = horaFinCheck;
-  D }
-
-    const conflicto = await Clase.verificarConflictoHorario(
-      profesoresIds,
-      diaSemanaCheck,
-      horaInicioCheck,
-      horaFinCheck,
-      id // Excluir la clase actual
-    );
-
-    if (conflicto) {
-      const nombresProfesoresConflicto = (conflicto.profesores || [])
-        .map((p) => p.nombre)
-        .join(", ");
-      return res.status(400).json({
-        msg: `Conflicto de horario: ${nombresProfesoresConflicto} ya tiene clase.`,
-      });
-    }
-
-    const claseActualizada = await Clase.findByIdAndUpdate(id, updatePayload, {
-      new: true,
-      runValidators: true, 
-    }).populate([
-      { path: "materia", select: "nombre codigo anio division" },
-      { path: "profesores", select: "nombre apellido email" },
-    ]);
-
-    res.json({
-      msg: "Clase actualizada correctamente",
-      clase: claseActualizada.obtenerInfoCompleta(),
-    });
-  } catch (error) {
-    console.error("=== ERROR AL ACTUALIZAR CLASE ===", error);
-    if (error.name === "ValidationError") {
-      return res
-        .status(400)
-        .json({ msg: "Error de validación: " + error.message });
-    }
-    res
-      .status(500)
-      .json({ msg: "Error interno del servidor", error: error.message });
-  }
+    return res.json({
+      msg: "Clase actualizada correctamente.",
+      clase: await findClassById(id),
+    });
+  } catch (error) {
+    if (error.message === "INVALID_TEACHER") return res.status(400).json({ msg: "Uno o más profesores no existen o no están activos." });
+    if (error.message === "SCHEDULE_CONFLICT") {
+      return res.status(409).json({ msg: `Conflicto de horario: ${error.conflict.profesorNombre} ya tiene clase en ese horario.` });
+    }
+    console.error("Error al actualizar clase:", error);
+    return res.status(500).json({ msg: "Error al actualizar la clase." });
+  }
 };
 
-export const eliminarClase = async (req, res) => { 
-    try {
-        const { id } = req.params;
-        
-        if (!mongoose.Types.ObjectId.isValid(id)) {
-            return handleInvalidIdError(res, "clase", id);
-        }
-        
-        const result = await Clase.findByIdAndDelete(id); 
-
-        if (!result) {
-            return handleNotFoundError(res, "Clase");
-        }
-
-    } catch (error) { // <-- CORRECCIÓN: Se eliminó la 'G'
-        console.error("Error al eliminar clase:", error);
-        res.status(500).json({ msg: "Error interno del servidor", error: error.message });
-    }
+export const eliminarClase = async (req, res) => {
+  const id = getClassId(req.params.id);
+  if (!id) return res.status(400).json({ msg: "ID de clase inválido." });
+  try {
+    const [result] = await sequelize.query(
+      "DELETE FROM clases WHERE id = UNHEX(:id)",
+      { replacements: { id } },
+    );
+    if (!result.affectedRows) return res.status(404).json({ msg: "Clase no encontrada." });
+    return res.json({ msg: "Clase eliminada correctamente." });
+  } catch (error) {
+    console.error("Error al eliminar clase:", error);
+    return res.status(500).json({ msg: "Error al eliminar la clase." });
+  }
 };
 
-
-// Asignar un alumno a la clase
 export const asignarAlumno = async (req, res) => {
+  const id = getClassId(req.params.id);
+  const alumnoId = getClassId(req.body.alumnoId);
+  if (!id || !alumnoId) return res.status(400).json({ msg: "ID de clase o alumno inválido." });
+
   try {
-    const { id } = req.params; // ID de la Clase
-    const { alumnoId } = req.body; // ID del Alumno
-
-    if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(alumnoId)) {
-      return res.status(400).json({ msg: "IDs inválidos" });
+    const clase = await findClassById(id);
+    if (!clase) return res.status(404).json({ msg: "Clase no encontrada." });
+    const [student] = await sequelize.query(
+      `SELECT HEX(id) AS id, anio, division FROM users
+       WHERE id = UNHEX(:alumnoId) AND rol = 'alumno' AND isActive = TRUE LIMIT 1`,
+      { replacements: { alumnoId }, type: QueryTypes.SELECT },
+    );
+    if (!student) return res.status(404).json({ msg: "Alumno no encontrado o inactivo." });
+    if (Number(student.anio) !== Number(clase.anio) || student.division !== clase.division) {
+      return res.status(400).json({ msg: "El alumno no pertenece al año y división de esta clase." });
     }
 
-    const clase = await Clase.findById(id);
-    if (!clase) return res.status(404).json({ msg: "Clase no encontrada" });
-
-    // Verificar si ya está inscrito
-    if (clase.alumnos.includes(alumnoId)) {
-      return res.status(400).json({ msg: "El alumno ya está inscrito en esta clase" });
-    }
-
-    // Agregar alumno
-    clase.alumnos.push(alumnoId);
-    await clase.save();
-
-    // (Opcional) También podríamos inscribirlo en la Materia padre si es necesario
-    // await Materia.findByIdAndUpdate(clase.materia, { $addToSet: { alumnos: alumnoId } });
-
-    res.json({ msg: "Alumno inscrito correctamente", alumnos: clase.alumnos });
-
+    const [result] = await sequelize.query(
+      `INSERT IGNORE INTO clase_alumnos (clase_id, alumno_id)
+       VALUES (UNHEX(:id), UNHEX(:alumnoId))`,
+      { replacements: { id, alumnoId } },
+    );
+    if (!result.affectedRows) return res.status(409).json({ msg: "El alumno ya está inscrito en esta clase." });
+    return res.status(201).json({ msg: "Alumno inscrito correctamente." });
   } catch (error) {
-    console.error("Error al asignar alumno:", error);
-    res.status(500).json({ msg: "Error interno", error: error.message });
+    console.error("Error al asignar alumno a clase:", error);
+    return res.status(500).json({ msg: "Error al asignar el alumno a la clase." });
   }
 };
 
-// Quitar un alumno de la clase
 export const desasignarAlumno = async (req, res) => {
+  const id = getClassId(req.params.id);
+  const alumnoId = getClassId(req.params.alumnoId);
+  if (!id || !alumnoId) return res.status(400).json({ msg: "ID de clase o alumno inválido." });
   try {
-    const { id, alumnoId } = req.params; // ID Clase y ID Alumno
-
-    if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(alumnoId)) {
-      return res.status(400).json({ msg: "IDs inválidos" });
-    }
-
-    const clase = await Clase.findById(id);
-    if (!clase) return res.status(404).json({ msg: "Clase no encontrada" });
-
-    // Filtrar el array para quitar al alumno
-    clase.alumnos = clase.alumnos.filter(a => a.toString() !== alumnoId);
-    await clase.save();
-
-    res.json({ msg: "Alumno eliminado de la clase" });
-
+    const [result] = await sequelize.query(
+      "DELETE FROM clase_alumnos WHERE clase_id = UNHEX(:id) AND alumno_id = UNHEX(:alumnoId)",
+      { replacements: { id, alumnoId } },
+    );
+    if (!result.affectedRows) return res.status(404).json({ msg: "El alumno no estaba inscrito en esa clase." });
+    return res.json({ msg: "Alumno eliminado de la clase." });
   } catch (error) {
-    console.error("Error al desasignar alumno:", error);
-    res.status(500).json({ msg: "Error interno", error: error.message });
+    console.error("Error al quitar alumno de clase:", error);
+    return res.status(500).json({ msg: "Error al quitar el alumno de la clase." });
   }
 };
 
-// Listar alumnos de una clase
 export const listarAlumnosDeClase = async (req, res) => {
+  const id = getClassId(req.params.id);
+  if (!id) return res.status(400).json({ msg: "ID de clase inválido." });
   try {
-    const { id } = req.params;
-    
-    const clase = await Clase.findById(id).populate("alumnos", "nombre email dni");
-    if (!clase) return res.status(404).json({ msg: "Clase no encontrada" });
+    const [clase] = await sequelize.query(
+      "SELECT id FROM clases WHERE id = UNHEX(:id) LIMIT 1",
+      { replacements: { id }, type: QueryTypes.SELECT },
+    );
+    if (!clase) return res.status(404).json({ msg: "Clase no encontrada." });
 
-    res.json(clase.alumnos);
-
+    const students = await sequelize.query(
+      `SELECT HEX(u.id) AS _id, u.nombre, u.email, u.dni, u.anio, u.division
+       FROM users u
+       JOIN clase_alumnos ca ON ca.alumno_id = u.id
+       WHERE ca.clase_id = UNHEX(:id) AND u.rol = 'alumno'
+       ORDER BY u.nombre`,
+      { replacements: { id }, type: QueryTypes.SELECT },
+    );
+    return res.json(students);
   } catch (error) {
-    console.error("Error al listar alumnos:", error);
-    res.status(500).json({ msg: "Error interno", error: error.message });
+    console.error("Error al listar alumnos de clase:", error);
+    return res.status(500).json({ msg: "Error al listar los alumnos de la clase." });
   }
 };
 
 export const getMisClasesAlumno = async (req, res) => {
+  if (req.user.rol !== "alumno") {
+    return res.status(403).json({ msg: "Esta consulta es solo para alumnos." });
+  }
   try {
-    // 1. Verificar que el usuario existe y es alumno
-    // Usamos req.user.id que viene del token (middleware checkAuth)
-    const alumno = await User.findById(req.user.id);
-    
-    if (!alumno || alumno.rol !== 'alumno') {
-       return res.status(400).json({ msg: "Usuario no válido para esta consulta" });
-    }
-
-    const { anio, division } = alumno;
-    
-    console.log(`--- Buscando Clases para: Año ${anio} - Div ${division} ---`);
-
-    // 2. Buscamos las clases que coincidan con el Año y División del alumno
-    const clases = await Clase.find({ anio, division })
-      .populate('materia', 'nombre')    // Trae el nombre de la materia
-      .populate('profesores', 'nombre') // <--- CORRECCIÓN: 'profesores' (plural)
-      .sort({ diaSemana: 1, horaInicio: 1 }); // Ordenamos (esto se puede refinar luego)
-
-    res.json(clases);
-
+    const classes = await getClasses({
+      filters: [
+        "EXISTS (SELECT 1 FROM clase_alumnos ca_filter WHERE ca_filter.clase_id = c.id AND ca_filter.alumno_id = UNHEX(:alumnoId))",
+      ],
+      replacements: { alumnoId: databaseId(req.user.id) },
+      orderBy: "c.diaSemana, c.horaInicio",
+    });
+    return res.json(classes);
   } catch (error) {
-    console.error("Error en getMisClasesAlumno:", error);
-    res.status(500).json({ msg: "Error al obtener el cronograma" });
+    console.error("Error al obtener clases del alumno:", error);
+    return res.status(500).json({ msg: "Error al obtener el cronograma del alumno." });
   }
 };

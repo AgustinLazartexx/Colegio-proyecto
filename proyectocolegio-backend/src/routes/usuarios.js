@@ -1,11 +1,11 @@
-// routes/usuarios.js
-import pool from '../config/mariadb.js';
+import { QueryTypes } from 'sequelize';
+import { sequelize } from '../config/mariadb.js';
 
 export const obtenerUsuarios = async (req, res) => {
   try {
-    const conn = await pool.getConnection();
-    const usuarios = await conn.query('SELECT * FROM usuarios');
-    conn.release();
+    const usuarios = await sequelize.query('SELECT * FROM usuarios', {
+      type: QueryTypes.SELECT,
+    });
     res.json(usuarios);
   } catch (err) {
     console.error('Error al obtener usuarios:', err);

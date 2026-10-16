@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
+import api from "../../api/api";
 import { useAuth } from "../../context/AuthContext";
 import { toast } from "react-toastify";
 import { 
@@ -44,9 +44,7 @@ const AdminAuditoriaNotas = () => {
       setLoading(true);
       try {
         // Asegúrate de que la URL coincida con tu backend o usa tu instancia de api.js
-        const res = await axios.get("http://localhost:5000/api/notas/auditoria", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await api.get("/notas/auditoria");
         setLogs(res.data);
       } catch (err) {
         console.error(err);

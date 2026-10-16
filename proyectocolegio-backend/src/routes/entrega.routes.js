@@ -7,10 +7,24 @@ import { uploadEntrega } from "../middlewares/uploadEntrega.js";
 import { 
   subirEntrega, 
   obtenerEntregasPorTarea, 
-  corregirEntrega 
+  corregirEntrega,
+  obtenerEntregasAlumno,
 } from "../controllers/entrega.controller.js";
 
 const router = express.Router();
+const validarEntrega = [
+  checkAuth,
+  checkRole("profesor", "admin"),
+  param("id", "ID de entrega inválido").matches(/^[\da-f]{32}$/i),
+  body("nota", "La nota debe ser un número entre 0 y 10")
+    .optional()
+    .isFloat({ min: 0, max: 10 }),
+  body("comentario", "El comentario debe ser texto")
+    .optional()
+    .isString()
+    .trim(),
+  validateFields,
+];
 
 // 🔄 RUTA EXISTENTE: subir entrega de tarea (solo alumnos)
 router.post("/", [
@@ -23,7 +37,7 @@ router.post("/", [
 router.get("/:tareaId", [
   checkAuth,
   checkRole("profesor", "admin"), // Solo profesores pueden ver entregas
-  param("tareaId", "ID de tarea inválido").isMongoId(),
+  param("tareaId", "ID de tarea inválido").matches(/^[\da-f]{32}$/i),
   validateFields,
 ], obtenerEntregasPorTarea);
 
@@ -31,47 +45,14 @@ router.get("/:tareaId", [
 router.get("/tarea/:tareaId", [
   checkAuth,
   checkRole("profesor", "admin"),
-  param("tareaId", "ID de tarea inválido").isMongoId(),
+  param("tareaId", "ID de tarea inválido").matches(/^[\da-f]{32}$/i),
   validateFields,
 ], obtenerEntregasPorTarea);
 
 // 🆕 MEJORADA: corregir entrega con validaciones
-router.put("/:id", [
-  checkAuth,
-  checkRole("profesor", "admin"), // Solo profesores pueden corregir
-  param("id", "ID de entrega inválido").isMongoId(),
-  body("nota", "La nota debe ser un número entre 0 y 10")
-    .optional()
-    .isFloat({ min: 0, max: 10 }),
-  body("comentario", "El comentario debe ser texto")
-    .optional()
-    .isString()
-    .trim(),
-  validateFields,
-], corregirEntrega);
+router.put("/:id", validarEntrega, corregirEntrega);
+router.put("/:id/calificar", validarEntrega, corregirEntrega);
 
-// 🆕 NUEVA: obtener entregas de un alumno específico (útil para el futuro)
-router.get("/alumno/mis-entregas", [
-  checkAuth,
-  checkRole("alumno"),
-], async (req, res) => {
-  try {
-    const entregas = await Entrega.find({ alumno: req.user.id })
-      .populate("tarea", "titulo descripcion fechaLimite")
-      .populate({
-        path: "tarea",
-        populate: {
-          path: "materia",
-          select: "nombre anio"
-        }
-      })
-      .sort({ createdAt: -1 });
-    
-    res.json(entregas);
-  } catch (error) {
-    console.error("Error al obtener entregas del alumno:", error);
-    res.status(500).json({ msg: "Error al obtener tus entregas" });
-  }
-});
+router.get("/alumno/mis-entregas", checkAuth, checkRole("alumno"), obtenerEntregasAlumno);
 
 export default router;

@@ -1,41 +1,10 @@
-import mongoose from "mongoose";
+import { sequelize } from '../config/mariadb.js';
+import { DataTypes } from 'sequelize';
 
-const calificacionSchema = new mongoose.Schema(
-  {
-    materia: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Materia",
-      required: true,
-    },
-    alumno: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Usuario",
-      required: true,
-    },
-    profesor: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Usuario",
-      required: true,
-    },
-    descripcion: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    nota: {
-      type: Number,
-      min: 1,
-      max: 10,
-      required: true,
-    },
-    fechaEntrega: {
-      type: Date,
-      default: Date.now,
-    },
-  },
-  {
-    timestamps: true,
-  }
-);
+const Calificacion = sequelize.define('Calificacion', {
+  nota: { type: DataTypes.DECIMAL(5,2), allowNull: false },
+  tipo: { type: DataTypes.STRING, allowNull: true },
+  comentario: { type: DataTypes.TEXT, allowNull: true }
+}, { timestamps: true });
 
-export default mongoose.model("Calificacion", calificacionSchema);
+export default Calificacion;

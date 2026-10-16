@@ -51,7 +51,7 @@ router.put(
   [
     checkAuth,
     checkRole("profesor"),
-    param("id", "ID inválido").isMongoId(),
+    param("id", "ID inválido").matches(/^[\da-f]{32}$/i),
     validateFields
   ],
   actualizarAnuncio
@@ -63,7 +63,7 @@ router.delete(
   [
     checkAuth,
     checkRole("profesor"),
-    param("id", "ID inválido").isMongoId(),
+    param("id", "ID inválido").matches(/^[\da-f]{32}$/i),
     validateFields
   ],
   eliminarAnuncio

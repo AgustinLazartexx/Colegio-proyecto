@@ -1,210 +1,352 @@
-import Materia from "../models/materia.model.js";
-import User from "../models/user.model.js";
-import Clase from "../models/Clases.js"; // <--- IMPORTANTE: Asegúrate de importar el modelo Clase
+import { randomUUID } from "node:crypto";
+import { QueryTypes } from "sequelize";
+import { databaseId, isDatabaseId, sequelize } from "../services/academicData.service.js";
 
-// ----------------------------------------------------
-// Crear nueva materia (solo admin)
-// ----------------------------------------------------
+const materiaSelect = `
+  SELECT
+    HEX(m.id) AS _id,
+    m.nombre,
+    m.descripcion,
+    m.anio,
+    m.division,
+    HEX(m.profesor_id) AS profesorId,
+    p.nombre AS profesorNombre,
+    p.email AS profesorEmail
+  FROM materias m
+  LEFT JOIN users p ON p.id = m.profesor_id
+`;
+
+const toMateria = (row) => ({
+  _id: row._id,
+  id: row._id,
+  nombre: row.nombre,
+  descripcion: row.descripcion,
+  anio: row.anio,
+  division: row.division,
+  profesor: row.profesorId
+    ? {
+        _id: row.profesorId,
+        id: row.profesorId,
+        nombre: row.profesorNombre,
+        email: row.profesorEmail,
+      }
+    : null,
+});
+
+const getValidatedTeacher = async (id) => {
+  if (!id) return null;
+  if (!isDatabaseId(id)) return false;
+  const [teacher] = await sequelize.query(
+    "SELECT HEX(id) AS id FROM users WHERE id = UNHEX(:id) AND rol = 'profesor' AND isActive = TRUE LIMIT 1",
+    { replacements: { id: databaseId(id) }, type: QueryTypes.SELECT },
+  );
+  return teacher?.id ?? false;
+};
+
+const serverError = (res, message, error) => {
+  console.error(`${message}:`, error);
+  return res.status(500).json({ msg: message });
+};
+
 export const crearMateria = async (req, res) => {
-  try {
-    const { nombre, anio, profesor, division } = req.body;
+  const { nombre, anio, division, profesor, descripcion } = req.body;
+  const normalizedName = typeof nombre === "string" ? nombre.trim() : "";
+  const normalizedDivision = typeof division === "string" ? division.trim().toUpperCase() : "";
+  const year = Number(anio);
 
-    const existe = await Materia.findOne({ nombre, anio, division });
-    if (existe) {
-      return res.status(400).json({ msg: "La materia ya existe para ese año y división" });
+  if (!normalizedName || !Number.isInteger(year) || year < 0 || year > 6) {
+    return res.status(400).json({ msg: "Nombre y año válido son obligatorios." });
+  }
+  if (year > 0 && !normalizedDivision) {
+    return res.status(400).json({ msg: "La división es obligatoria para materias de curso." });
+  }
+
+  try {
+    const teacherId = await getValidatedTeacher(profesor);
+    if (teacherId === false) {
+      return res.status(400).json({ msg: "El profesor seleccionado no existe o no está activo." });
     }
 
-    const materia = new Materia({ nombre, anio, profesor, division });
-    await materia.save();
+    const [existing] = await sequelize.query(
+      `SELECT HEX(id) AS id FROM materias
+       WHERE nombre = :nombre AND anio = :anio AND division <=> :division LIMIT 1`,
+      {
+        replacements: {
+          nombre: normalizedName,
+          anio: year,
+          division: normalizedDivision || null,
+        },
+        type: QueryTypes.SELECT,
+      },
+    );
+    if (existing) {
+      return res.status(409).json({ msg: "La materia ya existe para ese año y división." });
+    }
 
-    res.status(201).json(materia);
+    const id = randomUUID().replaceAll("-", "").toUpperCase();
+    await sequelize.query(
+      `INSERT INTO materias (id, nombre, descripcion, anio, division, profesor_id)
+       VALUES (UNHEX(:id), :nombre, :descripcion, :anio, :division, ${teacherId ? "UNHEX(:teacherId)" : "NULL"})`,
+      {
+        replacements: {
+          id,
+          nombre: normalizedName,
+          descripcion: descripcion?.trim() || null,
+          anio: year,
+          division: normalizedDivision || null,
+          ...(teacherId ? { teacherId: databaseId(teacherId) } : {}),
+        },
+      },
+    );
+    const [row] = await sequelize.query(
+      `${materiaSelect} WHERE m.id = UNHEX(:id)`,
+      { replacements: { id }, type: QueryTypes.SELECT },
+    );
+    return res.status(201).json(toMateria(row));
   } catch (error) {
-    console.error("Error crear materia:", error);
-    res.status(500).json({ msg: "Error al crear materia", error });
+    if (error.original?.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({ msg: "La materia ya existe para ese año y división." });
+    }
+    return serverError(res, "Error al crear la materia.", error);
   }
 };
 
-// ----------------------------------------------------
-// Obtener todas las materias (admin y profesores)
-// ----------------------------------------------------
-export const obtenerMaterias = async (req, res) => {
-  try {
-    const materias = await Materia.find().populate("profesor", "nombre apellido");
-    res.json(materias);
-  } catch (error) {
-    res.status(500).json({ msg: "Error al obtener las materias", error });
-  }
-};
-
-// ----------------------------------------------------
-// Obtener materias filtradas
-// ----------------------------------------------------
 export const obtenerMateriasFiltradas = async (req, res) => {
-  try {
-    const { anio, profesor } = req.query;
-    const filtro = {};
-    if (anio) filtro.anio = anio;
-    if (profesor) filtro.profesor = profesor;
+  const { anio, profesor, division } = req.query;
+  const conditions = [];
+  const replacements = {};
 
-    const materias = await Materia.find(filtro).populate("profesor", "nombre apellido");
-    res.json(materias);
+  if (anio !== undefined) {
+    const year = Number(anio);
+    if (!Number.isInteger(year) || year < 0 || year > 6) {
+      return res.status(400).json({ msg: "Filtro de año inválido." });
+    }
+    conditions.push("m.anio = :anio");
+    replacements.anio = year;
+  }
+  if (division) {
+    conditions.push("m.division = :division");
+    replacements.division = String(division).trim().toUpperCase();
+  }
+
+  if (req.user.rol === "profesor") {
+    conditions.push(`(
+      m.profesor_id = UNHEX(:currentUserId)
+      OR EXISTS (
+        SELECT 1 FROM clases c
+        JOIN clase_profesores cp ON cp.clase_id = c.id
+        WHERE c.materia_id = m.id AND cp.profesor_id = UNHEX(:currentUserId)
+      )
+    )`);
+    replacements.currentUserId = databaseId(req.user.id);
+  } else if (req.user.rol === "alumno") {
+    conditions.push("m.anio = :userYear AND m.division = :userDivision");
+    replacements.userYear = req.user.anio;
+    replacements.userDivision = req.user.division;
+  } else if (profesor) {
+    if (!isDatabaseId(profesor)) return res.status(400).json({ msg: "ID de profesor inválido." });
+    conditions.push("m.profesor_id = UNHEX(:profesorId)");
+    replacements.profesorId = databaseId(profesor);
+  }
+
+  try {
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const rows = await sequelize.query(
+      `${materiaSelect} ${where} ORDER BY m.anio, m.division, m.nombre`,
+      { replacements, type: QueryTypes.SELECT },
+    );
+    return res.json(rows.map(toMateria));
   } catch (error) {
-    res.status(500).json({ msg: "Error al filtrar materias", error });
+    return serverError(res, "Error al obtener las materias.", error);
   }
 };
 
-// ----------------------------------------------------
-// Obtener una materia por ID
-// ----------------------------------------------------
 export const obtenerMateria = async (req, res) => {
+  if (!isDatabaseId(req.params.id)) return res.status(400).json({ msg: "ID de materia inválido." });
   try {
-    const { id } = req.params;
-    const materia = await Materia.findById(id).populate("profesor", "nombre apellido email");
-
-    if (!materia) {
-      return res.status(404).json({ msg: "Materia no encontrada" });
-    }
-
-    res.json(materia);
+    const [row] = await sequelize.query(
+      `${materiaSelect} WHERE m.id = UNHEX(:id) LIMIT 1`,
+      { replacements: { id: databaseId(req.params.id) }, type: QueryTypes.SELECT },
+    );
+    if (!row) return res.status(404).json({ msg: "Materia no encontrada." });
+    return res.json(toMateria(row));
   } catch (error) {
-    res.status(500).json({ msg: "Error al obtener la materia", error });
+    return serverError(res, "Error al obtener la materia.", error);
   }
 };
 
-// ----------------------------------------------------
-// Actualizar una materia
-// ----------------------------------------------------
 export const actualizarMateria = async (req, res) => {
+  const { id } = req.params;
+  if (!isDatabaseId(id)) return res.status(400).json({ msg: "ID de materia inválido." });
+
+  const currentRows = await sequelize.query(
+    `SELECT nombre, anio, division, HEX(profesor_id) AS profesorId, descripcion
+     FROM materias WHERE id = UNHEX(:id) LIMIT 1`,
+    { replacements: { id: databaseId(id) }, type: QueryTypes.SELECT },
+  ).catch((error) => {
+    console.error("Error al buscar la materia:", error);
+    return null;
+  });
+  if (!currentRows) return res.status(500).json({ msg: "Error al actualizar la materia." });
+  const current = currentRows[0];
+  if (!current) return res.status(404).json({ msg: "Materia no encontrada." });
+
+  const nombre = req.body.nombre === undefined ? current.nombre : String(req.body.nombre).trim();
+  const anio = req.body.anio === undefined ? current.anio : Number(req.body.anio);
+  const division = req.body.division === undefined
+    ? current.division
+    : String(req.body.division).trim().toUpperCase() || null;
+  const descripcion = req.body.descripcion === undefined
+    ? current.descripcion
+    : String(req.body.descripcion).trim() || null;
+  const professorProvided = Object.hasOwn(req.body, "profesor");
+
+  if (!nombre || !Number.isInteger(anio) || anio < 0 || anio > 6 || (anio > 0 && !division)) {
+    return res.status(400).json({ msg: "Nombre, año y división válidos son obligatorios." });
+  }
+
   try {
-    const { id } = req.params;
-    const { nombre, anio, profesor, division } = req.body;
+    const teacherId = professorProvided
+      ? await getValidatedTeacher(req.body.profesor)
+      : current.profesorId;
+    if (teacherId === false) {
+      return res.status(400).json({ msg: "El profesor seleccionado no existe o no está activo." });
+    }
 
-    const updateData = { nombre, anio, profesor, division };
-
-    const materia = await Materia.findByIdAndUpdate(id, updateData, { new: true });
-    if (!materia) return res.status(404).json({ msg: "Materia no encontrada" });
-
-    res.json({ msg: "Materia actualizada", materia });
+    await sequelize.query(
+      `UPDATE materias
+       SET nombre = :nombre, descripcion = :descripcion, anio = :anio, division = :division,
+           profesor_id = ${teacherId ? "UNHEX(:teacherId)" : "NULL"}
+       WHERE id = UNHEX(:id)`,
+      {
+        replacements: {
+          id: databaseId(id),
+          nombre,
+          descripcion,
+          anio,
+          division,
+          ...(teacherId ? { teacherId: databaseId(teacherId) } : {}),
+        },
+      },
+    );
+    const [row] = await sequelize.query(
+      `${materiaSelect} WHERE m.id = UNHEX(:id)`,
+      { replacements: { id: databaseId(id) }, type: QueryTypes.SELECT },
+    );
+    return res.json({ msg: "Materia actualizada.", materia: toMateria(row) });
   } catch (error) {
-    res.status(500).json({ msg: "Error al actualizar materia", error });
+    if (error.original?.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({ msg: "Ya existe una materia con ese nombre, año y división." });
+    }
+    return serverError(res, "Error al actualizar la materia.", error);
   }
 };
 
-// ----------------------------------------------------
-// Eliminar una materia
-// ----------------------------------------------------
 export const eliminarMateria = async (req, res) => {
+  if (!isDatabaseId(req.params.id)) return res.status(400).json({ msg: "ID de materia inválido." });
   try {
-    const { id } = req.params;
-    const materia = await Materia.findById(id);
-
-    if (!materia) return res.status(404).json({ msg: "Materia no encontrada" });
-
-    await materia.deleteOne();
-
-    res.json({ msg: "Materia eliminada con éxito" });
+    const [result] = await sequelize.query(
+      "DELETE FROM materias WHERE id = UNHEX(:id)",
+      { replacements: { id: databaseId(req.params.id) } },
+    );
+    if (!result.affectedRows) return res.status(404).json({ msg: "Materia no encontrada." });
+    return res.json({ msg: "Materia eliminada con éxito." });
   } catch (error) {
-    res.status(500).json({ msg: "Error al eliminar materia", error });
+    if (error.original?.code === "ER_ROW_IS_REFERENCED_2") {
+      return res.status(409).json({ msg: "No se puede eliminar una materia que tiene clases asignadas." });
+    }
+    return serverError(res, "Error al eliminar la materia.", error);
   }
 };
 
-// ----------------------------------------------------
-// Ver alumnos de una materia (CORREGIDO)
-// ----------------------------------------------------
 export const verAlumnosMateria = async (req, res) => {
+  const { id } = req.params;
+  if (!isDatabaseId(id)) return res.status(400).json({ msg: "ID de materia inválido." });
   try {
-    const { id } = req.params; // ID de la Materia
-    
-    // 1. Intentar buscar la Clase asociada a esta Materia
-    // Como la relación real de alumnos está en 'Clase', buscamos ahí primero.
-    const clases = await Clase.find({ materia: id })
-      .populate('alumnos', 'nombre apellido email dni');
+    const [materia] = await sequelize.query(
+      "SELECT HEX(id) AS id, anio, division FROM materias WHERE id = UNHEX(:id) LIMIT 1",
+      { replacements: { id: databaseId(id) }, type: QueryTypes.SELECT },
+    );
+    if (!materia) return res.status(404).json({ msg: "Materia no encontrada." });
 
-    // Si encontramos clases con alumnos inscritos, devolvemos esos alumnos unificados
-    let alumnosMap = new Map();
-    if (clases && clases.length > 0) {
-        clases.forEach(clase => {
-            if (clase.alumnos && Array.isArray(clase.alumnos)) {
-                clase.alumnos.forEach(alumno => {
-                    if (alumno && alumno._id) {
-                        alumnosMap.set(alumno._id.toString(), alumno);
-                    }
-                });
-            }
-        });
+    if (req.user.rol === "profesor") {
+      const [assigned] = await sequelize.query(
+        `SELECT m.id FROM materias m
+         WHERE m.id = UNHEX(:materiaId) AND (
+           m.profesor_id = UNHEX(:profesorId)
+           OR EXISTS (SELECT 1 FROM clases c JOIN clase_profesores cp ON cp.clase_id = c.id
+                      WHERE c.materia_id = m.id AND cp.profesor_id = UNHEX(:profesorId))
+         ) LIMIT 1`,
+        {
+          replacements: {
+            materiaId: databaseId(id),
+            profesorId: databaseId(req.user.id),
+          },
+          type: QueryTypes.SELECT,
+        },
+      );
+      if (!assigned) return res.status(403).json({ msg: "No tienes asignada esta materia." });
     }
 
-    // Si encontramos alumnos en las clases, los devolvemos
-    if (alumnosMap.size > 0) {
-        const resultados = Array.from(alumnosMap.values());
-        // Ordenar por apellido
-        resultados.sort((a, b) => (a.apellido || "").localeCompare(b.apellido || ""));
-        return res.json(resultados);
+    let students = await sequelize.query(
+      `SELECT DISTINCT HEX(u.id) AS _id, u.nombre, u.email, u.dni, u.anio, u.division
+       FROM users u
+       JOIN clase_alumnos ca ON ca.alumno_id = u.id
+       JOIN clases c ON c.id = ca.clase_id
+       WHERE c.materia_id = UNHEX(:id) AND u.rol = 'alumno'
+       ORDER BY u.nombre`,
+      { replacements: { id: databaseId(id) }, type: QueryTypes.SELECT },
+    );
+
+    if (!students.length) {
+      students = await sequelize.query(
+        `SELECT HEX(id) AS _id, nombre, email, dni, anio, division
+         FROM users WHERE rol = 'alumno' AND anio = :anio AND division = :division
+         ORDER BY nombre`,
+        { replacements: { anio: materia.anio, division: materia.division }, type: QueryTypes.SELECT },
+      );
     }
-
-    // 2. FALLBACK (Plan B): Si no hay clases creadas o alumnos inscritos en la clase,
-    // buscamos todos los alumnos que coincidan con el AÑO y DIVISIÓN de la materia.
-    const materia = await Materia.findById(id);
-    if (materia) {
-       const alumnosPorCurso = await User.find({ 
-           rol: 'alumno', 
-           anio: materia.anio, 
-           division: materia.division 
-       }).select('nombre apellido email dni');
-       
-       return res.json(alumnosPorCurso);
-    }
-
-    // Si no se encuentra nada
-    return res.json([]);
-
+    return res.json(students);
   } catch (error) {
-    console.error("Error al ver alumnos de materia:", error);
-    res.status(500).json({ msg: "Error al obtener alumnos" });
+    return serverError(res, "Error al obtener alumnos de la materia.", error);
   }
 };
 
-// ----------------------------------------------------
-// Inscribir alumno (Delegado a Clases, pero mantenemos endpoint por compatibilidad si es necesario)
-// ----------------------------------------------------
-export const inscribirseAMateria = async (req, res) => {
-    res.status(501).json({ msg: "Utilice la gestión de Clases para inscribir alumnos." });
-};
+export const inscribirseAMateria = async (_req, res) =>
+  res.status(501).json({ msg: "Utilice la gestión de clases para inscribir alumnos." });
 
-// ----------------------------------------------------
-// Obtener materias del profesor logueado
-// ----------------------------------------------------
 export const obtenerMateriasDelProfesor = async (req, res) => {
   try {
-    if (!req.user || !req.user.id) {
-        return res.status(401).json({ msg: "Token inválido o usuario no encontrado" });
-    }
-    
-    const profesorId = req.user.id; 
-    
-    const materias = await Materia.find({ profesor: profesorId })
-        .populate("profesor", "nombre apellido email");
-    
-    res.json(materias);
+    const rows = await sequelize.query(
+      `${materiaSelect}
+       WHERE m.profesor_id = UNHEX(:profesorId)
+          OR EXISTS (
+            SELECT 1 FROM clases c JOIN clase_profesores cp ON cp.clase_id = c.id
+            WHERE c.materia_id = m.id AND cp.profesor_id = UNHEX(:profesorId)
+          )
+       ORDER BY m.anio, m.division, m.nombre`,
+      {
+        replacements: { profesorId: databaseId(req.user.id) },
+        type: QueryTypes.SELECT,
+      },
+    );
+    return res.json(rows.map(toMateria));
   } catch (error) {
-    console.error("Error al obtener materias del profesor:", error);
-    res.status(500).json({ msg: "Error al obtener materias del profesor", error: error.message });
+    return serverError(res, "Error al obtener materias del profesor.", error);
   }
 };
 
-// ----------------------------------------------------
-// Obtener alumnos por profesor (Genérico)
-// ----------------------------------------------------
-export const verAlumnosPorProfesor = async (req, res) => {
-   // Esta función puede expandirse en el futuro si necesitas ver todos tus alumnos sin filtrar por materia
-   res.json([]);
-};
+export const verAlumnosPorProfesor = async (_req, res) => res.json([]);
 
-export const obtenerProfesores = async (req, res) => {
+export const obtenerProfesores = async (_req, res) => {
   try {
-    const profesores = await User.find({ rol: "profesor" }).select("nombre apellido email");
-    res.json(profesores);
+    const teachers = await sequelize.query(
+      `SELECT HEX(id) AS _id, nombre, email, rol
+       FROM users WHERE rol = 'profesor' AND isActive = TRUE ORDER BY nombre`,
+      { type: QueryTypes.SELECT },
+    );
+    return res.json(teachers);
   } catch (error) {
-    res.status(500).json({ msg: "Error al obtener los profesores", error });
+    return serverError(res, "Error al obtener los profesores.", error);
   }
 };

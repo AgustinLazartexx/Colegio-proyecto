@@ -19,6 +19,8 @@ const userSchema = new mongoose.Schema({
   division: { type: String, uppercase: true, trim: true }, // División del alumno (puede ser null para profes/admin)
   mustChangePassword: { type: Boolean, default: true }, // Forzar cambio al inicio
   isActive: { type: Boolean, default: true },// Para deshabilitar
+  resetPasswordToken: { type: String, default: null },
+  resetPasswordExpiresAt: { type: Date, default: null },
   // --- NUEVO CAMPO: CONTROL DE CUOTAS ---
   acceso_habilitado: { 
     type: Boolean, 

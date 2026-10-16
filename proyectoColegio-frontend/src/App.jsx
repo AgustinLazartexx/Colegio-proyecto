@@ -12,6 +12,8 @@ import RegisterModal from "./components/RegisterModal";
 
 // Páginas principales
 import Home from "./pages/Home";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 import Unauthorized from "./pages/Unauthorized";
 
 // Dashboards
@@ -88,6 +90,8 @@ function App() {
       
       <Routes>
         <Route path="/" element={<><Navbar onLoginClick={() => setShowLogin(true)} onRegisterClick={() => setShowRegister(true)} /><Home /></>} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/unauthorized" element={<Unauthorized />} />
 
         {/* Rutas ALUMNO */}
@@ -118,7 +122,7 @@ function App() {
 
         {/* Rutas ADMIN */}
         <Route path="/admin/*" element={<PrivateRoute allowedRoles={["admin"]}><AdminDashboard /></PrivateRoute>}>
-          <Route index element={<h2>Inicio Admin</h2>} />
+          <Route index element={<DashboardAdmin />} />
           <Route path="Inicio" element={<DashboardAdmin />} />
           <Route path="usuarios" element={<UsuariosAdmin />} />
           <Route path="materias" element={<MateriasAdmin />} />

@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 
-import axios from "axios";
+import api, { BACKEND_URL } from "../../api/api";
 
 const EntregasTarea = () => {
   const { tareaId } = useParams();
@@ -11,16 +11,17 @@ const EntregasTarea = () => {
   const [notaEditando, setNotaEditando] = useState({});
   const [comentarioEditando, setComentarioEditando] = useState({});
 
-  const fetchEntregas = async () => {
+  const fetchEntregas = useCallback(async () => {
     try {
-      const { data } = await axios.get(`/api/entregas/${tareaId}`);
+      const { data } = await api.get(`/entregas/${tareaId}`);
       setEntregas(data);
     } catch (err) {
+      console.error("Error al cargar entregas:", err);
       setError("Error al cargar entregas");
     } finally {
       setLoading(false);
     }
-  };
+  }, [tareaId]);
 
   const handleNotaChange = (id, value) => {
     setNotaEditando({ ...notaEditando, [id]: value });
@@ -37,17 +38,18 @@ const EntregasTarea = () => {
 
       if (!nota) return alert("Debe ingresar una nota");
 
-      await axios.put(`/api/entregas/${id}`, { nota, comentario });
+      await api.put(`/entregas/${id}`, { nota, comentario });
       alert("Entrega calificada ✅");
       fetchEntregas(); // refrescar
     } catch (error) {
+      console.error("Error al calificar la entrega:", error);
       alert("Error al calificar");
     }
   };
 
   useEffect(() => {
     fetchEntregas();
-  }, [tareaId]);
+  }, [fetchEntregas]);
 
   if (loading) return <p className="text-center mt-10">Cargando entregas...</p>;
   if (error) return <p className="text-red-500 text-center">{error}</p>;
@@ -67,7 +69,7 @@ const EntregasTarea = () => {
                 <span className="italic">{entrega.comentario || "Ninguno"}</span>
               </p>
               <a
-                href={import.meta.env.VITE_BACKEND_URL + "/" + entrega.archivo}
+                href={`${BACKEND_URL}/uploads/${entrega.archivo}`}
                 target="_blank"
                 className="text-blue-600 underline block my-2"
               >

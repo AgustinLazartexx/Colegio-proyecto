@@ -1,5 +1,5 @@
 import { useState } from "react";
-import axios from "axios";
+import api from "../api/api";
 import { toast } from "react-toastify";
 import { X } from "lucide-react";
 
@@ -48,7 +48,7 @@ const RegisterModal = ({ isOpen, onClose }) => {
     setIsLoading(true);
 
     try {
-      await axios.post(`${import.meta.env.VITE_API_URL}/api/usuarios/register`, formData);
+      await api.post('/usuarios/register', formData);
       toast.success("Registro exitoso 🎉", { autoClose: 3000 });
       onClose();
     } catch (error) {
