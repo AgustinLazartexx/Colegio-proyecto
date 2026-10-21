@@ -5,10 +5,10 @@ import {
   getMateriasProfesor, 
   crearAnuncio, 
   actualizarAnuncio, 
-  eliminarAnuncio 
+  setAnuncioActive
 } from "../../api/api";
-import { Pencil, Trash2, Megaphone, Save, X, MessageSquare, Loader2 } from "lucide-react";
-import { toast } from "react-toastify"; // Asumiendo que usas react-toastify
+import { Pencil, Ban, CircleCheck, Megaphone, Save, X, MessageSquare, Loader2 } from "lucide-react";
+import { toast } from "react-toastify";
 
 const CrudAnunciosProfesor = () => {
   const [anuncios, setAnuncios] = useState([]);
@@ -50,11 +50,11 @@ const CrudAnunciosProfesor = () => {
     try {
       if (modoEdicion) {
         const res = await actualizarAnuncio(anuncioId, form);
-        setAnuncios(prev => prev.map(a => a._id === anuncioId ? res.data : a));
+        setAnuncios(prev => prev.map(a => a._id === anuncioId ? (res.data.anuncio || res.data) : a));
         toast.success("Anuncio actualizado");
       } else {
         const res = await crearAnuncio(form);
-        setAnuncios(prev => [res.data, ...prev]);
+        setAnuncios(prev => [res.data.anuncio || res.data, ...prev]);
         toast.success("Anuncio creado");
       }
       resetForm();
@@ -64,14 +64,18 @@ const CrudAnunciosProfesor = () => {
     }
   };
 
-  const handleEliminar = async (id) => {
-    if (!window.confirm("¿Estás seguro de eliminar este anuncio?")) return;
+  const handleToggleStatus = async (anuncio) => {
+    const isActive = !anuncio.isActive;
+    const action = isActive ? "reactivar" : "suspender";
+    if (!window.confirm(`¿Querés ${action} este anuncio?`)) return;
+
     try {
-      await eliminarAnuncio(id);
-      setAnuncios(prev => prev.filter(a => a._id !== id));
-      toast.success("Anuncio eliminado");
+      const res = await setAnuncioActive(anuncio._id, isActive);
+      const actualizado = res.data.anuncio || res.data;
+      setAnuncios(prev => prev.map(a => a._id === anuncio._id ? actualizado : a));
+      toast.success(isActive ? "Anuncio reactivado" : "Anuncio suspendido");
     } catch (error) {
-      toast.error("No se pudo eliminar");
+      toast.error(error.response?.data?.msg || "No se pudo cambiar el estado del anuncio");
     }
   };
 
@@ -101,7 +105,7 @@ const CrudAnunciosProfesor = () => {
         <Megaphone className="text-blue-600 w-8 h-8" />
         <div>
             <h1 className="text-2xl font-bold text-gray-900">Gestión de Anuncios</h1>
-            <p className="text-gray-500">Crea avisos importantes para tus materias</p>
+            <p className="text-gray-500">Publicá, editá y suspendé avisos de tus materias</p>
         </div>
       </div>
 
@@ -167,11 +171,14 @@ const CrudAnunciosProfesor = () => {
                 <p className="text-gray-500">No has publicado anuncios todavía.</p>
              </div>
         ) : anuncios.map(anuncio => (
-            <div key={anuncio._id} className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col md:flex-row justify-between gap-4">
+            <div key={anuncio._id} className={`bg-white p-5 rounded-xl shadow-sm border flex flex-col md:flex-row justify-between gap-4 ${anuncio.isActive ? "border-gray-200" : "border-amber-300 bg-amber-50/50"}`}>
                 <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                         <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-0.5 rounded">
                             {anuncio.materia?.nombre || "Materia eliminada"}
+                        </span>
+                        <span className={`rounded px-2 py-0.5 text-xs font-bold ${anuncio.isActive ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"}`}>
+                            {anuncio.isActive ? "Activo" : "Suspendido"}
                         </span>
                         <span className="text-gray-400 text-xs">
                             {new Date(anuncio.fecha).toLocaleDateString()}
@@ -181,11 +188,16 @@ const CrudAnunciosProfesor = () => {
                     <p className="text-gray-600 text-sm mt-1 whitespace-pre-wrap">{anuncio.mensaje}</p>
                 </div>
                 <div className="flex items-start gap-2">
-                    <button onClick={() => handleEditar(anuncio)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors">
+                    <button onClick={() => handleEditar(anuncio)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors" aria-label={`Editar ${anuncio.titulo}`} title="Editar anuncio">
                         <Pencil size={18} />
                     </button>
-                    <button onClick={() => handleEliminar(anuncio._id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors">
-                        <Trash2 size={18} />
+                    <button
+                      onClick={() => handleToggleStatus(anuncio)}
+                      className={`rounded-lg p-2 transition-colors ${anuncio.isActive ? "text-amber-600 hover:bg-amber-100" : "text-emerald-600 hover:bg-emerald-100"}`}
+                      aria-label={anuncio.isActive ? `Suspender ${anuncio.titulo}` : `Reactivar ${anuncio.titulo}`}
+                      title={anuncio.isActive ? "Suspender anuncio" : "Reactivar anuncio"}
+                    >
+                        {anuncio.isActive ? <Ban size={18} /> : <CircleCheck size={18} />}
                     </button>
                 </div>
             </div>

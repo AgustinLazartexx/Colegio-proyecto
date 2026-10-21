@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../../context/AuthContext"; 
 import {
-  Edit3, Trash2, X, Loader2, AlertCircle, Save, GraduationCap, Plus, Filter, Clock, MapPin, Users, Hash, Calendar, Search
+  Edit3, Ban, CircleCheck, X, Loader2, AlertCircle, Save, GraduationCap, Plus, Filter, Clock, MapPin, Users, Calendar, Search
 } from "lucide-react";
 import Swal from "sweetalert2"; 
 
@@ -12,7 +12,7 @@ import {
   getProfesores, 
   crearClase, 
   actualizarClase, 
-  eliminarClase 
+  setClaseActive
 } from "../../api/api";
 
 // Helper para obtener valores de select múltiple
@@ -65,7 +65,7 @@ const ClasesAdmin = () => {
 
   const fetchClases = async () => {
     try {
-      const res = await getTodasLasClases(); 
+      const res = await getTodasLasClases({ includeSuspended: true });
       // Aseguramos que sea un array
       const data = Array.isArray(res.data) ? res.data : (res.data.clases || []);
       setClases(data); 
@@ -181,23 +181,31 @@ const ClasesAdmin = () => {
     }
   };
 
-  const handleEliminar = async (id) => {
+  const handleToggleStatus = async (clase) => {
+    const isActive = !clase.isActive;
     const confirm = await Swal.fire({
-      title: "¿Estás seguro?",
-      text: "Esta acción no se puede deshacer.",
-      icon: "warning",
+      title: isActive ? "¿Reactivar clase?" : "¿Suspender clase?",
+      text: isActive
+        ? "La clase volverá a estar disponible para el curso."
+        : "La clase se conservará, pero dejará de estar disponible para docentes y alumnos.",
+      icon: isActive ? "question" : "warning",
       showCancelButton: true,
-      confirmButtonColor: "#d33",
-      confirmButtonText: "Sí, eliminar"
+      confirmButtonColor: isActive ? "#059669" : "#d97706",
+      confirmButtonText: isActive ? "Sí, reactivar" : "Sí, suspender",
+      cancelButtonText: "Cancelar",
     });
 
     if (confirm.isConfirmed) {
         try {
-          await eliminarClase(id);
-          Swal.fire("¡Eliminado!", "Clase eliminada.", "success");
-          fetchClases();
-        } catch {
-          Swal.fire("Error", "No se pudo eliminar.", "error");
+          const response = await setClaseActive(clase._id, isActive);
+          setClases(current => current.map(item => item._id === clase._id ? response.data.clase : item));
+          Swal.fire(
+            isActive ? "Clase reactivada" : "Clase suspendida",
+            isActive ? "La clase vuelve a estar disponible." : "La clase se conservó y quedó suspendida.",
+            "success",
+          );
+        } catch (error) {
+          Swal.fire("Error", error.response?.data?.msg || "No se pudo cambiar el estado de la clase.", "error");
         }
     }
   };
@@ -375,10 +383,18 @@ const ClasesAdmin = () => {
                            <button onClick={() => abrirModalEditar(c)} className="p-2 bg-white border border-gray-200 text-indigo-600 rounded-lg hover:bg-indigo-50 hover:border-indigo-200 shadow-sm transition" title="Editar Clase">
                              <Edit3 size={16}/>
                            </button>
-                           <button onClick={() => handleEliminar(c._id)} className="p-2 bg-white border border-gray-200 text-red-600 rounded-lg hover:bg-red-50 hover:border-red-200 shadow-sm transition" title="Eliminar Clase">
-                             <Trash2 size={16}/>
+                           <button
+                             onClick={() => handleToggleStatus(c)}
+                             className={`p-2 bg-white border rounded-lg shadow-sm transition ${c.isActive ? "border-amber-200 text-amber-600 hover:bg-amber-50" : "border-emerald-200 text-emerald-600 hover:bg-emerald-50"}`}
+                             title={c.isActive ? "Suspender clase" : "Reactivar clase"}
+                             aria-label={c.isActive ? "Suspender clase" : "Reactivar clase"}
+                           >
+                             {c.isActive ? <Ban size={16}/> : <CircleCheck size={16}/>}
                            </button>
                          </div>
+                         <span className={`mt-2 inline-flex rounded-full px-2 py-1 text-xs font-semibold ${c.isActive ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"}`}>
+                           {c.isActive ? "Activa" : "Suspendida"}
+                         </span>
                        </td>
 
                      </tr>

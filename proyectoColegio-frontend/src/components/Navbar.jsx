@@ -53,7 +53,7 @@ const Navbar = ({ onLoginClick }) => {
           aria-label="Ir al inicio"
         >
           <img
-            src="/img/Logodelsol.png"
+            src="/img/Logo.png"
             alt=""
             className="h-10 w-10 object-contain transition-transform group-hover:scale-105"
           />

@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { toast } from "react-toastify";
-import { Plus, Search, Edit2, Trash2, BookOpen, X, Loader2, User, GraduationCap, Users, Filter, Book, ListChecks } from "lucide-react";
+import { Plus, Search, Edit2, Ban, CircleCheck, BookOpen, X, Loader2, User, Users, Filter, Book, ListChecks, GraduationCap } from "lucide-react";
 import Swal from "sweetalert2";
 import { 
   getMaterias, 
   createMateria, 
   updateMateria, 
-  deleteMateria, 
+  setMateriaActive,
   getProfesores 
 } from "../../api/api";
 
@@ -34,7 +34,7 @@ const MateriasAdmin = () => {
     setLoading(true);
     try {
       const [resMaterias, resProfesores] = await Promise.all([
-        getMaterias(),
+        getMaterias({ includeSuspended: true }),
         getProfesores()
       ]);
       setMaterias(resMaterias.data || []);
@@ -85,24 +85,31 @@ const MateriasAdmin = () => {
     }
   };
 
-  const handleDelete = (materia) => {
+  const handleToggleStatus = async (materia) => {
+    const isActive = !materia.isActive;
     Swal.fire({
-      title: "¿Eliminar materia?",
-      text: `Se eliminará permanentemente la materia "${materia.nombre}"`,
-      icon: "warning",
+      title: isActive ? "¿Reactivar materia?" : "¿Suspender materia?",
+      text: isActive
+        ? `La materia "${materia.nombre}" volverá a estar disponible.`
+        : `La materia "${materia.nombre}" se conservará, pero dejará de estar disponible para las clases.`,
+      icon: isActive ? "question" : "warning",
       showCancelButton: true,
-      confirmButtonText: "Sí, eliminar",
+      confirmButtonText: isActive ? "Sí, reactivar" : "Sí, suspender",
       cancelButtonText: "Cancelar",
-      confirmButtonColor: "#dc2626",
+      confirmButtonColor: isActive ? "#059669" : "#d97706",
       cancelButtonColor: "#6b7280"
     }).then(async (result) => {
       if (result.isConfirmed) {
         try {
-          await deleteMateria(materia._id);
-          setMaterias(prev => prev.filter(m => m._id !== materia._id));
-          Swal.fire("¡Eliminada!", "La materia ha sido eliminada.", "success");
-        } catch {
-          toast.error("Error al eliminar la materia");
+          const response = await setMateriaActive(materia._id, isActive);
+          setMaterias(prev => prev.map(m => m._id === materia._id ? response.data.materia : m));
+          Swal.fire(
+            isActive ? "Materia reactivada" : "Materia suspendida",
+            isActive ? "La materia vuelve a estar disponible." : "La materia se conservó y quedó suspendida.",
+            "success",
+          );
+        } catch (error) {
+          toast.error(error.response?.data?.msg || "No se pudo cambiar el estado de la materia.");
         }
       }
     });
@@ -291,12 +298,13 @@ const MateriasAdmin = () => {
                     >
                       <Edit2 size={18} strokeWidth={2} />
                     </button>
-                    <button 
-                      onClick={() => handleDelete(materia)} 
-                      className="bg-white/90 hover:bg-white p-2 rounded-lg text-red-600 hover:text-red-700 transition-all shadow-lg active:scale-95"
-                      title="Eliminar materia"
+                    <button
+                      onClick={() => handleToggleStatus(materia)}
+                      className={`bg-white/90 hover:bg-white p-2 rounded-lg transition-all shadow-lg active:scale-95 ${materia.isActive ? "text-amber-600 hover:text-amber-700" : "text-emerald-600 hover:text-emerald-700"}`}
+                      title={materia.isActive ? "Suspender materia" : "Reactivar materia"}
+                      aria-label={materia.isActive ? `Suspender ${materia.nombre}` : `Reactivar ${materia.nombre}`}
                     >
-                      <Trash2 size={18} strokeWidth={2} />
+                      {materia.isActive ? <Ban size={18} strokeWidth={2} /> : <CircleCheck size={18} strokeWidth={2} />}
                     </button>
                   </div>
                   
@@ -309,6 +317,9 @@ const MateriasAdmin = () => {
                   <h3 className="font-bold text-xl text-white mb-2 pr-20">
                     {materia.nombre}
                   </h3>
+                  <span className={`mb-2 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${materia.isActive ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"}`}>
+                    {materia.isActive ? "Activa" : "Suspendida"}
+                  </span>
                   
                   <div className="flex gap-2">
                     <span className="bg-white/20 backdrop-blur-sm text-white text-xs font-semibold px-3 py-1.5 rounded-lg border border-white/30">

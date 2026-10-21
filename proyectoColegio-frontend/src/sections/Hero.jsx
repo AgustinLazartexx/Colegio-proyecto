@@ -70,8 +70,8 @@ const Hero = () => {
           <div className="absolute -inset-3 -rotate-2 rounded-[2rem] bg-gradient-to-br from-blue-200 via-white to-red-100" />
           <div className="relative overflow-hidden rounded-[1.7rem] border border-white/80 bg-white p-2 shadow-2xl shadow-slate-900/15">
             <img
-              src="/img/colegio1.jpg"
-              alt="Estudiantes participando de una clase"
+              src="/img/fachada-colegio.png"
+              alt="Fachada del Colegio Reina de la Esperanza"
               className="h-[300px] w-full rounded-[1.25rem] object-cover object-center sm:h-[390px] lg:h-[450px]"
             />
             <div className="absolute inset-x-2 bottom-2 rounded-b-[1.25rem] bg-gradient-to-t from-slate-950/75 via-slate-950/25 to-transparent px-6 pb-6 pt-16 text-white">

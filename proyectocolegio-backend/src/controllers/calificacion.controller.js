@@ -18,8 +18,8 @@ const asignadaAlProfesor = async (materiaId, profesorId) => {
     `SELECT m.id FROM materias m
      LEFT JOIN clases c ON c.materia_id = m.id
      LEFT JOIN clase_profesores cp ON cp.clase_id = c.id AND cp.profesor_id = UNHEX(:profesorId)
-     WHERE m.id = UNHEX(:materiaId)
-       AND (m.profesor_id = UNHEX(:profesorId) OR cp.profesor_id IS NOT NULL)
+     WHERE m.id = UNHEX(:materiaId) AND m.isActive = TRUE
+       AND (m.profesor_id = UNHEX(:profesorId) OR (c.isActive = TRUE AND cp.profesor_id IS NOT NULL))
      LIMIT 1`,
     { materiaId: databaseId(materiaId), profesorId: databaseId(profesorId) },
   );
@@ -39,7 +39,8 @@ export const crearCalificacion = async (req, res) => {
     }
     const enrolled = await queryRows(
       `SELECT 1 AS ok FROM clase_alumnos ca JOIN clases c ON c.id = ca.clase_id
-       WHERE c.materia_id = UNHEX(:materiaId) AND ca.alumno_id = UNHEX(:alumnoId) LIMIT 1`,
+       WHERE c.materia_id = UNHEX(:materiaId) AND c.isActive = TRUE
+         AND ca.alumno_id = UNHEX(:alumnoId) LIMIT 1`,
       { materiaId: databaseId(materia), alumnoId: databaseId(alumno) },
     );
     if (!enrolled.length) return res.status(400).json({ msg: "El alumno no está inscripto en esta materia." });

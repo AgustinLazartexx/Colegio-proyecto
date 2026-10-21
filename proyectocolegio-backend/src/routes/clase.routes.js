@@ -4,7 +4,7 @@ import { checkRole } from "../middlewares/checkRole.js";
 import {
   crearClase,
   actualizarClase,
-  eliminarClase,
+  cambiarEstadoClase,
   obtenerTodasLasClases,
   obtenerClasesProfesor,
   obtenerClasePorId,
@@ -31,7 +31,10 @@ router.get("/alumno/mis-clases", checkAuth, checkRole("alumno"), getMisClasesAlu
 // NOTA: Tu controlador lee 'req.params.claseId', así que usamos ':claseId'
 router.get("/:claseId", adminProfesor, obtenerClasePorId); 
 router.put("/:id", adminSolo, actualizarClase); // Este controlador lee 'id'
-router.delete("/:id", adminSolo, eliminarClase); // Este controlador lee 'id'
+router.put("/:id/estado", adminSolo, cambiarEstadoClase);
+router.delete("/:id", adminSolo, (_req, res) =>
+  res.status(405).json({ msg: "Las clases no se pueden borrar; suspenda o reactive su estado." }),
+);
 
 // --- Gestión de Alumnos en Clases ---
 // El controlador 'asignarAlumno' lee 'id' (de la clase)

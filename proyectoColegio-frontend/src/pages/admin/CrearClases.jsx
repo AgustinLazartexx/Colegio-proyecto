@@ -6,7 +6,8 @@ import {
   Clock,
   Users,
   Edit,
-  Trash2,
+  Ban,
+  CircleCheck,
   Plus,
   Loader2,
   BookOpen,
@@ -18,7 +19,7 @@ import {
 // Importar funciones de API
 import {
   getTodasLasClases,
-  eliminarClase,
+  setClaseActive,
   getMaterias,
   getProfesores
 } from "../../api/api";
@@ -76,7 +77,7 @@ const ClasesAdmin = () => {
         }
       });
 
-      const res = await getTodasLasClases(filtrosLimpios);
+      const res = await getTodasLasClases({ ...filtrosLimpios, includeSuspended: true });
       setClases(res.data?.clases || []);
     } catch (err) {
       console.error("Error cargando clases:", err);
@@ -86,18 +87,20 @@ const ClasesAdmin = () => {
     }
   };
 
-  const handleEliminar = async (id) => {
-    if (!window.confirm("¿Está seguro de eliminar esta clase? Esta acción no se puede deshacer.")) {
+  const handleToggleStatus = async (clase) => {
+    const isActive = !clase.isActive;
+    const action = isActive ? "reactivar" : "suspender";
+    if (!window.confirm(`¿Está seguro de ${action} esta clase? La información se conservará.`)) {
       return;
     }
 
     try {
-      await eliminarClase(id);
-      toast.success("Clase eliminada correctamente");
-      cargarClases();
+      const response = await setClaseActive(clase._id, isActive);
+      setClases(current => current.map(item => item._id === clase._id ? response.data.clase : item));
+      toast.success(isActive ? "Clase reactivada correctamente" : "Clase suspendida correctamente");
     } catch (err) {
-      console.error("Error al eliminar:", err);
-      toast.error(err.response?.data?.msg || "Error al eliminar la clase");
+      console.error("Error al cambiar estado de la clase:", err);
+      toast.error(err.response?.data?.msg || "Error al cambiar el estado de la clase");
     }
   };
 
@@ -276,6 +279,9 @@ const ClasesAdmin = () => {
                       <Users className="w-4 h-4 text-gray-500" />
                       <span>{clase.alumnos?.length || 0} alumnos</span>
                     </div>
+                    <span className={`inline-flex w-fit rounded-full px-2 py-1 text-xs font-semibold ${clase.isActive ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"}`}>
+                      {clase.isActive ? "Activa" : "Suspendida"}
+                    </span>
                   </div>
                 </div>
 
@@ -296,11 +302,12 @@ const ClasesAdmin = () => {
                     <Edit className="w-5 h-5" />
                   </button>
                   <button
-                    onClick={() => handleEliminar(clase._id)}
-                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                    title="Eliminar clase"
+                    onClick={() => handleToggleStatus(clase)}
+                    className={`p-2 rounded-lg ${clase.isActive ? "text-amber-600 hover:bg-amber-50" : "text-emerald-600 hover:bg-emerald-50"}`}
+                    title={clase.isActive ? "Suspender clase" : "Reactivar clase"}
+                    aria-label={clase.isActive ? "Suspender clase" : "Reactivar clase"}
                   >
-                    <Trash2 className="w-5 h-5" />
+                    {clase.isActive ? <Ban className="w-5 h-5" /> : <CircleCheck className="w-5 h-5" />}
                   </button>
                 </div>
               </div>

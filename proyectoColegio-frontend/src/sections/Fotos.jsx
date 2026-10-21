@@ -1,27 +1,26 @@
-import { useKeenSlider } from "keen-slider/react";
-import "keen-slider/keen-slider.min.css";
 import { motion } from "framer-motion";
 
 const MotionDiv = motion.div;
 
-const images = [
-  "/img/colegiosalon.png",
-  "/img/colegio2.jpg",
-  "/img/colegio3.jpg",
-  "/img/colegio4.jpg",
+const fotos = [
+  {
+    src: "/img/vida-escolar-1.png",
+    alt: "Estudiantes reunidos en el patio del colegio",
+    caption: "La comunidad escolar",
+  },
+  {
+    src: "/img/vida-escolar-2.png",
+    alt: "Celebración escolar en el patio",
+    caption: "Celebraciones y encuentros",
+  },
+  {
+    src: "/img/vida-escolar-3.png",
+    alt: "Estudiantes participando de un acto escolar",
+    caption: "Actos escolares",
+  },
 ];
 
 const Fotos = () => {
-  const [sliderRef] = useKeenSlider({
-    loop: true,
-    mode: "snap",
-    slides: {
-      origin: "center",
-      perView: 1,
-      spacing: 15,
-    },
-  });
-
   return (
     <section className="scroll-mt-20 bg-primary px-4 py-14 text-accent sm:px-6 sm:py-20 md:px-20">
       <MotionDiv
@@ -29,31 +28,22 @@ const Fotos = () => {
         whileInView={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: "easeOut" }}
         viewport={{ once: true }}
-        className="mx-auto max-w-5xl"
+        className="mx-auto max-w-6xl"
       >
-        <h2 className="mb-8 text-center text-3xl font-bold sm:mb-12">Galería de Fotos</h2>
-        <div
-          ref={sliderRef}
-          className="keen-slider overflow-hidden rounded-xl shadow-lg"
-          role="region"
-          aria-roledescription="carrusel"
-          aria-label="Galería de fotos del colegio"
-        >
-          {images.map((img, i) => (
-            <div
-              className="keen-slider__slide"
-              key={img}
-              role="group"
-              aria-roledescription="diapositiva"
-              aria-label={`Imagen ${i + 1} de ${images.length}`}
-            >
+        <h2 className="mb-8 text-center text-3xl font-bold sm:mb-12">Así se vive en el colegio</h2>
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {fotos.map((foto) => (
+            <figure key={foto.src} className="overflow-hidden rounded-xl bg-white shadow-lg">
               <img
-                src={img}
-                alt={`Foto colegio ${i + 1}`}
-                loading={i === 0 ? "eager" : "lazy"}
-                className="h-64 w-full object-cover sm:h-80 md:h-96"
+                src={foto.src}
+                alt={foto.alt}
+                loading="lazy"
+                className="h-64 w-full object-cover sm:h-72"
               />
-            </div>
+              <figcaption className="px-5 py-3 text-center text-sm font-medium text-slate-700">
+                {foto.caption}
+              </figcaption>
+            </figure>
           ))}
         </div>
       </MotionDiv>

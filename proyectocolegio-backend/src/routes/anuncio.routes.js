@@ -5,7 +5,7 @@ import {
   obtenerAnunciosAlumno,
   obtenerAnunciosProfesor,
   actualizarAnuncio,
-  eliminarAnuncio
+  cambiarEstadoAnuncio
 } from "../controllers/anuncio.controller.js";
 import { checkAuth } from "../middlewares/checkAuth.js";
 import { checkRole } from "../middlewares/checkRole.js";
@@ -57,16 +57,25 @@ router.put(
   actualizarAnuncio
 );
 
-// 📌 Eliminar anuncio del profesor
+// Los anuncios se conservan; el profesor solo puede suspenderlos o reactivarlos.
 router.delete(
   "/:id",
+  [
+    checkAuth,
+    checkRole("profesor"),
+  ],
+  (_req, res) => res.status(405).json({ msg: "Los anuncios no se pueden eliminar; suspenda o reactive su estado." }),
+);
+
+router.put(
+  "/:id/estado",
   [
     checkAuth,
     checkRole("profesor"),
     param("id", "ID inválido").matches(/^[\da-f]{32}$/i),
     validateFields
   ],
-  eliminarAnuncio
+  cambiarEstadoAnuncio
 );
 
 export default router;

@@ -44,7 +44,7 @@ export const getMaterias = (params = {}) => api.get('/materias', { params });
 export const getMateriaById = (id) => api.get(`/materias/${id}`);
 export const createMateria = (data) => api.post('/materias', data);
 export const updateMateria = (id, data) => api.put(`/materias/${id}`, data);
-export const deleteMateria = (id) => api.delete(`/materias/${id}`);
+export const setMateriaActive = (id, isActive) => api.put(`/materias/${id}/estado`, { isActive });
 export const getMateriasProfesor = () => api.get('/materias/profesor/listado');
 
 // ==========================================
@@ -52,10 +52,10 @@ export const getMateriasProfesor = () => api.get('/materias/profesor/listado');
 // ==========================================
 export const crearClase = (data) => api.post('/clases', data);
 export const actualizarClase = (id, data) => api.put(`/clases/${id}`, data);
-export const eliminarClase = (id) => api.delete(`/clases/${id}`);
+export const setClaseActive = (id, isActive) => api.put(`/clases/${id}/estado`, { isActive });
 
 // Admin: Todas las clases
-export const getTodasLasClases = () => api.get('/clases'); 
+export const getTodasLasClases = (params = {}) => api.get('/clases', { params });
 
 // Profesor: Solo mis clases
 export const getMisClases = () => api.get('/clases/misclases');
@@ -129,7 +129,7 @@ export const getMisNotasAlumno = () => api.get('/notas/mias');
 export const getMisAnuncios = () => api.get('/anuncios/profesor/mis-anuncios');
 export const crearAnuncio = (data) => api.post('/anuncios', data);
 export const actualizarAnuncio = (id, data) => api.put(`/anuncios/${id}`, data);
-export const eliminarAnuncio = (id) => api.delete(`/anuncios/${id}`);
+export const setAnuncioActive = (id, isActive) => api.put(`/anuncios/${id}/estado`, { isActive });
 // --- NUEVO: Función para el alumno ---
 export const getAnunciosAlumno = () => api.get('/anuncios/alumno/mis-anuncios');
 

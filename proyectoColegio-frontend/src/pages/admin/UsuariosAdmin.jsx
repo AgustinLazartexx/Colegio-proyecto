@@ -1,4 +1,4 @@
-import { createElement, useEffect, useState } from "react";
+import { createElement, useState } from "react";
 import Swal from "sweetalert2";
 import { useAuth } from "../../context/AuthContext";
 import {
@@ -16,7 +16,8 @@ import {
 const UsuariosAdmin = () => {
   const { usuario: usuarioActual } = useAuth();
   const [usuarios, setUsuarios] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
   
   // --- ESTADOS DE ORGANIZACIÓN ---
   const [activeTab, setActiveTab] = useState("alumno"); // 'alumno', 'profesor', 'admin'
@@ -39,47 +40,44 @@ const UsuariosAdmin = () => {
   const [form, setForm] = useState(initialForm);
 
   const aniosAcademicos = [1, 2, 3, 4, 5, 6];
+  const hasSearchCriteria = Boolean(searchTerm.trim() || filterAnio || filterDivision);
 
-  // --- CARGA DE DATOS ---
-  const fetchUsuarios = async () => {
+  const currentFilters = () => ({
+    rol: activeTab,
+    ...(filterAnio ? { anio: filterAnio } : {}),
+    ...(filterDivision ? { division: filterDivision } : {}),
+    ...(searchTerm.trim() ? { q: searchTerm.trim() } : {}),
+  });
+
+  const clearResults = () => {
+    setUsuarios([]);
+    setHasSearched(false);
+  };
+
+  const fetchUsuarios = async (filters) => {
      try {
        setLoading(true);
-       const res = await getUsuarios();
+       const res = await getUsuarios(filters);
        setUsuarios(res.data || []);
      } catch (error) {
        console.error("Error cargando usuarios:", error);
        setUsuarios([]);
+       Swal.fire("Error", error.response?.data?.msg || "No se pudieron buscar los usuarios.", "error");
      } finally {
        setLoading(false);
      }
   };
 
-  useEffect(() => {
-    fetchUsuarios();
-  }, []);
-
-  // --- LÓGICA DE FILTRADO (LA CLAVE DE LA ORGANIZACIÓN) ---
-  const usuariosFiltrados = usuarios.filter((u) => {
-    // 1. Primer filtro: Por Pestaña (Rol)
-    if (u.rol !== activeTab) return false;
-
-    // 2. Segundo filtro: Búsqueda de texto (Nombre, DNI, Email)
-    const term = searchTerm.toLowerCase();
-    const matchSearch = 
-        u.nombre?.toLowerCase().includes(term) || 
-        u.email?.toLowerCase().includes(term) || 
-        u.dni?.includes(term);
-
-    if (!matchSearch) return false;
-
-    // 3. Tercer filtro: Específico para Alumnos (Año y División)
-    if (activeTab === "alumno") {
-        if (filterAnio && u.anio !== parseInt(filterAnio)) return false;
-        if (filterDivision && u.division !== filterDivision) return false;
+  const handleSearch = async (event) => {
+    event.preventDefault();
+    setHasSearched(true);
+    const filters = currentFilters();
+    if (!filters.q && !filters.anio && !filters.division) {
+      setUsuarios([]);
+      return;
     }
-
-    return true;
-  });
+    await fetchUsuarios(filters);
+  };
 
   // --- MANEJO DEL MODAL ---
   const resetForm = () => {
@@ -139,7 +137,7 @@ const UsuariosAdmin = () => {
         Swal.fire("¡Creado!", `Usuario creado con DNI: ${form.dni}`, "success");
       }
       setShowModal(false);
-      fetchUsuarios();
+      if (hasSearched && hasSearchCriteria) await fetchUsuarios(currentFilters());
       resetForm();
     } catch (error) {
       console.error(error);
@@ -184,7 +182,14 @@ const UsuariosAdmin = () => {
   // --- RENDERIZADO DE PESTAÑAS ---
   const TabButton = ({ id, label, icon, color }) => (
       <button
-        onClick={() => { setActiveTab(id); setSearchTerm(""); }}
+        type="button"
+        onClick={() => {
+          setActiveTab(id);
+          setSearchTerm("");
+          setFilterAnio("");
+          setFilterDivision("");
+          clearResults();
+        }}
         className={`flex items-center gap-2 px-6 py-3 font-medium transition-all border-b-2 ${
             activeTab === id 
             ? `border-${color}-600 text-${color}-700 bg-${color}-50` 
@@ -193,9 +198,6 @@ const UsuariosAdmin = () => {
       >
         {createElement(icon, { size: 18 })}
         {label}
-        <span className="ml-2 text-xs bg-gray-200 px-2 py-0.5 rounded-full text-gray-700">
-            {usuarios.filter(u => u.rol === id).length}
-        </span>
       </button>
   );
 
@@ -224,7 +226,7 @@ const UsuariosAdmin = () => {
         </div>
 
         {/* --- BARRA DE HERRAMIENTAS Y FILTROS --- */}
-        <div className="bg-white p-4 rounded-b-xl shadow-sm border border-t-0 border-gray-200 flex flex-col md:flex-row gap-4">
+        <form onSubmit={handleSearch} className="bg-white p-4 rounded-b-xl shadow-sm border border-t-0 border-gray-200 flex flex-col md:flex-row gap-4">
             
             {/* Buscador General */}
             <div className="relative flex-1">
@@ -233,7 +235,7 @@ const UsuariosAdmin = () => {
                     type="text" 
                     placeholder={`Buscar ${activeTab === 'alumno' ? 'alumno' : activeTab}...`}
                     value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
+                    onChange={e => { setSearchTerm(e.target.value); clearResults(); }}
                     className="w-full pl-10 p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition"
                 />
             </div>
@@ -245,7 +247,7 @@ const UsuariosAdmin = () => {
                         <Filter className="absolute left-3 top-3 text-gray-400" size={16} />
                         <select 
                             value={filterAnio}
-                            onChange={e => setFilterAnio(e.target.value)}
+                            onChange={e => { setFilterAnio(e.target.value); clearResults(); }}
                             className="w-full pl-9 p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none appearance-none bg-white cursor-pointer"
                         >
                             <option value="">Todos los Años</option>
@@ -257,7 +259,7 @@ const UsuariosAdmin = () => {
                          <ListChecks className="absolute left-3 top-3 text-gray-400" size={16} />
                          <select 
                             value={filterDivision}
-                            onChange={e => setFilterDivision(e.target.value)}
+                            onChange={e => { setFilterDivision(e.target.value); clearResults(); }}
                             className="w-full pl-9 p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none appearance-none bg-white cursor-pointer"
                          >
                             <option value="">Todas Div.</option>
@@ -266,12 +268,26 @@ const UsuariosAdmin = () => {
                     </div>
                 </div>
             )}
-        </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-5 py-2.5 font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Search size={18} />
+              Buscar
+            </button>
+        </form>
 
         {/* --- TABLA DE RESULTADOS --- */}
         <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200">
             {loading ? (
                 <div className="p-12 flex justify-center"><Loader2 className="animate-spin text-indigo-600" size={40} /></div>
+            ) : !hasSearched || !hasSearchCriteria ? (
+                <div className="p-12 text-center text-gray-500">
+                    <Search size={40} className="mx-auto mb-3 text-gray-300" />
+                    <p className="font-semibold text-gray-700">Busca usuarios cuando los necesites</p>
+                    <p className="mt-1 text-sm">Escribe un nombre, correo o DNI, o selecciona año o división; luego presiona “Buscar”.</p>
+                </div>
             ) : (
                 <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm text-gray-600">
@@ -286,8 +302,8 @@ const UsuariosAdmin = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {usuariosFiltrados.length > 0 ? (
-                                usuariosFiltrados.map(u => (
+                            {usuarios.length > 0 ? (
+                                usuarios.map(u => (
                                     <tr key={u._id} className="hover:bg-gray-50 transition-colors group">
                                         
                                         {/* Columna Nombre */}
@@ -369,7 +385,7 @@ const UsuariosAdmin = () => {
                                     <td colSpan={activeTab === "alumno" ? 5 : 4} className="px-6 py-12 text-center text-gray-400">
                                         <div className="flex flex-col items-center justify-center">
                                             <Users size={48} className="text-gray-200 mb-2"/>
-                                            <p>No se encontraron usuarios en esta sección.</p>
+                                            <p>No se encontraron usuarios con los filtros seleccionados.</p>
                                         </div>
                                     </td>
                                 </tr>

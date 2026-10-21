@@ -20,6 +20,14 @@ import {
   getReporteAsistencias,
 } from "../../api/api";
 
+const getFechaLocal = () => {
+  const fecha = new Date();
+  const anio = fecha.getFullYear();
+  const mes = String(fecha.getMonth() + 1).padStart(2, "0");
+  const dia = String(fecha.getDate()).padStart(2, "0");
+  return `${anio}-${mes}-${dia}`;
+};
+
 const VerAsistenciasAdmin = () => {
   const [asistencias, setAsistencias] = useState([]);
   const [clases, setClases] = useState([]); 
@@ -29,7 +37,7 @@ const VerAsistenciasAdmin = () => {
   const [curso, setCurso] = useState({ anio: "", division: "" });
 
   const [filtros, setFiltros] = useState({
-    fecha: new Date().toISOString().split('T')[0], 
+    fecha: getFechaLocal(),
     claseId: "",
   });
 
@@ -59,10 +67,9 @@ const VerAsistenciasAdmin = () => {
     try {
       // USAR LA NUEVA FUNCIÓN DE API.JS
       const res = await getReporteAsistencias(filtros.claseId, filtros.fecha);
-      
-      setAsistencias(res.data || []);
-      
-      if(res.data.length === 0) toast.info("No hay asistencias registradas para esa fecha.");
+      const registros = Array.isArray(res.data) ? res.data : [];
+      setAsistencias(registros);
+      if (registros.length === 0) toast.info("No hay asistencias registradas para esa fecha.");
 
     } catch (err) {
       console.error(err);
@@ -105,6 +112,11 @@ const VerAsistenciasAdmin = () => {
     );
   };
 
+  const resumenAsistencias = asistencias.reduce((resumen, asistencia) => {
+    if (Object.hasOwn(resumen, asistencia.estado)) resumen[asistencia.estado] += 1;
+    return resumen;
+  }, { presente: 0, ausente: 0, tarde: 0, justificado: 0 });
+
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-6xl mx-auto space-y-8">
@@ -115,24 +127,26 @@ const VerAsistenciasAdmin = () => {
             <UserCheck className="text-white" size={28} />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Reporte de Asistencias</h1>
-            <p className="text-gray-500">Consulta los registros docentes o compara el control general con las materias.</p>
+            <h1 className="text-3xl font-bold text-gray-900">Historial de asistencias</h1>
+            <p className="text-gray-500">Elegí una clase y una fecha para consultar la lista de alumnos.</p>
           </div>
         </div>
 
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setModo("materias")}
+            aria-pressed={modo === "materias"}
             className={`rounded-lg px-4 py-2 font-semibold ${modo === "materias" ? "bg-blue-600 text-white" : "bg-white text-gray-700 border"}`}
           >
-            Reporte por materia
+            Historial por clase
           </button>
           <button
             onClick={() => setModo("comparacion")}
+            aria-pressed={modo === "comparacion"}
             className={`rounded-lg px-4 py-2 font-semibold flex items-center gap-2 ${modo === "comparacion" ? "bg-blue-600 text-white" : "bg-white text-gray-700 border"}`}
           >
             <ClipboardCheck size={18} />
-            Control general vs. materias
+            Comparación avanzada
           </button>
         </div>
 
@@ -149,13 +163,16 @@ const VerAsistenciasAdmin = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Clase / Materia</label>
                 <select
                   value={filtros.claseId}
-                  onChange={(e) => setFiltros({ ...filtros, claseId: e.target.value })}
+                  onChange={(e) => {
+                    setFiltros({ ...filtros, claseId: e.target.value });
+                    setAsistencias([]);
+                  }}
                   className="w-full border border-gray-300 p-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                 >
-                  <option value="">-- Selecciona una clase --</option>
+                  <option value="">Seleccioná una clase</option>
                   {clases.map((c) => (
                     <option key={c._id || c.id} value={c._id || c.id}>
-                      {c.materia?.nombre || "Materia"} - {c.anio}° {c.division} ({c.diaSemana})
+                      {c.materia?.nombre || "Materia"} — {c.anio}° {c.division} · {c.diaSemana} · {c.horaInicio}
                     </option>
                   ))}
                 </select>
@@ -201,6 +218,7 @@ const VerAsistenciasAdmin = () => {
                     value={filtros.fecha}
                     onChange={(e) => {
                       setFiltros({ ...filtros, fecha: e.target.value });
+                      setAsistencias([]);
                       setComparacion(null);
                     }}
                     className="w-full border border-gray-300 p-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
@@ -215,7 +233,7 @@ const VerAsistenciasAdmin = () => {
                     className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 h-[42px]"
                 >
                     {loading ? <Loader2 className="animate-spin" /> : modo === "materias" ? <Search size={20} /> : <ClipboardCheck size={20} />}
-                    {modo === "materias" ? "Ver Reporte" : "Comparar asistencias"}
+                    {modo === "materias" ? "Ver historial" : "Comparar"}
                 </button>
             </div>
           </div>
@@ -322,65 +340,49 @@ const VerAsistenciasAdmin = () => {
         /* Tabla de Resultados */
         <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200">
             {asistencias.length > 0 ? (
-             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead className="bg-gray-100 text-gray-600 uppercase text-xs font-bold">
-                  <tr>
-                    <th className="p-4 border-b">Alumno</th>
-                    <th className="p-4 border-b text-center">Estado</th>
-                    <th className="p-4 border-b">Cargado Por</th>
-                    <th className="p-4 border-b">Última Modificación</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 text-sm">
-                  {asistencias.map((asis) => (
-                    <tr key={asis._id} className="hover:bg-blue-50 transition-colors">
-                      
-                      {/* Columna Alumno */}
-                      <td className="p-4 font-medium text-gray-900">
-                        {asis.alumno?.nombre || "Alumno desconocido"}
-                      </td>
-
-                      {/* Columna Estado */}
-                      <td className="p-4 text-center">
-                        {getEstadoBadge(asis.estado)}
-                      </td>
-
-                      {/* Columna Cargado Por (La parte importante) */}
-                      <td className="p-4">
-                        <div className="flex items-center gap-2">
-                            {asis.cargadoPor?.rol === 'admin' ? (
-                                <ShieldCheck size={16} className="text-purple-600" title="Administrador" />
-                            ) : (
-                                <User size={16} className="text-gray-500" title="Profesor" />
-                            )}
-                            <div className="flex flex-col">
-                                <span className={`font-semibold ${asis.cargadoPor?.rol === 'admin' ? 'text-purple-700' : 'text-gray-700'}`}>
-                                    {asis.cargadoPor?.nombre || "Sistema"}
-                                </span>
-                                <span className="text-xs text-gray-400 uppercase">
-                                    {asis.cargadoPor?.rol || "-"}
-                                </span>
-                            </div>
-                        </div>
-                      </td>
-
-                      {/* Columna Fecha Hora */}
-                      <td className="p-4 text-gray-500 flex items-center gap-2">
-                        <Clock size={14}/>
-                        {new Date(asis.updatedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                      </td>
-
-                    </tr>
+              <>
+                <div className="grid grid-cols-2 gap-3 border-b border-gray-200 p-4 sm:grid-cols-4">
+                  {[
+                    ["Presentes", resumenAsistencias.presente, "text-green-700"],
+                    ["Ausentes", resumenAsistencias.ausente, "text-red-700"],
+                    ["Tarde", resumenAsistencias.tarde, "text-amber-700"],
+                    ["Justificados", resumenAsistencias.justificado, "text-blue-700"],
+                  ].map(([label, count, color]) => (
+                    <div key={label} className="rounded-lg bg-gray-50 px-4 py-3">
+                      <p className="text-sm text-gray-500">{label}</p>
+                      <p className={`text-xl font-bold ${color}`}>{count}</p>
+                    </div>
                   ))}
-                </tbody>
-              </table>
-             </div>
+                </div>
+                <div className="divide-y divide-gray-100">
+                  {asistencias.map((asis) => (
+                    <div key={asis._id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 hover:bg-blue-50">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-gray-900">{asis.alumno?.nombre || "Alumno desconocido"}</p>
+                        <div className="mt-1 flex items-center gap-1.5 text-xs text-gray-500">
+                          {asis.cargadoPor?.rol === "admin"
+                            ? <ShieldCheck size={14} className="text-purple-600" aria-label="Administrador" />
+                            : <User size={14} aria-label="Docente" />}
+                          <span>{asis.cargadoPor?.nombre || "Sistema"}</span>
+                          {asis.updatedAt && (
+                            <>
+                              <span aria-hidden="true">·</span>
+                              <Clock size={12} aria-hidden="true" />
+                              <span>{new Date(asis.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      {getEstadoBadge(asis.estado)}
+                    </div>
+                  ))}
+                </div>
+              </>
             ) : (
                 <div className="p-12 text-center text-gray-400 flex flex-col items-center">
                     <CalendarDays size={48} className="mb-4 text-gray-300"/>
-                    <p className="text-lg font-medium">No hay datos para mostrar.</p>
-                    <p className="text-sm">Selecciona una clase y una fecha arriba.</p>
+                    <p className="text-lg font-medium">No hay registros para mostrar.</p>
+                    <p className="text-sm">Elegí una clase y una fecha y consultá el historial.</p>
                 </div>
             )}
         </div>

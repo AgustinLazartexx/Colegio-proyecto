@@ -9,6 +9,7 @@ const materiaSelect = `
     m.descripcion,
     m.anio,
     m.division,
+    m.isActive,
     HEX(m.profesor_id) AS profesorId,
     p.nombre AS profesorNombre,
     p.email AS profesorEmail
@@ -23,6 +24,7 @@ const toMateria = (row) => ({
   descripcion: row.descripcion,
   anio: row.anio,
   division: row.division,
+  isActive: Boolean(row.isActive),
   profesor: row.profesorId
     ? {
         _id: row.profesorId,
@@ -112,9 +114,13 @@ export const crearMateria = async (req, res) => {
 };
 
 export const obtenerMateriasFiltradas = async (req, res) => {
-  const { anio, profesor, division } = req.query;
+  const { anio, profesor, division, includeSuspended } = req.query;
   const conditions = [];
   const replacements = {};
+
+  if (!(req.user.rol === "admin" && includeSuspended === "true")) {
+    conditions.push("m.isActive = TRUE");
+  }
 
   if (anio !== undefined) {
     const year = Number(anio);
@@ -165,8 +171,16 @@ export const obtenerMateria = async (req, res) => {
   if (!isDatabaseId(req.params.id)) return res.status(400).json({ msg: "ID de materia inválido." });
   try {
     const [row] = await sequelize.query(
-      `${materiaSelect} WHERE m.id = UNHEX(:id) LIMIT 1`,
-      { replacements: { id: databaseId(req.params.id) }, type: QueryTypes.SELECT },
+      `${materiaSelect}
+       WHERE m.id = UNHEX(:id) AND (m.isActive = TRUE OR :isAdmin = TRUE)
+       LIMIT 1`,
+      {
+        replacements: {
+          id: databaseId(req.params.id),
+          isAdmin: req.user.rol === "admin",
+        },
+        type: QueryTypes.SELECT,
+      },
     );
     if (!row) return res.status(404).json({ msg: "Materia no encontrada." });
     return res.json(toMateria(row));
@@ -242,20 +256,28 @@ export const actualizarMateria = async (req, res) => {
   }
 };
 
-export const eliminarMateria = async (req, res) => {
+export const cambiarEstadoMateria = async (req, res) => {
   if (!isDatabaseId(req.params.id)) return res.status(400).json({ msg: "ID de materia inválido." });
+  if (typeof req.body.isActive !== "boolean") {
+    return res.status(400).json({ msg: "El estado de la materia es inválido." });
+  }
   try {
-    const [result] = await sequelize.query(
-      "DELETE FROM materias WHERE id = UNHEX(:id)",
-      { replacements: { id: databaseId(req.params.id) } },
+    const [existing] = await sequelize.query(
+      "SELECT id FROM materias WHERE id = UNHEX(:id) LIMIT 1",
+      { replacements: { id: databaseId(req.params.id) }, type: QueryTypes.SELECT },
     );
-    if (!result.affectedRows) return res.status(404).json({ msg: "Materia no encontrada." });
-    return res.json({ msg: "Materia eliminada con éxito." });
+    if (!existing) return res.status(404).json({ msg: "Materia no encontrada." });
+    await sequelize.query(
+      "UPDATE materias SET isActive = :isActive WHERE id = UNHEX(:id)",
+      { replacements: { id: databaseId(req.params.id), isActive: req.body.isActive } },
+    );
+    const [row] = await sequelize.query(
+      `${materiaSelect} WHERE m.id = UNHEX(:id)`,
+      { replacements: { id: databaseId(req.params.id) }, type: QueryTypes.SELECT },
+    );
+    return res.json({ msg: req.body.isActive ? "Materia reactivada." : "Materia suspendida.", materia: toMateria(row) });
   } catch (error) {
-    if (error.original?.code === "ER_ROW_IS_REFERENCED_2") {
-      return res.status(409).json({ msg: "No se puede eliminar una materia que tiene clases asignadas." });
-    }
-    return serverError(res, "Error al eliminar la materia.", error);
+    return serverError(res, "Error al cambiar el estado de la materia.", error);
   }
 };
 
@@ -264,10 +286,13 @@ export const verAlumnosMateria = async (req, res) => {
   if (!isDatabaseId(id)) return res.status(400).json({ msg: "ID de materia inválido." });
   try {
     const [materia] = await sequelize.query(
-      "SELECT HEX(id) AS id, anio, division FROM materias WHERE id = UNHEX(:id) LIMIT 1",
+      "SELECT HEX(id) AS id, anio, division, isActive FROM materias WHERE id = UNHEX(:id) LIMIT 1",
       { replacements: { id: databaseId(id) }, type: QueryTypes.SELECT },
     );
     if (!materia) return res.status(404).json({ msg: "Materia no encontrada." });
+    if (req.user.rol !== "admin" && !materia.isActive) {
+      return res.status(404).json({ msg: "Materia no encontrada." });
+    }
 
     if (req.user.rol === "profesor") {
       const [assigned] = await sequelize.query(
@@ -319,11 +344,15 @@ export const obtenerMateriasDelProfesor = async (req, res) => {
   try {
     const rows = await sequelize.query(
       `${materiaSelect}
-       WHERE m.profesor_id = UNHEX(:profesorId)
-          OR EXISTS (
+       WHERE m.isActive = TRUE
+         AND (
+           m.profesor_id = UNHEX(:profesorId)
+           OR EXISTS (
             SELECT 1 FROM clases c JOIN clase_profesores cp ON cp.clase_id = c.id
-            WHERE c.materia_id = m.id AND cp.profesor_id = UNHEX(:profesorId)
+            WHERE c.materia_id = m.id AND c.isActive = TRUE
+              AND cp.profesor_id = UNHEX(:profesorId)
           )
+         )
        ORDER BY m.anio, m.division, m.nombre`,
       {
         replacements: { profesorId: databaseId(req.user.id) },

@@ -8,7 +8,7 @@ const tabs = [
   {
     id: "primaria",
     title: "Primaria",
-    img: "/img/colegio1.jpg",
+    img: "/img/vida-escolar-1.png",
     heading: "Cimientos Sólidos para el Futuro",
     description:
       "Nuestro programa de primaria se enfoca en el aprendizaje a través del descubrimiento. Fomentamos la curiosidad innata de los niños en un entorno bilingüe.",
@@ -21,7 +21,7 @@ const tabs = [
   {
     id: "secundaria",
     title: "Secundaria",
-    img: "/img/colegio4.jpg",
+    img: "/img/vida-escolar-2.png",
     heading: "Desarrollando Pensamiento Crítico",
     description:
       "En secundaria, desafiamos a los estudiantes con un currículo riguroso, preparando para el bachillerato y la universidad.",

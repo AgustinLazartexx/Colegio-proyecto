@@ -1,42 +1,52 @@
-<<<<<<< HEAD
-# React + Vite
+# Backend del sistema escolar
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+API REST construida con Node.js y Express. Los datos relacionales se gestionan con Sequelize. El entorno local usa MariaDB por defecto; la demo pública configura PostgreSQL.
 
-Currently, two official plugins are available:
+## Requisitos
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Node.js y npm.
+- MariaDB para desarrollo local, salvo que se configure explícitamente otro entorno compatible.
 
-## Expanding the ESLint configuration
+## Configuración local
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
-=======
-# Backend del Colegio
+1. Instala dependencias:
 
-## Entorno local desde cero
+   ```powershell
+   npm install
+   ```
 
-1. Configura `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` y `JWT_SECRET` en `.env`.
-2. Crea la base de datos local si aún no existe y prepara el esquema:
+2. Crea un archivo `.env` en esta carpeta. Como mínimo, configura:
+
+   ```dotenv
+   DB_DIALECT=mariadb
+   DB_HOST=127.0.0.1
+   DB_PORT=3306
+   DB_NAME=colegio
+   DB_USER=root
+   DB_PASSWORD=
+   JWT_SECRET=REEMPLAZAR_POR_UN_SECRETO_LARGO_Y_ALEATORIO
+   FRONTEND_URL=http://localhost:5173
+   ```
+
+   Usa las credenciales correspondientes a tu instalación de MariaDB. No compartas ni subas `.env` al repositorio.
+
+3. Crea la base y las tablas académicas:
 
    ```powershell
    npm run db:create:local
    npm run migrate:academics
    ```
 
-   La migración es repetible y conserva las tablas/datos que ya existen. No importa datos de MongoDB.
-3. Carga cuentas nuevas de prueba en MariaDB:
+   Las migraciones son repetibles y no importan datos desde los archivos heredados de MongoDB.
+
+4. Opcionalmente, carga datos ficticios para desarrollo:
 
    ```powershell
    npm run seed:local
-   ```
-
-   El seeder es repetible: omite los emails o DNI que ya existan y no modifica cuentas.
-4. Crea materias, horarios y asignaciones de prueba:
-
-   ```powershell
    npm run seed:academics
    ```
+
+   El seeder local evita duplicar cuentas ya existentes. Las credenciales de las cuentas generadas son solo para el entorno local; no reutilizarlas en producción.
 
 5. Inicia la API:
 
@@ -44,22 +54,25 @@ If you are developing a production application, we recommend using TypeScript wi
    npm run dev
    ```
 
-## Cuentas de prueba locales
+La API escucha en el puerto indicado por `PORT` o, por defecto, en `5000`. La ruta raíz `/` informa si responde y qué base de datos está activa.
 
-La contraseña inicial de cada cuenta de prueba es su DNI:
+## Rutas y archivos
 
-| Rol | Email | Contraseña |
-|---|---|---|
-| Alumno | `alumno1@colegio.test` | `40000001` |
-| Alumno | `alumno2@colegio.test` | `40000002` |
-| Profesor | `profesor1@colegio.test` | `50000001` |
-| Profesor | `profesor2@colegio.test` | `50000002` |
+Las rutas de la API se montan bajo `/api`: `/auth`, `/usuarios`, `/materias`, `/clases`, `/tareas`, `/entregas`, `/calificaciones`, `/notas`, `/asistencias`, `/anuncios`, `/cuotas` y `/admin`. Los adjuntos cargados se sirven desde `/uploads`.
 
-Estas cuentas son exclusivamente para desarrollo local. No uses estos datos en producción.
+Las migraciones están en `src/database/migrations/`. Ejecuta las migraciones antes de iniciar el servidor en una base nueva. Los archivos subidos se guardan en `uploads`; los metadatos y relaciones de los módulos escolares se almacenan en la base SQL.
 
-## Módulos conectados a MariaDB
+La pantalla de búsqueda administrativa de usuarios requiere un texto de búsqueda o filtros de año/división. La API no devuelve usuarios sin recibir al menos un filtro; otros módulos pueden solicitar un rol específico para completar selectores. Materias y clases se suspenden/reactivan mediante sus rutas de estado; no se permite eliminarlas.
 
-El backend usa MariaDB para usuarios/autenticación, materias, horarios, asignaciones, calificaciones, notas trimestrales y su auditoría, asistencias, tareas, entregas, anuncios y cuotas. Las tablas de los módulos académicos y escolares se crean con `npm run migrate:academics`; ejecuta las migraciones antes de iniciar la API. El servidor no modifica el esquema automáticamente.
+## Pruebas
 
-`seed:academics` crea materias, clases y asignaciones de prueba. Las cuentas y los datos locales se crean desde cero; no se importan ni consultan datos de MongoDB. Los archivos subidos se conservan en `uploads`, mientras que sus metadatos y relaciones se guardan en MariaDB.
->>>>>>> 073fbf6 (demoback1.0)
+```powershell
+npm test
+npm run test:postgres-compat
+```
+
+## PostgreSQL para la demo
+
+La demo requiere `DB_DIALECT=postgres` y `DATABASE_URL`, además de las variables de seed indicadas en la configuración de Render. El seed de demo se niega a ejecutarse si el dialecto no es PostgreSQL, si no está activado `DEMO_SEED_ENABLED=true` o si faltan sus credenciales. Usa exclusivamente una base separada con datos ficticios.
+
+Consulta la [guía general del proyecto](../docs/DOCUMENTACION.md) y [DEMO-DEPLOYMENT.md](../DEMO-DEPLOYMENT.md) antes de desplegar.
