@@ -20,8 +20,8 @@ const verificarProfesorMateria = async (materiaId, usuario) => {
     `SELECT m.id FROM materias m
      LEFT JOIN clases c ON c.materia_id = m.id
      LEFT JOIN clase_profesores cp ON cp.clase_id = c.id AND cp.profesor_id = UNHEX(:profesorId)
-     WHERE m.id = UNHEX(:materiaId)
-       AND (m.profesor_id = UNHEX(:profesorId) OR cp.profesor_id IS NOT NULL)
+     WHERE m.id = UNHEX(:materiaId) AND m.isActive = TRUE
+       AND (m.profesor_id = UNHEX(:profesorId) OR (c.isActive = TRUE AND cp.profesor_id IS NOT NULL))
      LIMIT 1`,
     { materiaId: databaseId(materiaId), profesorId: databaseId(usuario.id) },
   );
@@ -91,7 +91,8 @@ export const guardarNota = async (req, res) => {
     const inscripto = await queryRows(
       `SELECT ca.alumno_id FROM clase_alumnos ca
        JOIN clases c ON c.id = ca.clase_id
-       WHERE c.materia_id = UNHEX(:materiaId) AND ca.alumno_id = UNHEX(:alumnoId)
+       WHERE c.materia_id = UNHEX(:materiaId) AND c.isActive = TRUE
+         AND ca.alumno_id = UNHEX(:alumnoId)
        LIMIT 1`,
       { materiaId: materiaKey, alumnoId: alumnoKey },
     );

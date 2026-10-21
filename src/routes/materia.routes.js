@@ -5,7 +5,7 @@ import {
   obtenerMateria, // Obtener una por ID
   obtenerMateriasFiltradas, // Usaremos esta como la principal para GET /
   actualizarMateria,
-  eliminarMateria,
+  cambiarEstadoMateria,
   inscribirseAMateria,
   verAlumnosMateria,
   verAlumnosPorProfesor,
@@ -63,7 +63,17 @@ router.post("/inscribirse/:id", checkAuth, checkRole("alumno"), inscribirseAMate
 // --- RUTAS CON PARÁMETRO ID (Siempre al final) ---
 router.get("/:id", checkAuth, obtenerMateria);
 router.put("/:id", checkAuth, checkRole("admin"), actualizarMateria);
-router.delete("/:id", checkAuth, checkRole("admin"), eliminarMateria);
+router.put(
+  "/:id/estado",
+  checkAuth,
+  checkRole("admin"),
+  body("isActive", "Estado inválido").isBoolean(),
+  validateFields,
+  cambiarEstadoMateria,
+);
+router.delete("/:id", checkAuth, checkRole("admin"), (_req, res) =>
+  res.status(405).json({ msg: "Las materias no se pueden borrar; suspenda o reactive su estado." }),
+);
 router.get("/:id/alumnos", checkAuth, checkRole("admin", "profesor"), verAlumnosMateria);
 
 export default router;

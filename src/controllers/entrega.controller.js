@@ -43,13 +43,18 @@ export const subirEntrega = async (req, res) => {
   try {
     const tareas = await queryRows(
       `SELECT HEX(t.id) AS id, HEX(t.materia_id) AS materiaId
-       FROM school_tareas t WHERE t.id = UNHEX(:tareaId) LIMIT 1`,
+       FROM school_tareas t
+       JOIN materias m ON m.id = t.materia_id
+       WHERE t.id = UNHEX(:tareaId) AND m.isActive = TRUE LIMIT 1`,
       { tareaId: databaseId(tareaId) },
     );
     if (!tareas.length) return res.status(404).json({ msg: "La tarea no existe." });
     const inscrito = await queryRows(
-      `SELECT 1 AS ok FROM clases c JOIN clase_alumnos ca ON ca.clase_id = c.id
-       WHERE c.materia_id = UNHEX(:materiaId) AND ca.alumno_id = UNHEX(:alumnoId) LIMIT 1`,
+      `SELECT 1 AS ok FROM clases c
+       JOIN materias m ON m.id = c.materia_id
+       JOIN clase_alumnos ca ON ca.clase_id = c.id
+       WHERE c.materia_id = UNHEX(:materiaId) AND c.isActive = TRUE AND m.isActive = TRUE
+         AND ca.alumno_id = UNHEX(:alumnoId) LIMIT 1`,
       { materiaId: tareas[0].materiaId, alumnoId: databaseId(req.user.id) },
     );
     if (!inscrito.length) return res.status(403).json({ msg: "No estás inscripto en esta materia." });

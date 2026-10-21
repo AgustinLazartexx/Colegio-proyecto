@@ -31,8 +31,10 @@ const validarAccesoClase = async (claseId, user) => {
   const acceso = await queryRows(
     `SELECT HEX(c.id) AS id
      FROM clases c
+     JOIN materias m ON m.id = c.materia_id
      LEFT JOIN clase_profesores cp ON cp.clase_id = c.id AND cp.profesor_id = UNHEX(:userId)
-     WHERE c.id = UNHEX(:claseId) AND (:isAdmin = 1 OR cp.profesor_id IS NOT NULL)
+     WHERE c.id = UNHEX(:claseId) AND c.isActive = TRUE AND m.isActive = TRUE
+       AND (:isAdmin = 1 OR cp.profesor_id IS NOT NULL)
      LIMIT 1`,
     { ...replacements, isAdmin: user.rol === "admin" ? 1 : 0 },
   );

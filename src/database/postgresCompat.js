@@ -25,7 +25,7 @@ export const translatePostgresSql = (input) => {
   sql = sql
     .replace(/UNHEX\s*\(\s*REPLACE\s*\(\s*UUID\s*\(\s*\)\s*,\s*'-'\s*,\s*''\s*\)\s*\)/gi,
       "decode(replace(gen_random_uuid()::text, '-', ''), 'hex')")
-    .replace(/UNHEX\s*\(\s*(:[a-zA-Z]\w*)\s*\)/gi, "decode($1, 'hex')")
+    .replace(/UNHEX\s*\(\s*(:[a-zA-Z]\w*)\s*\)/gi, "decode(replace($1, '-', ''), 'hex')")
     .replace(/HEX\s*\(\s*([a-zA-Z_][\w.]*)\s*\)/gi, "UPPER(encode($1, 'hex'))")
     .replace(/TIME_FORMAT\s*\(\s*([^,]+),\s*'%H:%i'\s*\)/gi, "to_char($1, 'HH24:MI')")
     .replace(/\bIFNULL\s*\(/gi, "COALESCE(")
@@ -72,7 +72,7 @@ export const translatePostgresDdl = (input) => {
     .replace(/\s+ON\s+UPDATE\s+CURRENT_TIMESTAMP/gi, "")
     .replace(/(\b[a-zA-Z_]\w*\s+BOOLEAN\b[^,\r\n]*\bDEFAULT)\s+1\b/gi, "$1 TRUE")
     .replace(/(\b[a-zA-Z_]\w*\s+BOOLEAN\b[^,\r\n]*\bDEFAULT)\s+0\b/gi, "$1 FALSE")
-    .replace(/,\s*\r?\n\s*\)/g, "\n)");
+    .replace(/,\s*$/, "");
 
   const statement = `${prefix}${body})`;
   if (hasUpdatedAt) {

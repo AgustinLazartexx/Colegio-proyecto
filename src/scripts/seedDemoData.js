@@ -146,7 +146,6 @@ try {
         "SELECT HEX(id) AS id FROM materias WHERE nombre = :nombre AND anio = 1 AND division = 'A' LIMIT 1",
         { nombre: subject.nombre },
       );
-      subjects.push({ ...subject, materiaId });
 
       await insertRecord(
         transaction,
@@ -168,7 +167,7 @@ try {
            AND horaInicio = :horaInicio AND anio = 1 AND division = 'A' LIMIT 1`,
         { materiaId, diaSemana: subject.diaSemana, horaInicio: subject.horaInicio },
       );
-      subject.claseId = claseId;
+      subjects.push({ ...subject, materiaId, claseId });
 
       await insertRecord(
         transaction,

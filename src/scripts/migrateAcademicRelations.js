@@ -7,6 +7,8 @@ const authColumns = require("../database/migrations/20261015-12-add-user-auth-co
 const migration = require("../database/migrations/20261015-13-create-academic-relations.cjs");
 const relationalModules = require("../database/migrations/20261015-14-create-relational-school-modules.cjs");
 const generalAttendance = require("../database/migrations/20261015-15-create-general-attendance.cjs");
+const academicRecordStatus = require("../database/migrations/20261019-16-add-active-status-to-academic-records.cjs");
+const announcementStatus = require("../database/migrations/20261021-17-add-active-status-to-announcements.cjs");
 
 try {
   await sequelize.authenticate();
@@ -15,6 +17,8 @@ try {
   await migration.up(sequelize.getQueryInterface(), sequelize.constructor);
   await relationalModules.up(sequelize.getQueryInterface(), sequelize.constructor);
   await generalAttendance.up(sequelize.getQueryInterface(), sequelize.constructor);
+  await academicRecordStatus.up(sequelize.getQueryInterface(), sequelize.constructor);
+  await announcementStatus.up(sequelize.getQueryInterface(), sequelize.constructor);
   console.log(`Esquema local y todos los módulos académicos listos en ${DB_DIALECT === "postgres" ? "PostgreSQL" : "MariaDB"}.`);
 } catch (error) {
   console.error("No se pudieron preparar las tablas académicas:", error);

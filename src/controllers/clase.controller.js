@@ -15,10 +15,12 @@ const classSelect = `
     TIME_FORMAT(c.horaInicio, '%H:%i') AS horaInicio,
     TIME_FORMAT(c.horaFin, '%H:%i') AS horaFin,
     c.aula,
+    c.isActive,
     HEX(m.id) AS materiaId,
     m.nombre AS materiaNombre,
     m.anio AS materiaAnio,
     m.division AS materiaDivision,
+    m.isActive AS materiaActiva,
     HEX(mp.id) AS materiaProfesorId,
     mp.nombre AS materiaProfesorNombre,
     mp.email AS materiaProfesorEmail,
@@ -50,12 +52,14 @@ const formatClasses = (rows) => {
         horarioFin: row.horaFin,
         horario: `${row.horaInicio} - ${row.horaFin}`,
         aula: row.aula,
+        isActive: Boolean(row.isActive),
         materia: {
           _id: row.materiaId,
           id: row.materiaId,
           nombre: row.materiaNombre,
           anio: row.materiaAnio,
           division: row.materiaDivision,
+          isActive: Boolean(row.materiaActiva),
           profesor: row.materiaProfesorId
             ? {
                 _id: row.materiaProfesorId,
@@ -130,9 +134,11 @@ const getConflict = async ({ teacherIds, diaSemana, horaInicio, horaFin, exclude
     `SELECT c.diaSemana, TIME_FORMAT(c.horaInicio, '%H:%i') AS horaInicio,
             TIME_FORMAT(c.horaFin, '%H:%i') AS horaFin, u.nombre AS profesorNombre
      FROM clases c
+     JOIN materias m ON m.id = c.materia_id
      JOIN clase_profesores cp ON cp.clase_id = c.id
      JOIN users u ON u.id = cp.profesor_id
-     WHERE c.diaSemana = :diaSemana
+     WHERE c.isActive = TRUE AND m.isActive = TRUE
+       AND c.diaSemana = :diaSemana
        AND c.horaInicio < :horaFin AND c.horaFin > :horaInicio
        AND cp.profesor_id IN (${teacherParameters.join(", ")})
        ${excludeClause}
@@ -162,6 +168,9 @@ export const obtenerClasePorId = async (req, res) => {
   try {
     const clase = await findClassById(id);
     if (!clase) return res.status(404).json({ msg: "Clase no encontrada." });
+    if (req.user.rol !== "admin" && (!clase.isActive || !clase.materia.isActive)) {
+      return res.status(404).json({ msg: "Clase no encontrada." });
+    }
     return res.json(clase);
   } catch (error) {
     console.error("Error al obtener clase:", error);
@@ -187,7 +196,8 @@ export const crearClase = async (req, res) => {
   try {
     await sequelize.transaction(async (transaction) => {
       const [subject] = await sequelize.query(
-        `SELECT anio, division FROM materias WHERE id = UNHEX(:materiaId) LIMIT 1`,
+        `SELECT anio, division FROM materias
+         WHERE id = UNHEX(:materiaId) AND isActive = TRUE LIMIT 1`,
         { replacements: { materiaId }, type: QueryTypes.SELECT, transaction },
       );
       if (!subject) {
@@ -268,10 +278,13 @@ export const crearClase = async (req, res) => {
 };
 
 export const obtenerTodasLasClases = async (req, res) => {
-  const { anio, materia, profesor, division, diaSemana } = req.query;
+  const { anio, materia, profesor, division, diaSemana, includeSuspended } = req.query;
   const filters = [];
   const replacements = {};
 
+  if (includeSuspended !== "true") {
+    filters.push("c.isActive = TRUE AND m.isActive = TRUE");
+  }
   if (anio) {
     const year = Number(anio);
     if (!Number.isInteger(year) || year < 1 || year > 6) return res.status(400).json({ msg: "Filtro de año inválido." });
@@ -314,7 +327,11 @@ export const obtenerTodasLasClases = async (req, res) => {
 export const obtenerClasesProfesor = async (req, res) => {
   try {
     const classes = await getClasses({
-      filters: ["EXISTS (SELECT 1 FROM clase_profesores cp_filter WHERE cp_filter.clase_id = c.id AND cp_filter.profesor_id = UNHEX(:profesorId))"],
+      filters: [
+        "c.isActive = TRUE",
+        "m.isActive = TRUE",
+        "EXISTS (SELECT 1 FROM clase_profesores cp_filter WHERE cp_filter.clase_id = c.id AND cp_filter.profesor_id = UNHEX(:profesorId))",
+      ],
       replacements: { profesorId: databaseId(req.user.id) },
       orderBy: "c.diaSemana, c.horaInicio",
     });
@@ -405,19 +422,29 @@ export const actualizarClase = async (req, res) => {
   }
 };
 
-export const eliminarClase = async (req, res) => {
+export const cambiarEstadoClase = async (req, res) => {
   const id = getClassId(req.params.id);
   if (!id) return res.status(400).json({ msg: "ID de clase inválido." });
+  if (typeof req.body.isActive !== "boolean") {
+    return res.status(400).json({ msg: "El estado de la clase es inválido." });
+  }
   try {
-    const [result] = await sequelize.query(
-      "DELETE FROM clases WHERE id = UNHEX(:id)",
-      { replacements: { id } },
+    const [existing] = await sequelize.query(
+      "SELECT id FROM clases WHERE id = UNHEX(:id) LIMIT 1",
+      { replacements: { id }, type: QueryTypes.SELECT },
     );
-    if (!result.affectedRows) return res.status(404).json({ msg: "Clase no encontrada." });
-    return res.json({ msg: "Clase eliminada correctamente." });
+    if (!existing) return res.status(404).json({ msg: "Clase no encontrada." });
+    await sequelize.query(
+      "UPDATE clases SET isActive = :isActive WHERE id = UNHEX(:id)",
+      { replacements: { id, isActive: req.body.isActive } },
+    );
+    return res.json({
+      msg: req.body.isActive ? "Clase reactivada correctamente." : "Clase suspendida correctamente.",
+      clase: await findClassById(id),
+    });
   } catch (error) {
-    console.error("Error al eliminar clase:", error);
-    return res.status(500).json({ msg: "Error al eliminar la clase." });
+    console.error("Error al cambiar el estado de la clase:", error);
+    return res.status(500).json({ msg: "Error al cambiar el estado de la clase." });
   }
 };
 
@@ -429,6 +456,9 @@ export const asignarAlumno = async (req, res) => {
   try {
     const clase = await findClassById(id);
     if (!clase) return res.status(404).json({ msg: "Clase no encontrada." });
+    if (!clase.isActive || !clase.materia.isActive) {
+      return res.status(409).json({ msg: "No se pueden inscribir alumnos en una clase o materia suspendida." });
+    }
     const [student] = await sequelize.query(
       `SELECT HEX(id) AS id, anio, division FROM users
        WHERE id = UNHEX(:alumnoId) AND rol = 'alumno' AND isActive = TRUE LIMIT 1`,
@@ -474,10 +504,15 @@ export const listarAlumnosDeClase = async (req, res) => {
   if (!id) return res.status(400).json({ msg: "ID de clase inválido." });
   try {
     const [clase] = await sequelize.query(
-      "SELECT id FROM clases WHERE id = UNHEX(:id) LIMIT 1",
+      `SELECT c.id, c.isActive AS claseActiva, m.isActive AS materiaActiva
+       FROM clases c JOIN materias m ON m.id = c.materia_id
+       WHERE c.id = UNHEX(:id) LIMIT 1`,
       { replacements: { id }, type: QueryTypes.SELECT },
     );
     if (!clase) return res.status(404).json({ msg: "Clase no encontrada." });
+    if (req.user.rol !== "admin" && (!clase.claseActiva || !clase.materiaActiva)) {
+      return res.status(404).json({ msg: "Clase no encontrada." });
+    }
 
     const students = await sequelize.query(
       `SELECT HEX(u.id) AS _id, u.nombre, u.email, u.dni, u.anio, u.division
@@ -501,6 +536,8 @@ export const getMisClasesAlumno = async (req, res) => {
   try {
     const classes = await getClasses({
       filters: [
+        "c.isActive = TRUE",
+        "m.isActive = TRUE",
         "EXISTS (SELECT 1 FROM clase_alumnos ca_filter WHERE ca_filter.clase_id = c.id AND ca_filter.alumno_id = UNHEX(:alumnoId))",
       ],
       replacements: { alumnoId: databaseId(req.user.id) },

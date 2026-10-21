@@ -19,8 +19,8 @@ const esProfesorMateria = async (materiaId, profesorId) => {
     `SELECT m.id FROM materias m
      LEFT JOIN clases c ON c.materia_id = m.id
      LEFT JOIN clase_profesores cp ON cp.clase_id = c.id AND cp.profesor_id = UNHEX(:profesorId)
-     WHERE m.id = UNHEX(:materiaId)
-       AND (m.profesor_id = UNHEX(:profesorId) OR cp.profesor_id IS NOT NULL)
+     WHERE m.id = UNHEX(:materiaId) AND m.isActive = TRUE
+       AND (m.profesor_id = UNHEX(:profesorId) OR (c.isActive = TRUE AND cp.profesor_id IS NOT NULL))
      LIMIT 1`,
     { materiaId: databaseId(materiaId), profesorId: databaseId(profesorId) },
   );
@@ -88,8 +88,11 @@ export const obtenerTareasPorMateria = async (req, res) => {
   try {
     if (req.user.rol === "alumno") {
       const enrolled = await queryRows(
-        `SELECT 1 AS ok FROM clase_alumnos ca JOIN clases c ON c.id = ca.clase_id
-         WHERE c.materia_id = UNHEX(:materiaId) AND ca.alumno_id = UNHEX(:userId) LIMIT 1`,
+        `SELECT 1 AS ok FROM clase_alumnos ca
+         JOIN clases c ON c.id = ca.clase_id
+         JOIN materias m ON m.id = c.materia_id
+         WHERE c.materia_id = UNHEX(:materiaId) AND c.isActive = TRUE
+           AND m.isActive = TRUE AND ca.alumno_id = UNHEX(:userId) LIMIT 1`,
         { materiaId: databaseId(materiaId), userId: databaseId(req.user.id) },
       );
       if (!enrolled.length) return res.status(403).json({ msg: "No estás inscripto en esta materia." });
@@ -112,7 +115,8 @@ export const obtenerTareasPorClase = async (req, res) => {
   if (!isDatabaseId(claseId)) return res.status(400).json({ msg: "ID de clase inválido." });
   try {
     const clase = await queryRows(
-      `SELECT HEX(materia_id) AS materiaId FROM clases WHERE id = UNHEX(:claseId) LIMIT 1`,
+      `SELECT HEX(materia_id) AS materiaId FROM clases
+       WHERE id = UNHEX(:claseId) AND isActive = TRUE LIMIT 1`,
       { claseId: databaseId(claseId) },
     );
     if (!clase.length) return res.status(404).json({ msg: "Clase no encontrada." });

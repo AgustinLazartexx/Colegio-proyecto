@@ -166,25 +166,39 @@ export const cambiarPassword = async (req, res) => {
 };
 
 export const getUsers = async (req, res) => {
-  const { rol, anio, division } = req.query;
+  const { rol, anio, division, q } = req.query;
   const filters = [];
   const replacements = {};
 
-  if (rol && ["admin", "profesor", "alumno"].includes(rol)) {
+  if (rol && !["admin", "profesor", "alumno"].includes(rol)) {
+    return res.status(400).json({ msg: "Rol de usuario inválido." });
+  }
+  if (rol) {
     filters.push("rol = :rol");
     replacements.rol = rol;
   }
   if (anio) {
+    const year = Number(anio);
+    if (!Number.isInteger(year) || year < 1 || year > 6) {
+      return res.status(400).json({ msg: "Filtro de año inválido." });
+    }
     filters.push("anio = :anio");
-    replacements.anio = Number(anio);
+    replacements.anio = year;
   }
   if (division) {
     filters.push("division = :division");
     replacements.division = String(division).trim().toUpperCase();
   }
+  if (!filters.length) return res.json([]);
+  const searchTerm = typeof q === "string" ? q.trim() : "";
+  if (searchTerm) {
+    filters.push("(nombre LIKE :search OR email LIKE :search OR dni LIKE :search)");
+    replacements.search = `%${searchTerm}%`;
+  }
 
   try {
-    const where = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+    if (!filters.length) return res.json([]);
+    const where = `WHERE ${filters.join(" AND ")}`;
     const users = await sequelize.query(
       `SELECT ${userFields} FROM users ${where} ORDER BY rol, nombre`,
       { replacements, type: QueryTypes.SELECT },
