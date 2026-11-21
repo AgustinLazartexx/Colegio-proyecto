@@ -1,10 +1,31 @@
 module.exports = {
   up: async (queryInterface, Sequelize) => {
+    const users = await queryInterface.describeTable("users");
+    if (!users.codigoAlumno) {
+      await queryInterface.addColumn("users", "codigoAlumno", {
+        type: Sequelize.STRING(50),
+        allowNull: true,
+      });
+    }
+
     const materias = await queryInterface.describeTable("materias");
     if (!materias.descripcion) {
       await queryInterface.addColumn("materias", "descripcion", {
         type: Sequelize.TEXT,
         allowNull: true,
+      });
+    }
+    if (!materias.division) {
+      await queryInterface.addColumn("materias", "division", {
+        type: Sequelize.STRING(10),
+        allowNull: true,
+      });
+    }
+    if (!materias.isActive) {
+      await queryInterface.addColumn("materias", "isActive", {
+        type: Sequelize.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
       });
     }
 
@@ -13,6 +34,13 @@ module.exports = {
       await queryInterface.addColumn("clases", "aula", {
         type: Sequelize.STRING(50),
         allowNull: true,
+      });
+    }
+    if (!clases.isActive) {
+      await queryInterface.addColumn("clases", "isActive", {
+        type: Sequelize.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
       });
     }
 

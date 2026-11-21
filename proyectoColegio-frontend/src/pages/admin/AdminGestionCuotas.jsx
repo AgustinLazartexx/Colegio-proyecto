@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { X, Plus, DollarSign, CheckCircle, AlertCircle, Calendar } from "lucide-react";
 import { toast } from "react-toastify";
 import { getCuotasDeAlumno, generarCuota, registrarPagoCuota, marcarCuotaVencida } from "../../api/api";
@@ -15,20 +15,20 @@ const AdminGestionCuotas = ({ alumno, onClose }) => {
     fechaVencimiento: ""
   });
 
-  useEffect(() => {
-    cargarCuotas();
-  }, [alumno]);
-
-  const cargarCuotas = async () => {
+  const cargarCuotas = useCallback(async () => {
     try {
       const res = await getCuotasDeAlumno(alumno._id);
       setCuotas(res.data);
-    } catch (error) {
+    } catch {
       toast.error("Error al cargar historial de cuotas");
     } finally {
       setLoading(false);
     }
-  };
+  }, [alumno]);
+
+  useEffect(() => {
+    cargarCuotas();
+  }, [cargarCuotas]);
 
   const handleGenerar = async (e) => {
     e.preventDefault();
@@ -49,7 +49,7 @@ const AdminGestionCuotas = ({ alumno, onClose }) => {
       const res = await registrarPagoCuota(cuotaId, "efectivo"); // Podrías agregar un selector de método
       toast.success(res.data.msg);
       cargarCuotas();
-    } catch (error) {
+    } catch {
       toast.error("Error al registrar pago");
     }
   };
@@ -59,7 +59,7 @@ const AdminGestionCuotas = ({ alumno, onClose }) => {
           await marcarCuotaVencida(cuotaId);
           toast.info("Cuota marcada como vencida");
           cargarCuotas();
-      } catch (error) {
+      } catch {
           toast.error("Error al actualizar");
       }
   };

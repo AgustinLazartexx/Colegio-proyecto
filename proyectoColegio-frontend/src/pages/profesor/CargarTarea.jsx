@@ -27,7 +27,6 @@ const CargarTarea = () => {
 
   useEffect(() => {
     const obtenerMaterias = async () => {
-      const token = localStorage.getItem("token");
       setLoadingMaterias(true);
       try {
         const res = await api.get("/materias/profesor/materias");
@@ -53,7 +52,6 @@ const CargarTarea = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    const token = localStorage.getItem("token");
 
     const formData = new FormData();
     formData.append("titulo", form.titulo);

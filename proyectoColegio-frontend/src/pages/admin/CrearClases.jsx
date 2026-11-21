@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
@@ -61,12 +61,7 @@ const ClasesAdmin = () => {
     cargarDatos();
   }, []);
 
-  // Cargar clases con filtros
-  useEffect(() => {
-    cargarClases();
-  }, [filtros]);
-
-  const cargarClases = async () => {
+  const cargarClases = useCallback(async () => {
     setLoading(true);
     try {
       // Construir objeto de filtros solo con valores definidos
@@ -85,7 +80,12 @@ const ClasesAdmin = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filtros]);
+
+  // Cargar clases con filtros
+  useEffect(() => {
+    cargarClases();
+  }, [cargarClases]);
 
   const handleToggleStatus = async (clase) => {
     const isActive = !clase.isActive;

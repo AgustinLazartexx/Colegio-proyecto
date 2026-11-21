@@ -48,13 +48,8 @@ const TomarAsistencia = () => {
         const listaAlumnos = resAlumnos.data.alumnos || resAlumnos.data || [];
         
         // B. Traer asistencia ya guardada (si existe) para esta fecha
-        let historial = {};
-        try {
-             const resHistorial = await obtenerAsistenciaFecha(claseSeleccionada, fecha);
-             historial = resHistorial.data || {}; 
-        } catch (error) {
-             // No hay asistencia previa, es normal
-        }
+        const resHistorial = await obtenerAsistenciaFecha(claseSeleccionada, fecha);
+        const historial = resHistorial.data || {};
 
         setAlumnos(listaAlumnos);
 

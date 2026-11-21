@@ -8,7 +8,6 @@ const AlumnosInscriptos = () => {
 
   useEffect(() => {
     const obtenerAlumnos = async () => {
-      const token = localStorage.getItem("token");
       try {
         const res = await api.get("/materias/profesor/alumnos");
         setDatos(res.data); // Espera que el back devuelva algo como [{ materia: ..., alumnos: [...] }, ...]

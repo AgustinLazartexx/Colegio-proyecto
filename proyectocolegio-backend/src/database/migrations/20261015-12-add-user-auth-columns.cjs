@@ -2,6 +2,14 @@ module.exports = {
   up: async (queryInterface, Sequelize) => {
     const columns = await queryInterface.describeTable('users');
 
+    if (!columns.mustChangePassword) {
+      await queryInterface.addColumn('users', 'mustChangePassword', {
+        type: Sequelize.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
+      });
+    }
+
     if (!columns.acceso_habilitado) {
       await queryInterface.addColumn('users', 'acceso_habilitado', {
         type: Sequelize.BOOLEAN,

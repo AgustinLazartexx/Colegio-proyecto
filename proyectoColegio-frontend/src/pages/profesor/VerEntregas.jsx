@@ -126,7 +126,7 @@ const VerEntregas = () => {
   const [error, setError] = useState(null);
 
   // CAMBIO: Se usa 'useCallback' para memorizar la función y evitar re-renders innecesarios
-  const fetchTareas = useCallback(async (userId, authToken) => {
+  const fetchTareas = useCallback(async (userId) => {
     try {
       setLoadingTareas(true);
       setError(null);
@@ -143,36 +143,19 @@ const VerEntregas = () => {
   }, []);
 
   useEffect(() => {
-  console.log("--- DEBUG INICIADO ---");
-  console.log("Usuario recibido del contexto:", usuario);
-  console.log("Token recibido del contexto:", token);
-
   if (authCargando) {
-    console.log("ACCIÓN: authCargando es true, no se hace nada todavía.");
     return;
   }
 
-  // Extraemos el ID aquí para verificarlo
   const userId = usuario?.id;
-  
-  console.log("Valor de 'userId' extraído:", userId);
-  console.log("Valor de 'token':", token);
-
-  // Forzamos la evaluación de la condición a un booleano explícito
   const laCondicionEsVerdadera = !!(userId && token);
-  console.log("¿La condición (userId && token) es VERDADERA?:", laCondicionEsVerdadera);
 
   if (laCondicionEsVerdadera) {
-    console.log("ACCIÓN: La condición es VERDADERA. Se llamará a fetchTareas.");
-    fetchTareas(userId, token);
+    fetchTareas(userId);
   } else {
-    console.log("ACCIÓN: La condición es FALSA. Se mostrará el error en pantalla.");
     setError("No hay un usuario autenticado o falta el token.");
     setLoadingTareas(false);
   }
-  
-  console.log("--- DEBUG FINALIZADO ---");
-
 }, [authCargando, usuario, token, fetchTareas]);
 
   const handleSeleccionarTarea = async (tareaId) => {

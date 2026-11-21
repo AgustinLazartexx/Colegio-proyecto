@@ -22,22 +22,7 @@ const ModalGestionAlumnos = ({ clase, isOpen, onClose, onUpdateSuccess }) => {
   const [busqueda, setBusqueda] = useState('');
   const [error, setError] = useState(null);
 
-  // Cargar datos cada vez que se abre el modal con una clase nueva
-  useEffect(() => {
-    if (isOpen && clase) {
-      cargarListas();
-    }
-    
-    // Limpiar estados al cerrar
-    return () => {
-      setBusqueda('');
-      setError(null);
-      setInscritos([]);
-      setDisponibles([]);
-    };
-  }, [isOpen, clase]);
-
-  const cargarListas = async () => {
+  const cargarListas = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -71,7 +56,21 @@ const ModalGestionAlumnos = ({ clase, isOpen, onClose, onUpdateSuccess }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [clase]);
+
+  // Cargar datos cada vez que se abre el modal con una clase nueva
+  useEffect(() => {
+    if (isOpen && clase) {
+      cargarListas();
+    }
+
+    return () => {
+      setBusqueda('');
+      setError(null);
+      setInscritos([]);
+      setDisponibles([]);
+    };
+  }, [isOpen, clase, cargarListas]);
 
   const handleAsignar = async (alumno) => {
     try {

@@ -1,4 +1,4 @@
-import { motion } from "framer-motion";
+import { motion as Motion } from "framer-motion";
 import { HeartHandshake, UsersRound, School } from "lucide-react";
 
 const comunidadData = [
@@ -38,7 +38,7 @@ const Comunidad = () => {
       <h2 className="text-3xl font-bold text-center mb-12">Nuestra Comunidad</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8">
         {comunidadData.map((item, index) => (
-          <motion.div
+          <Motion.div
             key={index}
             className="bg-white p-6 rounded-xl shadow hover:shadow-lg transition duration-300"
             variants={fadeIn}
@@ -50,7 +50,7 @@ const Comunidad = () => {
             <div className="flex justify-center mb-4">{item.icon}</div>
             <h3 className="text-xl font-semibold text-center mb-2">{item.title}</h3>
             <p className="text-center text-gray-700 text-sm">{item.text}</p>
-          </motion.div>
+          </Motion.div>
         ))}
       </div>
     </section>

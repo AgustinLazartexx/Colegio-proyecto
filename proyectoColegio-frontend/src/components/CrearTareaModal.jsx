@@ -12,7 +12,6 @@ const CrearTareaModal = ({ materiaId, onClose }) => {
   });
   const [archivo, setArchivo] = useState(null);
   const [loading, setLoading] = useState(false);
-  const token = localStorage.getItem("token");
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });

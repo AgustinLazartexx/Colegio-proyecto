@@ -48,6 +48,22 @@ API REST construida con Node.js y Express. Los datos relacionales se gestionan c
 
    El seeder local evita duplicar cuentas ya existentes. Las credenciales de las cuentas generadas son solo para el entorno local; no reutilizarlas en producción.
 
+   Para cargar el plan de estudios después de las migraciones, ejecuta:
+
+   ```powershell
+   npm run seed:curriculum
+   ```
+
+   El seed crea cada materia para las divisiones A, B y C y las deja activas. No crea horarios en `clases`, ya que el plan no especifica días ni horas.
+
+   Para crear una sesión semanal de 45 minutos por materia y división, con asignación rotativa de docentes activos:
+
+   ```powershell
+   npm run seed:class-schedule
+   ```
+
+   El horario usa seis bloques consecutivos por día de lunes a viernes, entre las 08:00 y las 12:30. El seed conserva los IDs y las inscripciones de alumnos de las clases del plan, las reprograma y reemplaza sus asignaciones docentes. Las clases de materias fuera del plan se preservan y reservan su horario para evitar superposiciones. Las aulas de clases nuevas quedan sin asignar.
+
 5. Inicia la API:
 
    ```powershell
@@ -55,6 +71,29 @@ API REST construida con Node.js y Express. Los datos relacionales se gestionan c
    ```
 
 La API escucha en el puerto indicado por `PORT` o, por defecto, en `5000`. La ruta raíz `/` informa si responde y qué base de datos está activa.
+
+### Crear una cuenta administradora inicial
+
+Si la cuenta administradora anterior no está en la base SQL activa, crea una nueva desde una terminal local en esta carpeta. No reutilices contraseñas que se hayan compartido por chat.
+
+```powershell
+$env:BOOTSTRAP_ADMIN_ENABLED = "true"
+$env:BOOTSTRAP_ADMIN_EMAIL = Read-Host "Email"
+$env:BOOTSTRAP_ADMIN_NAME = Read-Host "Nombre"
+$env:BOOTSTRAP_ADMIN_DNI = Read-Host "DNI"
+$securePassword = Read-Host "Nueva contraseña (mínimo 12 caracteres)" -AsSecureString
+$pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePassword)
+try {
+  $env:BOOTSTRAP_ADMIN_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+  npm run bootstrap:admin
+} finally {
+  [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
+  $securePassword.Dispose()
+  Remove-Item Env:BOOTSTRAP_ADMIN_ENABLED, Env:BOOTSTRAP_ADMIN_EMAIL, Env:BOOTSTRAP_ADMIN_NAME, Env:BOOTSTRAP_ADMIN_DNI, Env:BOOTSTRAP_ADMIN_PASSWORD -ErrorAction SilentlyContinue
+}
+```
+
+El comando está deshabilitado en `NODE_ENV=production`, solo crea un usuario si el email y el DNI todavía no existen y no modifica cuentas existentes. La contraseña se guarda con bcrypt y no se muestra en la salida. No guardes estas variables en archivos versionados.
 
 ## Rutas y archivos
 

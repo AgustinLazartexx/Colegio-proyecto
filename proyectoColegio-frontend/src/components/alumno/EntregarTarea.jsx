@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import api from "../../api/api";
 
-const EntregarTarea = ({ tareaId, alumnoId, token }) => {
+const EntregarTarea = ({ tareaId, alumnoId }) => {
   const [archivo, setArchivo] = useState(null);
   const [comentario, setComentario] = useState("");
   const [mensaje, setMensaje] = useState("");
@@ -26,7 +26,7 @@ const EntregarTarea = ({ tareaId, alumnoId, token }) => {
 
     try {
       setLoading(true);
-      const res = await api.post("/entregas", formData, {
+      await api.post("/entregas", formData, {
         headers: {
           "Content-Type": "multipart/form-data",
         },

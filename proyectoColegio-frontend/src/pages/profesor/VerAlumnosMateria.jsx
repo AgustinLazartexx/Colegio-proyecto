@@ -1,7 +1,6 @@
 /// src/pages/profesor/VerAlumnosMateria.jsx
 import { useEffect, useState } from "react";
 import api from "../../api/api";
-import { useAuth } from "../../context/AuthContext";
 import { toast } from "react-toastify";
 import { 
   Users, 
@@ -21,8 +20,6 @@ const VerAlumnosMateria = () => {
   const [busqueda, setBusqueda] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingAlumnos, setLoadingAlumnos] = useState(false);
-  const { usuario } = useAuth();
-  const token = localStorage.getItem("token");
 
   useEffect(() => {
     const fetchMaterias = async () => {
@@ -30,7 +27,7 @@ const VerAlumnosMateria = () => {
       try {
         const res = await api.get("/materias/profesor/materias");
         setMaterias(res.data);
-      } catch (err) {
+      } catch {
         toast.error("Error al cargar materias");
       } finally {
         setLoading(false);
@@ -69,7 +66,7 @@ const VerAlumnosMateria = () => {
       const res = await api.get(`/materias/${materiaId}/alumnos`);
       setAlumnos(res.data);
       setAlumnosFiltrados(res.data);
-    } catch (err) {
+    } catch {
       toast.error("No se pudo obtener los alumnos");
       setAlumnos([]);
       setAlumnosFiltrados([]);
