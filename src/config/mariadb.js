@@ -31,6 +31,9 @@ const sequelize = DB_DIALECT === 'postgres'
       host: DB_HOST,
       port: DB_PORT,
       dialect: 'mariadb',
+      dialectOptions: {
+        allowPublicKeyRetrieval: true,
+      },
       logging,
       pool: { max: 10, min: 0, acquire: 30000, idle: 10000 },
     });
@@ -44,6 +47,7 @@ const pool = DB_DIALECT === 'postgres'
       database: DB_NAME,
       port: DB_PORT,
       connectionLimit: 5,
+      allowPublicKeyRetrieval: true,
     });
 
 if (DB_DIALECT === 'postgres') {

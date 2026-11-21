@@ -73,6 +73,48 @@ test("translates MariaDB table definitions and retains secondary indexes", () =>
   ]);
 });
 
+test("adds fields required by academic controllers to legacy tables", async () => {
+  const addedColumns = [];
+  const migration = require("../database/migrations/20261015-13-create-academic-relations.cjs");
+  const tables = {
+    users: {},
+    materias: { nombre: {}, anio: {}, profesor_id: {} },
+    clases: { aula: {} },
+  };
+  const queryInterface = {
+    sequelize: { query: async () => {} },
+    describeTable: async (table) => tables[table],
+    addColumn: async (table, column) => addedColumns.push(`${table}.${column}`),
+    showIndex: async () => [
+      { name: "uq_materia_curso" },
+      { name: "uq_clase_materia_horario" },
+    ],
+  };
+
+  await migration.up(queryInterface, Sequelize);
+
+  assert.deepEqual(addedColumns, [
+    "users.codigoAlumno",
+    "materias.descripcion",
+    "materias.division",
+    "materias.isActive",
+    "clases.isActive",
+  ]);
+});
+
+test("adds mustChangePassword to existing user tables", async () => {
+  const addedColumns = [];
+  const migration = require("../database/migrations/20261015-12-add-user-auth-columns.cjs");
+  const queryInterface = {
+    describeTable: async () => ({}),
+    addColumn: async (_table, column) => addedColumns.push(column),
+  };
+
+  await migration.up(queryInterface, Sequelize);
+
+  assert.ok(addedColumns.includes("mustChangePassword"));
+});
+
 test("translates the production schema migrations without MariaDB-only DDL", async () => {
   const migrationFiles = [
     "../database/migrations/20261015-00-create-core-schema.cjs",
@@ -89,10 +131,14 @@ test("translates the production schema migrations without MariaDB-only DDL", asy
       },
     },
     describeTable: async () => ({
+      mustChangePassword: {},
+      codigoAlumno: {},
       acceso_habilitado: {},
       resetPasswordToken: {},
       resetPasswordExpiresAt: {},
       descripcion: {},
+      division: {},
+      isActive: {},
       aula: {},
     }),
     showIndex: async () => [],

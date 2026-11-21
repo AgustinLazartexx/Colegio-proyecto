@@ -14,6 +14,7 @@
     "db:create:local": "node src/scripts/createLocalDatabase.js",
     "migrate:academics": "node src/scripts/migrateAcademicRelations.js",
     "seed:academics": "node src/scripts/seedLocalAcademics.js",
+    "seed:curriculum": "node src/scripts/seedCurriculum.js",
     "seed:demo": "node src/scripts/seedDemoData.js",
     "deploy:demo": "npm run migrate:academics && npm run seed:demo && npm start",
     "test:postgres-compat": "node --test src/database/postgresCompat.test.js"
