@@ -5,6 +5,11 @@ import {
   queryRows,
   sequelize,
 } from "../services/relationalData.service.js";
+import {
+  assertCycleWritable,
+  getActiveCycle,
+  getCycleById,
+} from "../services/cycleAccess.service.js";
 
 const camposPermitidos = new Set(["orientadora", "proceso", "integradora", "recuperacion"]);
 const columnasNota = {
@@ -14,16 +19,16 @@ const columnasNota = {
   recuperacion: "recuperacion",
 };
 
-const verificarProfesorMateria = async (materiaId, usuario) => {
+const verificarProfesorMateria = async (materiaId, usuario, cicloId) => {
   if (usuario.rol === "admin") return true;
   const rows = await queryRows(
     `SELECT m.id FROM materias m
-     LEFT JOIN clases c ON c.materia_id = m.id
+     LEFT JOIN clases c ON c.materia_id = m.id AND c.ciclo_lectivo_id = UNHEX(:cycleId)
      LEFT JOIN clase_profesores cp ON cp.clase_id = c.id AND cp.profesor_id = UNHEX(:profesorId)
      WHERE m.id = UNHEX(:materiaId) AND m.isActive = TRUE
        AND (m.profesor_id = UNHEX(:profesorId) OR (c.isActive = TRUE AND cp.profesor_id IS NOT NULL))
      LIMIT 1`,
-    { materiaId: databaseId(materiaId), profesorId: databaseId(usuario.id) },
+    { materiaId: databaseId(materiaId), profesorId: databaseId(usuario.id), cycleId },
   );
   if (!rows.length) {
     const exists = await queryRows(
@@ -52,6 +57,7 @@ const notaPublica = (row) => ({
   isAprobadaAdmin: Boolean(row.isAprobadaAdmin),
   isBloqueada: Boolean(row.isBloqueada),
   actualizadoPor: row.actualizadoPor,
+  cicloLectivoId: row.cicloLectivoId,
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
 });
@@ -70,6 +76,10 @@ const calcularNotas = ({ orientadora, proceso, integradora, recuperacion }) => {
   return { promedioPonderado, notaFinalTrimestre };
 };
 
+const resolveCycleForRead = async (req) => req.query.cicloLectivoId
+  ? getCycleById(req.query.cicloLectivoId)
+  : getActiveCycle();
+
 export const guardarNota = async (req, res) => {
   const { materiaId, alumnoId, trimestre, tipoNota, nota } = req.body;
   if (!isDatabaseId(materiaId) || !isDatabaseId(alumnoId) || !camposPermitidos.has(tipoNota)) {
@@ -80,35 +90,42 @@ export const guardarNota = async (req, res) => {
     return res.status(400).json({ msg: "Debe indicar un trimestre entre 1 y 3 y una nota." });
   }
   const notaNueva = nota === "" || nota === null ? null : Number(nota);
-  if (notaNueva !== null && (!Number.isFinite(notaNueva) || notaNueva < 0 || notaNueva > 10)) {
-    return res.status(400).json({ msg: "La nota debe ser un número entre 0 y 10 o quedar vacía." });
+  if (notaNueva !== null && (!Number.isFinite(notaNueva) || notaNueva < 1 || notaNueva > 10)) {
+    return res.status(400).json({ msg: "La nota debe ser un número entre 1 y 10 o quedar vacía." });
   }
 
   const materiaKey = databaseId(materiaId);
   const alumnoKey = databaseId(alumnoId);
   try {
-    await verificarProfesorMateria(materiaKey, req.user);
+    const cycle = req.body.cicloLectivoId
+      ? await getCycleById(req.body.cicloLectivoId)
+      : await getActiveCycle();
+    assertCycleWritable(cycle, { allowRecovery: false });
+    await verificarProfesorMateria(materiaKey, req.user, databaseId(cycle.id));
     const inscripto = await queryRows(
       `SELECT ca.alumno_id FROM clase_alumnos ca
        JOIN clases c ON c.id = ca.clase_id
-       WHERE c.materia_id = UNHEX(:materiaId) AND c.isActive = TRUE
+       WHERE c.materia_id = UNHEX(:materiaId) AND c.ciclo_lectivo_id = UNHEX(:cicloId)
+         AND c.isActive = TRUE AND ca.isActive = TRUE
          AND ca.alumno_id = UNHEX(:alumnoId)
        LIMIT 1`,
-      { materiaId: materiaKey, alumnoId: alumnoKey },
+      { materiaId: materiaKey, alumnoId: alumnoKey, cicloId: databaseId(cycle.id) },
     );
     if (!inscripto.length) return res.status(400).json({ msg: "El alumno no está inscripto en esta materia." });
 
     const result = await sequelize.transaction(async (transaction) => {
       const rows = await queryRows(
         `SELECT HEX(id) AS _id, HEX(materia_id) AS materiaId, HEX(alumno_id) AS alumnoId,
+                HEX(ciclo_lectivo_id) AS cicloLectivoId,
                 trimestre, orientadora, proceso, integradora, recuperacion,
                 promedio_ponderado AS promedioPonderado, nota_final_trimestre AS notaFinalTrimestre,
                 observacion, is_aprobada_admin AS isAprobadaAdmin, is_bloqueada AS isBloqueada,
                 HEX(actualizado_por) AS actualizadoPor, createdAt, updatedAt
          FROM school_notas_trimestrales
-         WHERE materia_id = UNHEX(:materiaId) AND alumno_id = UNHEX(:alumnoId) AND trimestre = :trimestre
+         WHERE ciclo_lectivo_id = UNHEX(:cicloId) AND materia_id = UNHEX(:materiaId)
+           AND alumno_id = UNHEX(:alumnoId) AND trimestre = :trimestre
          FOR UPDATE`,
-        { materiaId: materiaKey, alumnoId: alumnoKey, trimestre: trimestreNum },
+        { cicloId: databaseId(cycle.id), materiaId: materiaKey, alumnoId: alumnoKey, trimestre: trimestreNum },
         transaction,
       );
       let current = rows[0];
@@ -119,21 +136,30 @@ export const guardarNota = async (req, res) => {
       }
       if (!current) {
         await executeSql(
-          `INSERT INTO school_notas_trimestrales (id, materia_id, alumno_id, trimestre, actualizado_por)
-           VALUES (UNHEX(REPLACE(UUID(), '-', '')), UNHEX(:materiaId), UNHEX(:alumnoId), :trimestre, UNHEX(:userId))`,
-          { materiaId: materiaKey, alumnoId: alumnoKey, trimestre: trimestreNum, userId: databaseId(req.user.id) },
+          `INSERT INTO school_notas_trimestrales
+           (id, ciclo_lectivo_id, materia_id, alumno_id, trimestre, actualizado_por)
+          VALUES (UNHEX(REPLACE(UUID(), '-', '')), UNHEX(:cicloId), UNHEX(:materiaId), UNHEX(:alumnoId), :trimestre, UNHEX(:userId))`,
+          {
+            cicloId: databaseId(cycle.id),
+            materiaId: materiaKey,
+            alumnoId: alumnoKey,
+            trimestre: trimestreNum,
+            userId: databaseId(req.user.id),
+          },
           transaction,
         );
         [current] = await queryRows(
           `SELECT HEX(id) AS _id, HEX(materia_id) AS materiaId, HEX(alumno_id) AS alumnoId,
+                  HEX(ciclo_lectivo_id) AS cicloLectivoId,
                   trimestre, orientadora, proceso, integradora, recuperacion,
                   promedio_ponderado AS promedioPonderado, nota_final_trimestre AS notaFinalTrimestre,
                   observacion, is_aprobada_admin AS isAprobadaAdmin, is_bloqueada AS isBloqueada,
                   HEX(actualizado_por) AS actualizadoPor, createdAt, updatedAt
            FROM school_notas_trimestrales
-           WHERE materia_id = UNHEX(:materiaId) AND alumno_id = UNHEX(:alumnoId) AND trimestre = :trimestre
+           WHERE ciclo_lectivo_id = UNHEX(:cicloId) AND materia_id = UNHEX(:materiaId)
+             AND alumno_id = UNHEX(:alumnoId) AND trimestre = :trimestre
            FOR UPDATE`,
-          { materiaId: materiaKey, alumnoId: alumnoKey, trimestre: trimestreNum },
+          { cicloId: databaseId(cycle.id), materiaId: materiaKey, alumnoId: alumnoKey, trimestre: trimestreNum },
           transaction,
         );
       }
@@ -186,6 +212,7 @@ export const guardarNota = async (req, res) => {
       );
       [current] = await queryRows(
         `SELECT HEX(id) AS _id, HEX(materia_id) AS materiaId, HEX(alumno_id) AS alumnoId,
+               HEX(ciclo_lectivo_id) AS cicloLectivoId,
                 trimestre, orientadora, proceso, integradora, recuperacion,
                 promedio_ponderado AS promedioPonderado, nota_final_trimestre AS notaFinalTrimestre,
                 observacion, is_aprobada_admin AS isAprobadaAdmin, is_bloqueada AS isBloqueada,
@@ -235,6 +262,13 @@ export const cambiarEstadoTrimestre = async (req, res) => {
   if (!fields.length) return res.status(400).json({ msg: "No se recibieron cambios." });
 
   try {
+    const [existing] = await queryRows(
+      "SELECT HEX(ciclo_lectivo_id) AS cicloId FROM school_notas_trimestrales WHERE id = UNHEX(:notaId)",
+      { notaId: databaseId(notaId) },
+    );
+    if (!existing) return res.status(404).json({ msg: "Documento de notas no encontrado." });
+    const cycle = await getCycleById(existing.cicloId);
+    assertCycleWritable(cycle, { allowRecovery: false });
     const [result] = await executeSql(
       `UPDATE school_notas_trimestrales SET ${fields.join(", ")}, actualizado_por = UNHEX(:userId)
        WHERE id = UNHEX(:notaId)`,
@@ -242,7 +276,8 @@ export const cambiarEstadoTrimestre = async (req, res) => {
     );
     if (!result.affectedRows) return res.status(404).json({ msg: "Documento de notas no encontrado." });
     const [row] = await queryRows(
-      `SELECT HEX(id) AS _id, HEX(materia_id) AS materiaId, HEX(alumno_id) AS alumnoId,
+      `      SELECT HEX(id) AS _id, HEX(materia_id) AS materiaId, HEX(alumno_id) AS alumnoId,
+              HEX(ciclo_lectivo_id) AS cicloLectivoId,
               trimestre, orientadora, proceso, integradora, recuperacion,
               promedio_ponderado AS promedioPonderado, nota_final_trimestre AS notaFinalTrimestre,
               observacion, is_aprobada_admin AS isAprobadaAdmin, is_bloqueada AS isBloqueada,
@@ -265,16 +300,19 @@ export const getNotasPorMateriaTrimestre = async (req, res) => {
     return res.status(400).json({ msg: "Debe especificar un trimestre entre 1 y 3." });
   }
   try {
-    await verificarProfesorMateria(id, req.user);
+    const cycle = await resolveCycleForRead(req);
+    await verificarProfesorMateria(id, req.user, databaseId(cycle.id));
     const rows = await queryRows(
-      `SELECT HEX(id) AS _id, HEX(materia_id) AS materiaId, HEX(alumno_id) AS alumnoId,
+      `      SELECT HEX(id) AS _id, HEX(materia_id) AS materiaId, HEX(alumno_id) AS alumnoId,
+             HEX(ciclo_lectivo_id) AS cicloLectivoId,
               trimestre, orientadora, proceso, integradora, recuperacion,
               promedio_ponderado AS promedioPonderado, nota_final_trimestre AS notaFinalTrimestre,
               observacion, is_aprobada_admin AS isAprobadaAdmin, is_bloqueada AS isBloqueada,
               HEX(actualizado_por) AS actualizadoPor, createdAt, updatedAt
        FROM school_notas_trimestrales
-       WHERE materia_id = UNHEX(:materiaId) AND trimestre = :trimestre`,
-      { materiaId: databaseId(id), trimestre },
+       WHERE ciclo_lectivo_id = UNHEX(:cycleId)
+         AND materia_id = UNHEX(:materiaId) AND trimestre = :trimestre`,
+      { cycleId: databaseId(cycle.id), materiaId: databaseId(id), trimestre },
     );
     return res.json(Object.fromEntries(rows.map((row) => [row.alumnoId, notaPublica(row)])));
   } catch (error) {
@@ -299,6 +337,12 @@ export const getAuditoriaNotas = async (req, res) => {
     replacements.trimestre = trimestre;
   }
   try {
+    const cycle = await resolveCycleForRead(req);
+    replacements.cycleId = databaseId(cycle.id);
+    where += ` AND EXISTS (
+      SELECT 1 FROM school_notas_trimestrales nota_ciclo
+      WHERE nota_ciclo.id = a.nota_id AND nota_ciclo.ciclo_lectivo_id = UNHEX(:cycleId)
+    )`;
     const rows = await queryRows(
       `SELECT HEX(a.id) AS _id, HEX(a.nota_id) AS notaOriginalId,
               HEX(a.materia_id) AS materiaId, HEX(a.alumno_id) AS alumnoId,
@@ -333,26 +377,39 @@ export const getAuditoriaNotas = async (req, res) => {
 };
 
 export const misNotasAlumno = async (req, res) => {
+  const alumnoId = req.user.rol === "admin" ? req.params.alumnoId : req.user.id;
+  if (!isDatabaseId(alumnoId)) return res.status(400).json({ msg: "ID de alumno inválido." });
   try {
+    const cycle = await resolveCycleForRead(req);
     const rows = await queryRows(
       `SELECT HEX(n.id) AS _id, HEX(n.materia_id) AS materiaId, HEX(n.alumno_id) AS alumnoId,
+              HEX(n.ciclo_lectivo_id) AS cicloLectivoId,
               n.trimestre, n.orientadora, n.proceso, n.integradora, n.recuperacion,
               n.promedio_ponderado AS promedioPonderado,
               n.nota_final_trimestre AS notaFinalTrimestre,
               n.observacion, n.is_aprobada_admin AS isAprobadaAdmin,
               n.is_bloqueada AS isBloqueada, HEX(n.actualizado_por) AS actualizadoPor,
-              n.createdAt, n.updatedAt, m.nombre AS materiaNombre
+              n.createdAt, n.updatedAt, m.nombre AS materiaNombre,
+              r.nota_recuperacion AS notaRecuperacion, r.estado_materia AS estadoMateria
        FROM school_notas_trimestrales n
        JOIN materias m ON m.id = n.materia_id
-       WHERE n.alumno_id = UNHEX(:alumnoId)
+       LEFT JOIN school_resultados_materia r ON r.ciclo_lectivo_id = n.ciclo_lectivo_id
+         AND r.materia_id = n.materia_id AND r.alumno_id = n.alumno_id
+       WHERE n.alumno_id = UNHEX(:alumnoId) AND n.ciclo_lectivo_id = UNHEX(:cycleId)
        ORDER BY m.nombre, n.trimestre`,
-      { alumnoId: databaseId(req.user.id) },
+      { alumnoId: databaseId(alumnoId), cycleId: databaseId(cycle.id) },
     );
     return res.json({
       total: rows.length,
-      notas: rows.map((row) => ({ ...notaPublica(row), materia: { _id: row.materiaId, nombre: row.materiaNombre } })),
+      notas: rows.map((row) => ({
+        ...notaPublica(row),
+        materia: { _id: row.materiaId, nombre: row.materiaNombre },
+        notaRecuperacion: row.notaRecuperacion === null ? null : Number(row.notaRecuperacion),
+        estadoMateria: row.estadoMateria,
+      })),
     });
   } catch (error) {
+    if (error.status) return res.status(error.status).json({ msg: error.message });
     console.error("Error consultando boletín:", error);
     return res.status(500).json({ msg: "Error al obtener notas." });
   }

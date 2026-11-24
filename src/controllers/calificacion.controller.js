@@ -4,8 +4,10 @@ import {
   isDatabaseId,
   queryRows,
 } from "../services/relationalData.service.js";
+import { getActiveCycle, getCycleById } from "../services/cycleAccess.service.js";
 
 const calificacionSelect = `SELECT HEX(c.id) AS _id, HEX(c.materia_id) AS materiaId,
+  HEX(c.ciclo_lectivo_id) AS cicloLectivoId,
   HEX(c.alumno_id) AS alumnoId, HEX(c.profesor_id) AS profesorId, c.descripcion, c.nota,
   c.createdAt, c.updatedAt, u.nombre AS alumnoNombre, u.email AS alumnoEmail,
   m.nombre AS materiaNombre, m.anio, m.division
@@ -13,15 +15,15 @@ const calificacionSelect = `SELECT HEX(c.id) AS _id, HEX(c.materia_id) AS materi
   JOIN users u ON u.id = c.alumno_id
   JOIN materias m ON m.id = c.materia_id`;
 
-const asignadaAlProfesor = async (materiaId, profesorId) => {
+const asignadaAlProfesor = async (materiaId, profesorId, cycleId) => {
   const rows = await queryRows(
     `SELECT m.id FROM materias m
-     LEFT JOIN clases c ON c.materia_id = m.id
+     LEFT JOIN clases c ON c.materia_id = m.id AND c.ciclo_lectivo_id = UNHEX(:cycleId)
      LEFT JOIN clase_profesores cp ON cp.clase_id = c.id AND cp.profesor_id = UNHEX(:profesorId)
      WHERE m.id = UNHEX(:materiaId) AND m.isActive = TRUE
        AND (m.profesor_id = UNHEX(:profesorId) OR (c.isActive = TRUE AND cp.profesor_id IS NOT NULL))
      LIMIT 1`,
-    { materiaId: databaseId(materiaId), profesorId: databaseId(profesorId) },
+    { materiaId: databaseId(materiaId), profesorId: databaseId(profesorId), cycleId: databaseId(cycleId) },
   );
   return rows.length > 0;
 };
@@ -34,21 +36,27 @@ export const crearCalificacion = async (req, res) => {
     return res.status(400).json({ msg: "Materia, alumno, descripción y nota válida son obligatorios." });
   }
   try {
-    if (!(await asignadaAlProfesor(materia, req.user.id))) {
+    const cycle = req.cicloLectivo ?? (req.body.cicloLectivoId
+      ? await getCycleById(req.body.cicloLectivoId)
+      : await getActiveCycle());
+    if (!(await asignadaAlProfesor(materia, req.user.id, cycle.id))) {
       return res.status(403).json({ msg: "No tienes acceso a esta materia." });
     }
     const enrolled = await queryRows(
       `SELECT 1 AS ok FROM clase_alumnos ca JOIN clases c ON c.id = ca.clase_id
-       WHERE c.materia_id = UNHEX(:materiaId) AND c.isActive = TRUE
+       WHERE c.materia_id = UNHEX(:materiaId) AND c.ciclo_lectivo_id = UNHEX(:cycleId)
+         AND c.isActive = TRUE AND ca.isActive = TRUE
          AND ca.alumno_id = UNHEX(:alumnoId) LIMIT 1`,
-      { materiaId: databaseId(materia), alumnoId: databaseId(alumno) },
+      { materiaId: databaseId(materia), alumnoId: databaseId(alumno), cycleId: databaseId(cycle.id) },
     );
     if (!enrolled.length) return res.status(400).json({ msg: "El alumno no está inscripto en esta materia." });
     await executeSql(
-      `INSERT INTO school_calificaciones (id, materia_id, alumno_id, profesor_id, descripcion, nota)
-       VALUES (UNHEX(REPLACE(UUID(), '-', '')), UNHEX(:materiaId), UNHEX(:alumnoId),
+      `INSERT INTO school_calificaciones
+         (id, ciclo_lectivo_id, materia_id, alumno_id, profesor_id, descripcion, nota)
+       VALUES (UNHEX(REPLACE(UUID(), '-', '')), UNHEX(:cycleId), UNHEX(:materiaId), UNHEX(:alumnoId),
          UNHEX(:profesorId), :descripcion, :nota)`,
       {
+        cycleId: databaseId(cycle.id),
         materiaId: databaseId(materia),
         alumnoId: databaseId(alumno),
         profesorId: databaseId(req.user.id),
@@ -58,8 +66,9 @@ export const crearCalificacion = async (req, res) => {
     );
     const [calificacion] = await queryRows(
       `${calificacionSelect} WHERE c.materia_id = UNHEX(:materiaId) AND c.alumno_id = UNHEX(:alumnoId)
+       AND c.ciclo_lectivo_id = UNHEX(:cycleId)
        ORDER BY c.createdAt DESC LIMIT 1`,
-      { materiaId: databaseId(materia), alumnoId: databaseId(alumno) },
+      { materiaId: databaseId(materia), alumnoId: databaseId(alumno), cycleId: databaseId(cycle.id) },
     );
     return res.status(201).json(calificacion);
   } catch (error) {
@@ -72,12 +81,16 @@ export const obtenerCalificacionesPorMateria = async (req, res) => {
   const { idMateria } = req.params;
   if (!isDatabaseId(idMateria)) return res.status(400).json({ msg: "ID de materia inválido." });
   try {
-    if (!(await asignadaAlProfesor(idMateria, req.user.id))) {
+    const cycle = req.query.cicloLectivoId
+      ? await getCycleById(req.query.cicloLectivoId)
+      : await getActiveCycle();
+    if (!(await asignadaAlProfesor(idMateria, req.user.id, cycle.id))) {
       return res.status(403).json({ msg: "No autorizado para esta materia." });
     }
     const rows = await queryRows(
-      `${calificacionSelect} WHERE c.materia_id = UNHEX(:materiaId) ORDER BY c.createdAt DESC`,
-      { materiaId: databaseId(idMateria) },
+      `${calificacionSelect} WHERE c.materia_id = UNHEX(:materiaId)
+       AND c.ciclo_lectivo_id = UNHEX(:cycleId) ORDER BY c.createdAt DESC`,
+      { materiaId: databaseId(idMateria), cycleId: databaseId(cycle.id) },
     );
     return res.json(rows.map((row) => ({
       _id: row._id,
@@ -89,6 +102,7 @@ export const obtenerCalificacionesPorMateria = async (req, res) => {
       createdAt: row.createdAt,
     })));
   } catch (error) {
+    if (error.status) return res.status(error.status).json({ msg: error.message });
     console.error("Error consultando calificaciones de materia:", error);
     return res.status(500).json({ msg: "Error al obtener calificaciones." });
   }
@@ -96,9 +110,13 @@ export const obtenerCalificacionesPorMateria = async (req, res) => {
 
 export const obtenerCalificacionesAlumno = async (req, res) => {
   try {
+    const cycle = req.query.cicloLectivoId
+      ? await getCycleById(req.query.cicloLectivoId)
+      : await getActiveCycle();
     const rows = await queryRows(
-      `${calificacionSelect} WHERE c.alumno_id = UNHEX(:alumnoId) ORDER BY c.createdAt DESC`,
-      { alumnoId: databaseId(req.user.id) },
+      `${calificacionSelect} WHERE c.alumno_id = UNHEX(:alumnoId)
+       AND c.ciclo_lectivo_id = UNHEX(:cycleId) ORDER BY c.createdAt DESC`,
+      { alumnoId: databaseId(req.user.id), cycleId: databaseId(cycle.id) },
     );
     return res.json(rows.map((row) => ({
       _id: row._id,
@@ -109,6 +127,7 @@ export const obtenerCalificacionesAlumno = async (req, res) => {
       createdAt: row.createdAt,
     })));
   } catch (error) {
+    if (error.status) return res.status(error.status).json({ msg: error.message });
     console.error("Error consultando calificaciones del alumno:", error);
     return res.status(500).json({ msg: "Error al obtener tus calificaciones." });
   }

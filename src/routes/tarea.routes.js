@@ -14,7 +14,13 @@ import { upload } from "../middlewares/upload.js";
 
 const router = express.Router();
 
-router.post("/", checkAuth, checkRole("profesor"), upload.single("archivo"), crearTarea);
+import {
+  cycleIdFromBody,
+  cycleIdFromTaskParam,
+  cycleWriteGuard,
+} from "../middlewares/cycleWrite.js";
+
+router.post("/", checkAuth, checkRole("profesor"), upload.single("archivo"), cycleWriteGuard(cycleIdFromBody), crearTarea);
 
 router.get("/profesor", checkAuth, checkRole("profesor", "admin"), obtenerTareasByProfesor);
 router.get("/by-profesor/:profesorId", [
@@ -25,6 +31,6 @@ router.get("/by-profesor/:profesorId", [
 ], obtenerTareasByProfesor);
 router.get("/materia/:materiaId", checkAuth, obtenerTareasPorMateria);
 router.get("/clase/:claseId", checkAuth, obtenerTareasPorClase);
-router.delete("/:id", checkAuth, checkRole("profesor", "admin"), eliminarTarea);
+router.delete("/:id", checkAuth, checkRole("profesor", "admin"), cycleWriteGuard(cycleIdFromTaskParam), eliminarTarea);
 
 export default router;

@@ -4,6 +4,11 @@ import { checkAuth } from "../middlewares/checkAuth.js";
 import { checkRole } from "../middlewares/checkRole.js";
 import { validateFields } from "../middlewares/validateFields.js";
 import { uploadEntrega } from "../middlewares/uploadEntrega.js";
+import {
+  cycleIdFromDeliveryParam,
+  cycleIdFromTaskBody,
+  cycleWriteGuard,
+} from "../middlewares/cycleWrite.js";
 import { 
   subirEntrega, 
   obtenerEntregasPorTarea, 
@@ -15,6 +20,7 @@ const router = express.Router();
 const validarEntrega = [
   checkAuth,
   checkRole("profesor", "admin"),
+  cycleWriteGuard(cycleIdFromDeliveryParam),
   param("id", "ID de entrega inválido").matches(/^[\da-f]{32}$/i),
   body("nota", "La nota debe ser un número entre 0 y 10")
     .optional()
@@ -31,6 +37,7 @@ router.post("/", [
   checkAuth,
   checkRole("alumno"), // Solo alumnos pueden subir entregas
   uploadEntrega.single("archivo"),
+  cycleWriteGuard(cycleIdFromTaskBody),
 ], subirEntrega);
 
 // 🆕 MEJORADA: obtener entregas por tarea - ruta principal que usa tu frontend
@@ -50,8 +57,8 @@ router.get("/tarea/:tareaId", [
 ], obtenerEntregasPorTarea);
 
 // 🆕 MEJORADA: corregir entrega con validaciones
-router.put("/:id", validarEntrega, corregirEntrega);
-router.put("/:id/calificar", validarEntrega, corregirEntrega);
+router.put("/:id", validarEntrega, cycleWriteGuard(cycleIdFromDeliveryParam), corregirEntrega);
+router.put("/:id/calificar", validarEntrega, cycleWriteGuard(cycleIdFromDeliveryParam), corregirEntrega);
 
 router.get("/alumno/mis-entregas", checkAuth, checkRole("alumno"), obtenerEntregasAlumno);
 

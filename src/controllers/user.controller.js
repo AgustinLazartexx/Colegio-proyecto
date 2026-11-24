@@ -166,7 +166,7 @@ export const cambiarPassword = async (req, res) => {
 };
 
 export const getUsers = async (req, res) => {
-  const { rol, anio, division, q } = req.query;
+  const { rol, anio, division, q, isActive, cicloLectivoId } = req.query;
   const filters = [];
   const replacements = {};
 
@@ -174,7 +174,7 @@ export const getUsers = async (req, res) => {
     return res.status(400).json({ msg: "Rol de usuario inválido." });
   }
   if (rol) {
-    filters.push("rol = :rol");
+    filters.push("users.rol = :rol");
     replacements.rol = rol;
   }
   if (anio) {
@@ -182,25 +182,60 @@ export const getUsers = async (req, res) => {
     if (!Number.isInteger(year) || year < 1 || year > 6) {
       return res.status(400).json({ msg: "Filtro de año inválido." });
     }
-    filters.push("anio = :anio");
+    filters.push("users.anio = :anio");
     replacements.anio = year;
   }
   if (division) {
-    filters.push("division = :division");
+    filters.push("users.division = :division");
     replacements.division = String(division).trim().toUpperCase();
   }
-  if (!filters.length) return res.json([]);
+  if (isActive !== undefined) {
+    if (!["true", "false", "1", "0"].includes(String(isActive))) {
+      return res.status(400).json({ msg: "Filtro de estado de usuario inválido." });
+    }
+    filters.push("users.isActive = :isActive");
+    replacements.isActive = ["true", "1"].includes(String(isActive)) ? 1 : 0;
+  }
+  if (cicloLectivoId) {
+    if (!validId(cicloLectivoId)) {
+      return res.status(400).json({ msg: "ID de ciclo lectivo inválido." });
+    }
+    if (rol && rol !== "alumno") {
+      return res.status(400).json({ msg: "El filtro de ciclo lectivo solo aplica a alumnos." });
+    }
+    filters.push(
+      `users.rol = 'alumno' AND EXISTS (
+         SELECT 1 FROM inscripciones_ciclo i
+         WHERE i.alumno_id = users.id
+           AND i.ciclo_lectivo_id = UNHEX(:cicloLectivoId)
+           AND i.estado_academico <> 'BAJA'
+       )`,
+    );
+    replacements.cicloLectivoId = cicloLectivoId;
+  }
   const searchTerm = typeof q === "string" ? q.trim() : "";
   if (searchTerm) {
-    filters.push("(nombre LIKE :search OR email LIKE :search OR dni LIKE :search)");
+    filters.push("(users.nombre LIKE :search OR users.email LIKE :search OR users.dni LIKE :search)");
     replacements.search = `%${searchTerm}%`;
   }
+  if (!filters.length) return res.json([]);
 
   try {
-    if (!filters.length) return res.json([]);
     const where = `WHERE ${filters.join(" AND ")}`;
+    const selectedFields = cicloLectivoId
+      ? userFields.replace(
+        "  division,",
+        `  division,
+  (SELECT i.nivel FROM inscripciones_ciclo i
+     WHERE i.alumno_id = users.id AND i.ciclo_lectivo_id = UNHEX(:cicloLectivoId)
+       AND i.estado_academico <> 'BAJA' LIMIT 1) AS nivelCiclo,
+  (SELECT i.division FROM inscripciones_ciclo i
+     WHERE i.alumno_id = users.id AND i.ciclo_lectivo_id = UNHEX(:cicloLectivoId)
+       AND i.estado_academico <> 'BAJA' LIMIT 1) AS divisionCiclo,`,
+      )
+      : userFields;
     const users = await sequelize.query(
-      `SELECT ${userFields} FROM users ${where} ORDER BY rol, nombre`,
+      `SELECT ${selectedFields} FROM users ${where} ORDER BY users.rol, users.nombre`,
       { replacements, type: QueryTypes.SELECT },
     );
     return res.json(users);

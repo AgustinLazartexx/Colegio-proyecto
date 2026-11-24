@@ -12,6 +12,11 @@ import {
 import { checkAuth } from "../middlewares/checkAuth.js";
 import { checkRole } from "../middlewares/checkRole.js";
 import { validateFields } from "../middlewares/validateFields.js";
+import {
+  cycleIdFromBody,
+  cycleIdFromGradeParam,
+  cycleWriteGuard,
+} from "../middlewares/cycleWrite.js";
 
 const router = express.Router();
 
@@ -21,6 +26,7 @@ router.post(
   [
     checkAuth,
     checkRole("profesor"),
+    cycleWriteGuard(cycleIdFromBody, { allowRecovery: false }),
     body("materia", "La materia es obligatoria").notEmpty(),
     body("alumno", "El alumno es obligatorio").notEmpty(),
     body("descripcion", "La descripción es obligatoria").notEmpty(),
@@ -35,6 +41,7 @@ router.get(
   "/materia/:idMateria",
   checkAuth,
   checkRole("profesor"),
+  cycleWriteGuard(cycleIdFromGradeParam, { allowRecovery: false }),
   obtenerCalificacionesPorMateria
 );
 
@@ -57,6 +64,6 @@ router.put(
   actualizarCalificacion
 );
 
-router.delete("/:id", checkAuth, checkRole("profesor"), eliminarCalificacion)
+router.delete("/:id", checkAuth, checkRole("profesor"), cycleWriteGuard(cycleIdFromGradeParam, { allowRecovery: false }), eliminarCalificacion)
 
 export default router;

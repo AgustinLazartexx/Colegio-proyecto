@@ -1,120 +1,13 @@
 import { QueryTypes } from "sequelize";
 import { pool, sequelize, DB_DIALECT } from "../config/mariadb.js";
-
-const curriculum = [
-  {
-    anio: 1,
-    materias: [
-      "Lengua",
-      "Lengua Extranjera",
-      "Matemática",
-      "Geografía",
-      "Historia",
-      "Biología",
-      "Físico-Química",
-      "Educación Artística",
-      "Tecnología / Informática",
-      "Educación Física",
-      "Formación Moral / Religión",
-      "E.D.I.",
-      "Tutoría",
-    ],
-  },
-  {
-    anio: 2,
-    materias: [
-      "Lengua",
-      "Lengua Extranjera",
-      "Matemática",
-      "Geografía",
-      "Historia",
-      "Biología",
-      "Físico-Química",
-      "Educación Artística",
-      "Tecnología / Informática",
-      "Educación Ética y Ciudadana",
-      "Educación Física",
-      "Formación Moral / Religión",
-      "E.D.I.",
-      "Tutoría",
-    ],
-  },
-  {
-    anio: 3,
-    materias: [
-      "Lengua",
-      "Lengua Extranjera",
-      "Matemática",
-      "Geografía",
-      "Historia",
-      "Biología",
-      "Físico-Química",
-      "Educación Artística",
-      "Tecnología / Informática",
-      "Educación Ética y Ciudadana",
-      "Educación Física",
-      "Formación Moral / Religión",
-      "E.D.I.",
-      "Tutoría",
-    ],
-  },
-  {
-    anio: 4,
-    materias: [
-      "Lengua I",
-      "Lengua Extranjera I",
-      "Matemática I",
-      "Biología I",
-      "Física I",
-      "Geografía I",
-      "Historia I",
-      "Tecnologías de Gestión",
-      "Educación Física I",
-      "E.D.I.",
-      "Tutoría",
-    ],
-  },
-  {
-    anio: 5,
-    materias: [
-      "Lengua y Literatura II",
-      "Lengua Extranjera II",
-      "Matemática II",
-      "Espacio Propio de Modalidad",
-      "Derecho I",
-      "Economía I",
-      "Sistema de Información",
-      "Teoría y Gestión de las Organizaciones I",
-      "Educación Física II",
-      "E.D.I.",
-      "Tutoría",
-    ],
-  },
-  {
-    anio: 6,
-    materias: [
-      "Lengua y Literatura III",
-      "Lengua Extranjera III",
-      "Matemática Aplicada",
-      "Economía II",
-      "Sistema de Información Contable",
-    ],
-  },
-];
-
-const divisions = ["A", "B", "C"];
-const curriculumRows = curriculum.flatMap(({ anio, materias }) =>
-  materias.flatMap((nombre) =>
-    divisions.map((division) => ({ nombre, anio, division })),
-  ),
-);
+import { curriculum, curriculumRows, divisions } from "../data/curriculum.js";
 const insertConflictClause = DB_DIALECT === "postgres"
-  ? "ON CONFLICT (nombre, anio, division) DO NOTHING"
-  : "ON DUPLICATE KEY UPDATE id = id";
+  ? 'ON CONFLICT (nombre, anio, division) DO UPDATE SET "isActive" = TRUE'
+  : "ON DUPLICATE KEY UPDATE isActive = TRUE";
 
 const verifyCurriculum = async (transaction) => {
   const rows = await sequelize.query(
-    `SELECT nombre, anio, division
+    `SELECT nombre, anio, division, isActive
      FROM materias
      WHERE anio BETWEEN 1 AND 6 AND division IN (:divisions)`,
     {
@@ -124,7 +17,9 @@ const verifyCurriculum = async (transaction) => {
     },
   );
   const existingRows = new Set(
-    rows.map(({ nombre, anio, division }) => `${Number(anio)}|${division}|${nombre}`),
+    rows
+      .filter(({ isActive }) => isActive === true || isActive === 1 || isActive === "1")
+      .map(({ nombre, anio, division }) => `${Number(anio)}|${division}|${nombre}`),
   );
   const missingRows = curriculumRows.filter(
     ({ nombre, anio, division }) => !existingRows.has(`${anio}|${division}|${nombre}`),
@@ -142,18 +37,20 @@ const verifyCurriculum = async (transaction) => {
 };
 
 try {
+  sequelize.options.logging = false;
   await sequelize.authenticate();
   await sequelize.transaction(async (transaction) => {
     for (const { nombre, anio, division } of curriculumRows) {
       await sequelize.query(
-        `INSERT INTO materias (id, nombre, descripcion, anio, division, profesor_id)
+        `INSERT INTO materias (id, nombre, descripcion, anio, division, profesor_id, isActive)
          VALUES (
            UNHEX(REPLACE(UUID(), '-', '')),
            :nombre,
            :descripcion,
            :anio,
            :division,
-           NULL
+           NULL,
+           TRUE
          )
          ${insertConflictClause}`,
         {

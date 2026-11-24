@@ -160,7 +160,7 @@ export const obtenerAnunciosAlumno = async (req, res) => {
       `${anuncioSelect.replace("SELECT ", "SELECT DISTINCT ")} ${anuncioJoins}
        JOIN clases c ON c.materia_id = a.materia_id
        JOIN clase_alumnos ca ON ca.clase_id = c.id
-       WHERE ca.alumno_id = UNHEX(:alumnoId) AND a.isActive = TRUE
+       WHERE ca.alumno_id = UNHEX(:alumnoId) AND ca.isActive = TRUE AND a.isActive = TRUE
          AND c.isActive = TRUE AND m.isActive = TRUE
        ORDER BY a.fecha DESC`,
       { alumnoId: databaseId(req.user.id) },

@@ -6,6 +6,11 @@ import {
   queryRows,
   sequelize,
 } from "../services/relationalData.service.js";
+import {
+  cycleDateOnly,
+  getActiveCycle,
+  getCycleById,
+} from "../services/cycleAccess.service.js";
 
 const estadosValidos = new Set(["presente", "ausente", "tarde", "justificado"]);
 const diasSemana = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
@@ -42,6 +47,7 @@ const validarAccesoClase = async (claseId, user) => {
 };
 
 const errorInterno = (res, message, error) => {
+  if (error.status) return res.status(error.status).json({ msg: error.message });
   console.error(message, error);
   return res.status(500).json({ msg: message });
 };
@@ -50,15 +56,21 @@ export const obtenerAsistenciaGeneral = async (req, res) => {
   const curso = validarCursoFecha(req.query);
   if (!curso) return res.status(400).json({ msg: "Se requieren año, división y fecha válida." });
   try {
+    const cycle = req.query.cicloLectivoId
+      ? await getCycleById(req.query.cicloLectivoId)
+      : await getActiveCycle();
     const alumnos = await queryRows(
       `SELECT HEX(u.id) AS _id, u.nombre, u.email, a.estado
-       FROM users u
+       FROM inscripciones_ciclo i
+       JOIN users u ON u.id = i.alumno_id
        LEFT JOIN school_asistencia_general a
-         ON a.alumno_id = u.id AND a.fecha = :fecha
+         ON a.alumno_id = i.alumno_id AND a.fecha = :fecha
          AND a.anio = :anio AND a.division = :division
-       WHERE u.rol = 'alumno' AND u.anio = :anio AND u.division = :division
+         AND a.ciclo_lectivo_id = UNHEX(:cycleId)
+       WHERE i.ciclo_lectivo_id = UNHEX(:cycleId)
+         AND i.nivel = :anio AND i.division = :division AND u.rol = 'alumno'
        ORDER BY u.nombre`,
-      curso,
+      { ...curso, cycleId: databaseId(cycle.id) },
     );
     return res.json(alumnos);
   } catch (error) {
@@ -82,16 +94,28 @@ export const registrarAsistenciaGeneral = async (req, res) => {
   }
 
   try {
-    const replacements = { anio: curso.anio, division: curso.division };
+    const cycle = req.cicloLectivo ?? (body.cicloLectivoId
+      ? await getCycleById(body.cicloLectivoId)
+      : await getActiveCycle());
+    const startDate = cycleDateOnly(cycle.fechaInicio);
+    const endDate = cycleDateOnly(cycle.fechaCierre);
+    if (curso.fecha < startDate || curso.fecha > endDate) {
+      return res.status(400).json({ msg: "La fecha de asistencia debe pertenecer al ciclo lectivo seleccionado." });
+    }
+    const replacements = {
+      anio: curso.anio,
+      division: curso.division,
+      cycleId: databaseId(cycle.id),
+    };
     const placeholders = alumnoIds.map((alumnoId, index) => {
       const key = `alumnoId${index}`;
       replacements[key] = alumnoId;
       return `UNHEX(:${key})`;
     });
     const alumnosCurso = await queryRows(
-      `SELECT HEX(id) AS id FROM users
-       WHERE rol = 'alumno' AND anio = :anio AND division = :division
-         AND id IN (${placeholders.join(", ")})`,
+      `SELECT HEX(alumno_id) AS id FROM inscripciones_ciclo
+       WHERE ciclo_lectivo_id = UNHEX(:cycleId) AND nivel = :anio AND division = :division
+         AND alumno_id IN (${placeholders.join(", ")})`,
       replacements,
     );
     if (alumnosCurso.length !== alumnoIds.length) {
@@ -102,12 +126,15 @@ export const registrarAsistenciaGeneral = async (req, res) => {
       for (const { alumno, estado } of asistencias) {
         await executeSql(
           `INSERT INTO school_asistencia_general
-             (id, alumno_id, anio, division, fecha, estado, registrado_por)
-           VALUES (UNHEX(REPLACE(UUID(), '-', '')), UNHEX(:alumnoId), :anio, :division, :fecha, :estado, UNHEX(:adminId))
-           ON DUPLICATE KEY UPDATE anio = VALUES(anio), division = VALUES(division),
-             estado = VALUES(estado), registrado_por = VALUES(registrado_por), updatedAt = CURRENT_TIMESTAMP`,
+             (id, ciclo_lectivo_id, alumno_id, anio, division, fecha, estado, registrado_por)
+           VALUES (UNHEX(REPLACE(UUID(), '-', '')), UNHEX(:cycleId), UNHEX(:alumnoId),
+             :anio, :division, :fecha, :estado, UNHEX(:adminId))
+           ON DUPLICATE KEY UPDATE ciclo_lectivo_id = VALUES(ciclo_lectivo_id),
+             anio = VALUES(anio), division = VALUES(division), estado = VALUES(estado),
+             registrado_por = VALUES(registrado_por), updatedAt = CURRENT_TIMESTAMP`,
           {
             alumnoId: databaseId(alumno),
+            cycleId: databaseId(cycle.id),
             anio: curso.anio,
             division: curso.division,
             fecha: curso.fecha,
@@ -128,15 +155,21 @@ export const compararAsistencias = async (req, res) => {
   const curso = validarCursoFecha(req.query);
   if (!curso) return res.status(400).json({ msg: "Se requieren año, división y fecha válida." });
   try {
+    const cycle = req.query.cicloLectivoId
+      ? await getCycleById(req.query.cicloLectivoId)
+      : await getActiveCycle();
     const alumnos = await queryRows(
       `SELECT HEX(u.id) AS _id, u.nombre, u.email, a.estado AS estadoGeneral
-       FROM users u
+       FROM inscripciones_ciclo i
+       JOIN users u ON u.id = i.alumno_id
        LEFT JOIN school_asistencia_general a
-         ON a.alumno_id = u.id AND a.fecha = :fecha
+         ON a.alumno_id = i.alumno_id AND a.fecha = :fecha
          AND a.anio = :anio AND a.division = :division
-       WHERE u.rol = 'alumno' AND u.anio = :anio AND u.division = :division
+         AND a.ciclo_lectivo_id = UNHEX(:cycleId)
+       WHERE i.ciclo_lectivo_id = UNHEX(:cycleId)
+         AND i.nivel = :anio AND i.division = :division AND u.rol = 'alumno'
        ORDER BY u.nombre`,
-      curso,
+      { ...curso, cycleId: databaseId(cycle.id) },
     );
     const filasClases = await queryRows(
       `SELECT HEX(c.id) AS claseId, m.nombre AS materia,
@@ -145,12 +178,13 @@ export const compararAsistencias = async (req, res) => {
               HEX(ca.alumno_id) AS alumnoId, a.estado AS estadoProfesor
        FROM clases c
        JOIN materias m ON m.id = c.materia_id
-       LEFT JOIN clase_alumnos ca ON ca.clase_id = c.id
+       LEFT JOIN clase_alumnos ca ON ca.clase_id = c.id AND ca.isActive = TRUE
        LEFT JOIN school_asistencias a
          ON a.clase_id = c.id AND a.alumno_id = ca.alumno_id AND a.fecha = :fecha
-       WHERE c.anio = :anio AND c.division = :division AND c.diaSemana = :diaSemana
+       WHERE c.nivel = :anio AND c.division = :division AND c.diaSemana = :diaSemana
+         AND c.ciclo_lectivo_id = UNHEX(:cycleId)
        ORDER BY c.horaInicio, m.nombre, ca.alumno_id`,
-      curso,
+      { ...curso, cycleId: databaseId(cycle.id) },
     );
 
     const clases = new Map();
@@ -255,7 +289,8 @@ export const registrarAsistencias = async (req, res) => {
     });
     const inscriptos = await queryRows(
       `SELECT HEX(alumno_id) AS id FROM clase_alumnos
-       WHERE clase_id = UNHEX(:claseId) AND alumno_id IN (${alumnoPlaceholders.join(", ")})`,
+       WHERE clase_id = UNHEX(:claseId) AND isActive = TRUE
+         AND alumno_id IN (${alumnoPlaceholders.join(", ")})`,
       replacements,
     );
     if (inscriptos.length !== alumnosIds.length) {
@@ -292,8 +327,18 @@ export const obtenerAsistenciasPorClaseYFecha = async (req, res) => {
     return res.status(400).json({ msg: "Se requieren claseId y fecha válida." });
   }
   try {
+    const cycle = req.query.cicloLectivoId
+      ? await getCycleById(req.query.cicloLectivoId)
+      : null;
     if (!(await validarAccesoClase(claseId, req.user))) {
       return res.status(403).json({ msg: "No tienes acceso a esta clase." });
+    }
+    if (cycle) {
+      const membership = await queryRows(
+        "SELECT id FROM clases WHERE id = UNHEX(:claseId) AND ciclo_lectivo_id = UNHEX(:cycleId)",
+        { claseId: databaseId(claseId), cycleId: databaseId(cycle.id) },
+      );
+      if (!membership.length) return res.status(404).json({ msg: "La clase no pertenece al ciclo seleccionado." });
     }
     const rows = await queryRows(
       `SELECT HEX(alumno_id) AS alumnoId, estado
@@ -317,6 +362,10 @@ export const obtenerAsistenciasPorAlumno = async (req, res) => {
     replacements.materiaId = databaseId(req.query.materiaId);
   }
   try {
+    const cycle = req.query.cicloLectivoId
+      ? await getCycleById(req.query.cicloLectivoId)
+      : await getActiveCycle();
+    replacements.cycleId = databaseId(cycle.id);
     const rows = await queryRows(
       `SELECT HEX(a.id) AS _id, HEX(a.alumno_id) AS alumnoId, HEX(a.clase_id) AS claseId,
               a.fecha, a.estado, HEX(a.cargado_por) AS cargadoPor,
@@ -324,7 +373,7 @@ export const obtenerAsistenciasPorAlumno = async (req, res) => {
        FROM school_asistencias a
        JOIN clases c ON c.id = a.clase_id
        JOIN materias m ON m.id = c.materia_id
-       WHERE a.alumno_id = UNHEX(:alumnoId) ${materiaFilter}
+       WHERE a.alumno_id = UNHEX(:alumnoId) AND c.ciclo_lectivo_id = UNHEX(:cycleId) ${materiaFilter}
        ORDER BY a.fecha DESC`,
       replacements,
     );
@@ -339,8 +388,18 @@ export const getReporteAsistencias = async (req, res) => {
   const dia = normalizeDate(fecha);
   if (!isDatabaseId(claseId) || !dia) return res.status(400).json({ msg: "Se requieren claseId y fecha válida." });
   try {
+    const cycle = req.query.cicloLectivoId
+      ? await getCycleById(req.query.cicloLectivoId)
+      : null;
     if (!(await validarAccesoClase(claseId, req.user))) {
       return res.status(403).json({ msg: "No tienes acceso a esta clase." });
+    }
+    if (cycle) {
+      const membership = await queryRows(
+        "SELECT id FROM clases WHERE id = UNHEX(:claseId) AND ciclo_lectivo_id = UNHEX(:cycleId)",
+        { claseId: databaseId(claseId), cycleId: databaseId(cycle.id) },
+      );
+      if (!membership.length) return res.status(404).json({ msg: "La clase no pertenece al ciclo seleccionado." });
     }
     const rows = await queryRows(
       `SELECT HEX(a.id) AS _id, HEX(a.clase_id) AS claseId, HEX(a.alumno_id) AS alumnoId,
@@ -372,15 +431,18 @@ export const getReporteAsistencias = async (req, res) => {
 
 export const getMisAsistencias = async (req, res) => {
   try {
+    const cycle = req.query.cicloLectivoId
+      ? await getCycleById(req.query.cicloLectivoId)
+      : await getActiveCycle();
     const rows = await queryRows(
       `SELECT HEX(a.id) AS id, a.fecha, a.estado, m.nombre AS materia,
               c.diaSemana, c.horaInicio
        FROM school_asistencias a
        JOIN clases c ON c.id = a.clase_id
        JOIN materias m ON m.id = c.materia_id
-       WHERE a.alumno_id = UNHEX(:alumnoId)
+       WHERE a.alumno_id = UNHEX(:alumnoId) AND c.ciclo_lectivo_id = UNHEX(:cycleId)
        ORDER BY a.fecha DESC`,
-      { alumnoId: databaseId(req.user.id) },
+      { alumnoId: databaseId(req.user.id), cycleId: databaseId(cycle.id) },
     );
     const historial = rows.map((row) => ({
       ...row,

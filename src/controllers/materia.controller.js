@@ -318,15 +318,20 @@ export const verAlumnosMateria = async (req, res) => {
        FROM users u
        JOIN clase_alumnos ca ON ca.alumno_id = u.id
        JOIN clases c ON c.id = ca.clase_id
-       WHERE c.materia_id = UNHEX(:id) AND u.rol = 'alumno'
+       WHERE c.materia_id = UNHEX(:id) AND c.isActive = TRUE AND ca.isActive = TRUE
+         AND u.rol = 'alumno' AND u.isActive = TRUE
        ORDER BY u.nombre`,
       { replacements: { id: databaseId(id) }, type: QueryTypes.SELECT },
     );
 
-    if (!students.length) {
+    const [hasClasses] = await sequelize.query(
+      "SELECT 1 AS existsClass FROM clases WHERE materia_id = UNHEX(:id) LIMIT 1",
+      { replacements: { id: databaseId(id) }, type: QueryTypes.SELECT },
+    );
+    if (!students.length && !hasClasses) {
       students = await sequelize.query(
         `SELECT HEX(id) AS _id, nombre, email, dni, anio, division
-         FROM users WHERE rol = 'alumno' AND anio = :anio AND division = :division
+         FROM users WHERE rol = 'alumno' AND isActive = TRUE AND anio = :anio AND division = :division
          ORDER BY nombre`,
         { replacements: { anio: materia.anio, division: materia.division }, type: QueryTypes.SELECT },
       );

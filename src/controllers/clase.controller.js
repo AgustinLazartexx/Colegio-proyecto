@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { QueryTypes } from "sequelize";
 import { databaseId, isDatabaseId, sequelize } from "../services/academicData.service.js";
+import { getActiveCycle, getCycleById } from "../services/cycleAccess.service.js";
 
 const validDays = new Set(["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]);
 const validId = (id) => typeof id === "string" && /^[\da-f]{32}$/i.test(String(id).replaceAll("-", ""));
@@ -9,7 +10,9 @@ const classSelect = `
   SELECT
     HEX(c.id) AS _id,
     HEX(c.id) AS id,
+    HEX(c.ciclo_lectivo_id) AS cicloLectivoId,
     c.anio,
+    c.nivel,
     c.division,
     c.diaSemana,
     TIME_FORMAT(c.horaInicio, '%H:%i') AS horaInicio,
@@ -42,7 +45,9 @@ const formatClasses = (rows) => {
       current = {
         _id: row._id,
         id: row.id,
+        cicloLectivoId: row.cicloLectivoId,
         anio: row.anio,
+        nivel: Number(row.nivel ?? row.anio),
         division: row.division,
         diaSemana: row.diaSemana,
         dia: row.diaSemana,
@@ -119,9 +124,9 @@ const getTeacherIds = async (teacherIds, transaction) => {
   return teachers.length === teacherIds.length;
 };
 
-const getConflict = async ({ teacherIds, diaSemana, horaInicio, horaFin, excludeId, transaction }) => {
+const getConflict = async ({ teacherIds, diaSemana, horaInicio, horaFin, cicloId, excludeId, transaction }) => {
   if (!teacherIds.length) return null;
-  const replacements = { diaSemana, horaInicio, horaFin };
+  const replacements = { diaSemana, horaInicio, horaFin, cicloId: databaseId(cicloId) };
   const teacherParameters = teacherIds.map((id, index) => {
     const key = `teacher${index}`;
     replacements[key] = id;
@@ -138,6 +143,7 @@ const getConflict = async ({ teacherIds, diaSemana, horaInicio, horaFin, exclude
      JOIN clase_profesores cp ON cp.clase_id = c.id
      JOIN users u ON u.id = cp.profesor_id
      WHERE c.isActive = TRUE AND m.isActive = TRUE
+       AND c.ciclo_lectivo_id = UNHEX(:cicloId)
        AND c.diaSemana = :diaSemana
        AND c.horaInicio < :horaFin AND c.horaFin > :horaInicio
        AND cp.profesor_id IN (${teacherParameters.join(", ")})
@@ -194,6 +200,9 @@ export const crearClase = async (req, res) => {
 
   const classId = randomUUID().replaceAll("-", "").toUpperCase();
   try {
+    const cycle = req.cicloLectivo ?? (req.body.cicloLectivoId
+      ? await getCycleById(req.body.cicloLectivoId)
+      : await getActiveCycle());
     await sequelize.transaction(async (transaction) => {
       const [subject] = await sequelize.query(
         `SELECT anio, division FROM materias
@@ -218,6 +227,7 @@ export const crearClase = async (req, res) => {
         diaSemana,
         horaInicio,
         horaFin,
+        cicloId: cycle.id,
         transaction,
       });
       if (conflict) {
@@ -228,8 +238,9 @@ export const crearClase = async (req, res) => {
 
       await sequelize.query(
         `INSERT INTO clases
-          (id, materia_id, diaSemana, horaInicio, horaFin, aula, anio, division)
-         VALUES (UNHEX(:classId), UNHEX(:materiaId), :diaSemana, :horaInicio, :horaFin, :aula, :anio, :division)`,
+          (id, materia_id, diaSemana, horaInicio, horaFin, aula, anio, nivel, division, ciclo_lectivo_id)
+         VALUES (UNHEX(:classId), UNHEX(:materiaId), :diaSemana, :horaInicio, :horaFin,
+           :aula, :anio, :nivel, :division, UNHEX(:cicloId))`,
         {
           replacements: {
             classId,
@@ -239,7 +250,9 @@ export const crearClase = async (req, res) => {
             horaFin,
             aula: typeof aula === "string" ? aula.trim() || null : null,
             anio: subject.anio,
+            nivel: subject.anio,
             division: subject.division,
+            cicloId: databaseId(cycle.id),
           },
           transaction,
         },
@@ -312,6 +325,11 @@ export const obtenerTodasLasClases = async (req, res) => {
   }
 
   try {
+    const cycle = req.query.cicloLectivoId
+      ? await getCycleById(req.query.cicloLectivoId)
+      : await getActiveCycle();
+    filters.push("c.ciclo_lectivo_id = UNHEX(:cycleId)");
+    replacements.cycleId = databaseId(cycle.id);
     const classes = await getClasses({ filters, replacements });
     return res.json({
       msg: "Clases obtenidas correctamente.",
@@ -319,6 +337,7 @@ export const obtenerTodasLasClases = async (req, res) => {
       total: classes.length,
     });
   } catch (error) {
+    if (error.status) return res.status(error.status).json({ msg: error.message });
     console.error("Error al obtener clases:", error);
     return res.status(500).json({ msg: "Error al obtener las clases." });
   }
@@ -326,13 +345,17 @@ export const obtenerTodasLasClases = async (req, res) => {
 
 export const obtenerClasesProfesor = async (req, res) => {
   try {
+    const cycle = req.query.cicloLectivoId
+      ? await getCycleById(req.query.cicloLectivoId)
+      : await getActiveCycle();
     const classes = await getClasses({
       filters: [
         "c.isActive = TRUE",
         "m.isActive = TRUE",
-        "EXISTS (SELECT 1 FROM clase_profesores cp_filter WHERE cp_filter.clase_id = c.id AND cp_filter.profesor_id = UNHEX(:profesorId))",
+        "c.ciclo_lectivo_id = UNHEX(:cycleId)",
+        "(EXISTS (SELECT 1 FROM clase_profesores cp_filter WHERE cp_filter.clase_id = c.id AND cp_filter.profesor_id = UNHEX(:profesorId)) OR m.profesor_id = UNHEX(:profesorId))",
       ],
-      replacements: { profesorId: databaseId(req.user.id) },
+      replacements: { profesorId: databaseId(req.user.id), cycleId: databaseId(cycle.id) },
       orderBy: "c.diaSemana, c.horaInicio",
     });
     return res.json({
@@ -342,6 +365,7 @@ export const obtenerClasesProfesor = async (req, res) => {
       profesor: { id: req.user.id, nombre: req.user.nombre },
     });
   } catch (error) {
+    if (error.status) return res.status(error.status).json({ msg: error.message });
     console.error("Error al obtener clases del profesor:", error);
     return res.status(500).json({ msg: "Error al obtener las clases del profesor." });
   }
@@ -380,6 +404,7 @@ export const actualizarClase = async (req, res) => {
         diaSemana,
         horaInicio,
         horaFin,
+        cicloId: current.cicloLectivoId,
         excludeId: id,
         transaction,
       });
@@ -460,42 +485,138 @@ export const asignarAlumno = async (req, res) => {
       return res.status(409).json({ msg: "No se pueden inscribir alumnos en una clase o materia suspendida." });
     }
     const [student] = await sequelize.query(
-      `SELECT HEX(id) AS id, anio, division FROM users
+      `SELECT HEX(id) AS id FROM users
        WHERE id = UNHEX(:alumnoId) AND rol = 'alumno' AND isActive = TRUE LIMIT 1`,
       { replacements: { alumnoId }, type: QueryTypes.SELECT },
     );
     if (!student) return res.status(404).json({ msg: "Alumno no encontrado o inactivo." });
-    if (Number(student.anio) !== Number(clase.anio) || student.division !== clase.division) {
-      return res.status(400).json({ msg: "El alumno no pertenece al año y división de esta clase." });
-    }
-
-    const [result] = await sequelize.query(
-      `INSERT IGNORE INTO clase_alumnos (clase_id, alumno_id)
-       VALUES (UNHEX(:id), UNHEX(:alumnoId))`,
-      { replacements: { id, alumnoId } },
-    );
+    const result = await sequelize.transaction(async (transaction) => {
+      const [enrollment] = await sequelize.query(
+        `SELECT HEX(id) AS id, nivel, division, estado_academico AS estado FROM inscripciones_ciclo
+         WHERE alumno_id = UNHEX(:alumnoId) AND ciclo_lectivo_id = UNHEX(:cycleId)
+         LIMIT 1 FOR UPDATE`,
+        {
+          replacements: { alumnoId, cycleId: databaseId(clase.cicloLectivoId) },
+          type: QueryTypes.SELECT,
+          transaction,
+        },
+      );
+      if (enrollment && (Number(enrollment.nivel) !== Number(clase.nivel) ||
+          enrollment.division !== clase.division || enrollment.estado !== "CURSANDO")) {
+        const error = new Error("ENROLLMENT_MISMATCH");
+        throw error;
+      }
+      if (!enrollment) {
+        await sequelize.query(
+          `INSERT INTO inscripciones_ciclo
+             (id, alumno_id, ciclo_lectivo_id, nivel, division, estado_academico, cantidad_desaprobadas)
+           VALUES (UNHEX(REPLACE(UUID(), '-', '')), UNHEX(:alumnoId), UNHEX(:cycleId),
+             :nivel, :division, 'CURSANDO', 0)`,
+          {
+            replacements: {
+              alumnoId,
+              cycleId: databaseId(clase.cicloLectivoId),
+              nivel: Number(clase.nivel),
+              division: clase.division,
+            },
+            transaction,
+          },
+        );
+      }
+      const [cycle] = await sequelize.query(
+        "SELECT estado FROM ciclos_lectivos WHERE id = UNHEX(:cycleId)",
+        {
+          replacements: { cycleId: databaseId(clase.cicloLectivoId) },
+          type: QueryTypes.SELECT,
+          transaction,
+        },
+      );
+      if (cycle?.estado === "ACTIVO") {
+        await sequelize.query(
+          "UPDATE users SET anio = :nivel, division = :division WHERE id = UNHEX(:alumnoId)",
+          {
+            replacements: {
+              alumnoId,
+              nivel: Number(clase.nivel),
+              division: clase.division,
+            },
+            transaction,
+          },
+        );
+      }
+      const [inserted] = await sequelize.query(
+        `INSERT IGNORE INTO clase_alumnos (clase_id, alumno_id)
+         VALUES (UNHEX(:id), UNHEX(:alumnoId))`,
+        { replacements: { id, alumnoId }, transaction },
+      );
+      return inserted;
+    });
     if (!result.affectedRows) return res.status(409).json({ msg: "El alumno ya está inscrito en esta clase." });
     return res.status(201).json({ msg: "Alumno inscrito correctamente." });
   } catch (error) {
+    if (error.message === "ENROLLMENT_MISMATCH") {
+      return res.status(400).json({ msg: "El alumno tiene una inscripción vigente en otro nivel, división o estado del ciclo." });
+    }
     console.error("Error al asignar alumno a clase:", error);
     return res.status(500).json({ msg: "Error al asignar el alumno a la clase." });
   }
 };
 
-export const desasignarAlumno = async (req, res) => {
+export const cambiarEstadoAlumno = async (req, res) => {
   const id = getClassId(req.params.id);
   const alumnoId = getClassId(req.params.alumnoId);
   if (!id || !alumnoId) return res.status(400).json({ msg: "ID de clase o alumno inválido." });
+  if (typeof req.body?.isActive !== "boolean") {
+    return res.status(400).json({ msg: "Debe indicar si la inscripción está activa." });
+  }
+
   try {
+    if (req.body.isActive) {
+      const clase = await findClassById(id);
+      if (!clase) return res.status(404).json({ msg: "Clase no encontrada." });
+      if (!clase.isActive || !clase.materia.isActive) {
+        return res.status(409).json({ msg: "No se puede reactivar una inscripción en una clase o materia suspendida." });
+      }
+
+      const [enrollment] = await sequelize.query(
+        `SELECT id FROM inscripciones_ciclo
+         WHERE alumno_id = UNHEX(:alumnoId) AND ciclo_lectivo_id = UNHEX(:cycleId)
+           AND nivel = :nivel AND division = :division AND estado_academico = 'CURSANDO'
+         LIMIT 1`,
+        {
+          replacements: {
+            alumnoId,
+            cycleId: databaseId(clase.cicloLectivoId),
+            nivel: Number(clase.nivel),
+            division: clase.division,
+          },
+          type: QueryTypes.SELECT,
+        },
+      );
+      if (!enrollment) {
+        return res.status(400).json({ msg: "El alumno no tiene una inscripción CURSANDO en este nivel, división y ciclo." });
+      }
+    }
+
     const [result] = await sequelize.query(
-      "DELETE FROM clase_alumnos WHERE clase_id = UNHEX(:id) AND alumno_id = UNHEX(:alumnoId)",
-      { replacements: { id, alumnoId } },
+      `UPDATE clase_alumnos SET isActive = :isActive
+       WHERE clase_id = UNHEX(:id) AND alumno_id = UNHEX(:alumnoId) AND isActive <> :isActive`,
+      { replacements: { id, alumnoId, isActive: req.body.isActive } },
     );
-    if (!result.affectedRows) return res.status(404).json({ msg: "El alumno no estaba inscrito en esa clase." });
-    return res.json({ msg: "Alumno eliminado de la clase." });
+    if (!result.affectedRows) {
+      const [existing] = await sequelize.query(
+        `SELECT isActive FROM clase_alumnos
+         WHERE clase_id = UNHEX(:id) AND alumno_id = UNHEX(:alumnoId) LIMIT 1`,
+        { replacements: { id, alumnoId }, type: QueryTypes.SELECT },
+      );
+      if (!existing) return res.status(404).json({ msg: "El alumno no estaba inscrito en esa clase." });
+    }
+    return res.json({
+      msg: req.body.isActive ? "Inscripción reactivada correctamente." : "Inscripción suspendida correctamente.",
+    });
   } catch (error) {
-    console.error("Error al quitar alumno de clase:", error);
-    return res.status(500).json({ msg: "Error al quitar el alumno de la clase." });
+    console.error("Error al cambiar el estado de inscripción del alumno:", error);
+    return res.status(500).json({ msg: "Error al cambiar el estado de inscripción del alumno." });
   }
 };
 
@@ -504,7 +625,8 @@ export const listarAlumnosDeClase = async (req, res) => {
   if (!id) return res.status(400).json({ msg: "ID de clase inválido." });
   try {
     const [clase] = await sequelize.query(
-      `SELECT c.id, c.isActive AS claseActiva, m.isActive AS materiaActiva
+      `SELECT c.id, c.ciclo_lectivo_id AS cicloId, c.nivel, c.division,
+              c.isActive AS claseActiva, m.isActive AS materiaActiva
        FROM clases c JOIN materias m ON m.id = c.materia_id
        WHERE c.id = UNHEX(:id) LIMIT 1`,
       { replacements: { id }, type: QueryTypes.SELECT },
@@ -515,14 +637,23 @@ export const listarAlumnosDeClase = async (req, res) => {
     }
 
     const students = await sequelize.query(
-      `SELECT HEX(u.id) AS _id, u.nombre, u.email, u.dni, u.anio, u.division
+      `SELECT HEX(u.id) AS _id, u.nombre, u.email, u.dni,
+              i.nivel AS anio, i.division,
+              u.isActive AS alumnoActivo, ca.isActive AS isActive
        FROM users u
+       JOIN inscripciones_ciclo i ON i.alumno_id = u.id
+         AND i.ciclo_lectivo_id = UNHEX(:cycleId)
        JOIN clase_alumnos ca ON ca.alumno_id = u.id
        WHERE ca.clase_id = UNHEX(:id) AND u.rol = 'alumno'
+         ${req.user.rol === "admin" ? "" : "AND ca.isActive = TRUE"}
        ORDER BY u.nombre`,
-      { replacements: { id }, type: QueryTypes.SELECT },
+      { replacements: { id, cycleId: databaseId(clase.cicloId) }, type: QueryTypes.SELECT },
     );
-    return res.json(students);
+    return res.json(students.map((student) => ({
+      ...student,
+      alumnoActivo: Boolean(student.alumnoActivo),
+      isActive: Boolean(student.isActive),
+    })));
   } catch (error) {
     console.error("Error al listar alumnos de clase:", error);
     return res.status(500).json({ msg: "Error al listar los alumnos de la clase." });
@@ -534,17 +665,22 @@ export const getMisClasesAlumno = async (req, res) => {
     return res.status(403).json({ msg: "Esta consulta es solo para alumnos." });
   }
   try {
+    const cycle = req.query.cicloLectivoId
+      ? await getCycleById(req.query.cicloLectivoId)
+      : await getActiveCycle();
     const classes = await getClasses({
       filters: [
         "c.isActive = TRUE",
         "m.isActive = TRUE",
-        "EXISTS (SELECT 1 FROM clase_alumnos ca_filter WHERE ca_filter.clase_id = c.id AND ca_filter.alumno_id = UNHEX(:alumnoId))",
+        "c.ciclo_lectivo_id = UNHEX(:cycleId)",
+        "EXISTS (SELECT 1 FROM clase_alumnos ca_filter WHERE ca_filter.clase_id = c.id AND ca_filter.alumno_id = UNHEX(:alumnoId) AND ca_filter.isActive = TRUE)",
       ],
-      replacements: { alumnoId: databaseId(req.user.id) },
+      replacements: { alumnoId: databaseId(req.user.id), cycleId: databaseId(cycle.id) },
       orderBy: "c.diaSemana, c.horaInicio",
     });
     return res.json(classes);
   } catch (error) {
+    if (error.status) return res.status(error.status).json({ msg: error.message });
     console.error("Error al obtener clases del alumno:", error);
     return res.status(500).json({ msg: "Error al obtener el cronograma del alumno." });
   }
