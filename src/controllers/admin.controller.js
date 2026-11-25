@@ -33,8 +33,8 @@ export const getAdminStats = async (req, res) => {
     const [[usuarios], [materias], [clases]] = await Promise.all([
       sequelize.query(
       `SELECT
-         SUM(rol = 'alumno') AS alumnos,
-         SUM(rol = 'profesor') AS profesores
+         SUM(CASE WHEN rol = 'alumno' THEN 1 ELSE 0 END) AS alumnos,
+         SUM(CASE WHEN rol = 'profesor' THEN 1 ELSE 0 END) AS profesores
        FROM users`,
       { type: QueryTypes.SELECT },
       ),
@@ -76,8 +76,8 @@ export const getAdminStats = async (req, res) => {
         { cycleId },
       ),
       queryRows(
-        `SELECT SUM(estado = 'pendiente') AS pendientes,
-                SUM(estado = 'vencido') AS vencidas
+        `SELECT SUM(CASE WHEN estado = 'pendiente' THEN 1 ELSE 0 END) AS pendientes,
+                SUM(CASE WHEN estado = 'vencido' THEN 1 ELSE 0 END) AS vencidas
          FROM school_cuotas WHERE ciclo_lectivo_id = UNHEX(:cycleId)`,
         { cycleId },
       ),

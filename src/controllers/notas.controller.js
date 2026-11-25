@@ -28,7 +28,7 @@ const verificarProfesorMateria = async (materiaId, usuario, cicloId) => {
      WHERE m.id = UNHEX(:materiaId) AND m.isActive = TRUE
        AND (m.profesor_id = UNHEX(:profesorId) OR (c.isActive = TRUE AND cp.profesor_id IS NOT NULL))
      LIMIT 1`,
-    { materiaId: databaseId(materiaId), profesorId: databaseId(usuario.id), cycleId },
+    { materiaId: databaseId(materiaId), profesorId: databaseId(usuario.id), cycleId: cicloId },
   );
   if (!rows.length) {
     const exists = await queryRows(
@@ -287,6 +287,7 @@ export const cambiarEstadoTrimestre = async (req, res) => {
     );
     return res.json({ msg: "Estado del trimestre actualizado.", doc: notaPublica(row) });
   } catch (error) {
+    if (error.status) return res.status(error.status).json({ msg: error.message });
     console.error("Error cambiando el estado del trimestre:", error);
     return res.status(500).json({ msg: "Error al cambiar estado." });
   }
@@ -371,6 +372,7 @@ export const getAuditoriaNotas = async (req, res) => {
       createdAt: row.createdAt,
     })));
   } catch (error) {
+    if (error.status) return res.status(error.status).json({ msg: error.message });
     console.error("Error consultando auditoría de notas:", error);
     return res.status(500).json({ msg: "Error al obtener auditoría." });
   }
@@ -381,6 +383,16 @@ export const misNotasAlumno = async (req, res) => {
   if (!isDatabaseId(alumnoId)) return res.status(400).json({ msg: "ID de alumno inválido." });
   try {
     const cycle = await resolveCycleForRead(req);
+    const [alumno] = await queryRows(
+      `SELECT HEX(u.id) AS _id, u.nombre, u.dni, u.email,
+              i.nivel AS anio, i.division, i.estado_academico AS estadoAcademico
+       FROM users u
+       LEFT JOIN inscripciones_ciclo i
+         ON i.alumno_id = u.id AND i.ciclo_lectivo_id = UNHEX(:cycleId)
+       WHERE u.id = UNHEX(:alumnoId)
+       LIMIT 1`,
+      { alumnoId: databaseId(alumnoId), cycleId: databaseId(cycle.id) },
+    );
     const rows = await queryRows(
       `SELECT HEX(n.id) AS _id, HEX(n.materia_id) AS materiaId, HEX(n.alumno_id) AS alumnoId,
               HEX(n.ciclo_lectivo_id) AS cicloLectivoId,
@@ -401,6 +413,7 @@ export const misNotasAlumno = async (req, res) => {
     );
     return res.json({
       total: rows.length,
+      alumno: alumno ? { ...alumno, anio: alumno.anio === null ? null : Number(alumno.anio) } : null,
       notas: rows.map((row) => ({
         ...notaPublica(row),
         materia: { _id: row.materiaId, nombre: row.materiaNombre },

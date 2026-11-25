@@ -57,8 +57,8 @@ router.get("/tarea/:tareaId", [
 ], obtenerEntregasPorTarea);
 
 // 🆕 MEJORADA: corregir entrega con validaciones
-router.put("/:id", validarEntrega, cycleWriteGuard(cycleIdFromDeliveryParam), corregirEntrega);
-router.put("/:id/calificar", validarEntrega, cycleWriteGuard(cycleIdFromDeliveryParam), corregirEntrega);
+router.put("/:id", validarEntrega, corregirEntrega);
+router.put("/:id/calificar", validarEntrega, corregirEntrega);
 
 router.get("/alumno/mis-entregas", checkAuth, checkRole("alumno"), obtenerEntregasAlumno);
 

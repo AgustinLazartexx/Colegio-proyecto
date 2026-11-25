@@ -4,7 +4,10 @@ import { sequelize } from "../config/mariadb.js";
 export const isDatabaseId = (id) =>
   typeof id === "string" && /^[\da-f]{32}$/i.test(id.replaceAll("-", ""));
 
-export const databaseId = (id) => id.replaceAll("-", "").toUpperCase();
+export const databaseId = (id) =>
+  Buffer.isBuffer(id)
+    ? id.toString("hex").toUpperCase()
+    : id.replaceAll("-", "").toUpperCase();
 
 export const findActiveUser = async (id, role) => {
   const [user] = await sequelize.query(

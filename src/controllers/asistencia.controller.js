@@ -39,7 +39,7 @@ const validarAccesoClase = async (claseId, user) => {
      JOIN materias m ON m.id = c.materia_id
      LEFT JOIN clase_profesores cp ON cp.clase_id = c.id AND cp.profesor_id = UNHEX(:userId)
      WHERE c.id = UNHEX(:claseId) AND c.isActive = TRUE AND m.isActive = TRUE
-       AND (:isAdmin = 1 OR cp.profesor_id IS NOT NULL)
+       AND (:isAdmin = 1 OR cp.profesor_id IS NOT NULL OR m.profesor_id = UNHEX(:userId))
      LIMIT 1`,
     { ...replacements, isAdmin: user.rol === "admin" ? 1 : 0 },
   );
@@ -276,6 +276,13 @@ export const registrarAsistencias = async (req, res) => {
 
   const claseKey = databaseId(claseId);
   try {
+    if (req.cicloLectivo) {
+      const startDate = cycleDateOnly(req.cicloLectivo.fechaInicio);
+      const endDate = cycleDateOnly(req.cicloLectivo.fechaCierre);
+      if (dia < startDate || dia > endDate) {
+        return res.status(400).json({ msg: "La fecha de asistencia debe pertenecer al ciclo lectivo de la clase." });
+      }
+    }
     if (!(await validarAccesoClase(claseKey, req.user))) {
       return res.status(403).json({ msg: "No tienes acceso para cargar asistencia en esta clase." });
     }
@@ -426,6 +433,96 @@ export const getReporteAsistencias = async (req, res) => {
     })));
   } catch (error) {
     return errorInterno(res, "Error al generar el reporte de asistencias.", error);
+  }
+};
+
+export const getReporteAsistenciasMensual = async (req, res) => {
+  const { claseId, mes, cicloLectivoId } = req.query;
+  const matchMonth = typeof mes === "string" ? mes.match(/^(\d{4})-(0[1-9]|1[0-2])$/) : null;
+  if (!isDatabaseId(claseId) || !matchMonth) {
+    return res.status(400).json({ msg: "Se requieren claseId y mes válidos (AAAA-MM)." });
+  }
+  if (cicloLectivoId && !isDatabaseId(cicloLectivoId)) {
+    return res.status(400).json({ msg: "ID de ciclo lectivo inválido." });
+  }
+
+  const year = Number(matchMonth[1]);
+  const monthNumber = Number(matchMonth[2]);
+  if (year < 1900 || year > 9998) {
+    return res.status(400).json({ msg: "El mes debe pertenecer a un año lectivo válido." });
+  }
+  const monthStart = `${mes}-01`;
+  const monthEnd = new Date(Date.UTC(year, monthNumber, 1)).toISOString().slice(0, 10);
+
+  try {
+    const cycle = cicloLectivoId ? await getCycleById(cicloLectivoId) : null;
+    if (!(await validarAccesoClase(claseId, req.user))) {
+      return res.status(403).json({ msg: "No tienes acceso a esta clase." });
+    }
+
+    const [clase] = await queryRows(
+      `SELECT HEX(c.id) AS _id, HEX(c.ciclo_lectivo_id) AS cicloLectivoId,
+              c.nivel AS anio, c.division, c.diaSemana,
+              TIME_FORMAT(c.horaInicio, '%H:%i') AS horaInicio,
+              TIME_FORMAT(c.horaFin, '%H:%i') AS horaFin,
+              m.nombre AS materia,
+              COALESCE(
+                (SELECT GROUP_CONCAT(DISTINCT p.nombre ORDER BY p.nombre SEPARATOR ', ')
+                 FROM clase_profesores cp JOIN users p ON p.id = cp.profesor_id
+                 WHERE cp.clase_id = c.id),
+                mp.nombre
+              ) AS profesor
+       FROM clases c
+       JOIN materias m ON m.id = c.materia_id
+       LEFT JOIN users mp ON mp.id = m.profesor_id
+       WHERE c.id = UNHEX(:claseId)
+       LIMIT 1`,
+      { claseId: databaseId(claseId) },
+    );
+    if (!clase) return res.status(404).json({ msg: "Clase no encontrada." });
+    if (cycle && databaseId(clase.cicloLectivoId) !== databaseId(cycle.id)) {
+      return res.status(404).json({ msg: "La clase no pertenece al ciclo seleccionado." });
+    }
+
+    const rows = await queryRows(
+      `SELECT HEX(u.id) AS alumnoId, u.nombre, u.dni,
+              a.fecha, a.estado
+       FROM clase_alumnos ca
+       JOIN users u ON u.id = ca.alumno_id AND u.rol = 'alumno'
+       LEFT JOIN school_asistencias a
+         ON a.clase_id = ca.clase_id AND a.alumno_id = ca.alumno_id
+         AND a.fecha >= :monthStart AND a.fecha < :monthEnd
+       WHERE ca.clase_id = UNHEX(:claseId) AND ca.isActive = TRUE
+       ORDER BY u.nombre, a.fecha`,
+      { claseId: databaseId(claseId), monthStart, monthEnd },
+    );
+
+    const students = new Map();
+    const dates = new Set();
+    rows.forEach((row) => {
+      if (!students.has(row.alumnoId)) {
+        students.set(row.alumnoId, {
+          _id: row.alumnoId,
+          nombre: row.nombre,
+          dni: row.dni,
+          estados: {},
+        });
+      }
+      if (row.fecha && row.estado) {
+        const date = cycleDateOnly(row.fecha);
+        dates.add(date);
+        students.get(row.alumnoId).estados[date] = row.estado;
+      }
+    });
+
+    return res.json({
+      mes,
+      fechas: [...dates].sort(),
+      clase: { ...clase, anio: Number(clase.anio) },
+      alumnos: [...students.values()],
+    });
+  } catch (error) {
+    return errorInterno(res, "Error al generar el reporte mensual de asistencias.", error);
   }
 };
 

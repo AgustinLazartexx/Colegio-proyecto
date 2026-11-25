@@ -19,6 +19,7 @@ const classSelect = `
     TIME_FORMAT(c.horaFin, '%H:%i') AS horaFin,
     c.aula,
     c.isActive,
+    (SELECT COUNT(*) FROM clase_alumnos ca_count WHERE ca_count.clase_id = c.id AND ca_count.isActive = TRUE) AS alumnosCount,
     HEX(m.id) AS materiaId,
     m.nombre AS materiaNombre,
     m.anio AS materiaAnio,
@@ -58,6 +59,7 @@ const formatClasses = (rows) => {
         horario: `${row.horaInicio} - ${row.horaFin}`,
         aula: row.aula,
         isActive: Boolean(row.isActive),
+        alumnosCount: Number(row.alumnosCount ?? 0),
         materia: {
           _id: row.materiaId,
           id: row.materiaId,

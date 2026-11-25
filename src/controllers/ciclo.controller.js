@@ -198,7 +198,9 @@ export const crearCiclo = async (req, res) => {
   } catch (error) {
     if (error.name === "SequelizeUniqueConstraintError" ||
         error.original?.code === "ER_DUP_ENTRY" ||
-        error.parent?.code === "ER_DUP_ENTRY") {
+        error.parent?.code === "ER_DUP_ENTRY" ||
+        error.original?.code === "23505" ||
+        error.parent?.code === "23505") {
       return res.status(409).json({ msg: "Ya existe un ciclo lectivo para ese año." });
     }
     console.error("Error creando ciclo lectivo:", error);
@@ -272,7 +274,11 @@ export const cambiarEstadoCiclo = async (req, res) => {
   } catch (error) {
     if (error.status) return res.status(error.status).json({ msg: error.message });
     console.error("Error cambiando estado del ciclo:", error);
-    if (error.original?.code === "ER_DUP_ENTRY" || error.parent?.code === "ER_DUP_ENTRY") {
+    if (error.name === "SequelizeUniqueConstraintError" ||
+        error.original?.code === "ER_DUP_ENTRY" ||
+        error.parent?.code === "ER_DUP_ENTRY" ||
+        error.original?.code === "23505" ||
+        error.parent?.code === "23505") {
       return res.status(409).json({ msg: "Ya existe otro ciclo ACTIVO o en RECUPERACION." });
     }
     return res.status(500).json({ msg: "No se pudo cambiar el estado del ciclo." });
@@ -386,7 +392,7 @@ export const cargarNotaRecuperacion = async (req, res) => {
            AND i.alumno_id = UNHEX(:alumnoId) AND m.id = UNHEX(:materiaId)
            AND i.estado_academico = 'CURSANDO'
          GROUP BY i.id, i.alumno_id, m.id
-         LIMIT 1 FOR UPDATE`,
+         LIMIT 1`,
         {
           cicloId: databaseId(cicloId),
           alumnoId: databaseId(alumnoId),

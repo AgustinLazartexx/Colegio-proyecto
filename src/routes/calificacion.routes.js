@@ -41,7 +41,6 @@ router.get(
   "/materia/:idMateria",
   checkAuth,
   checkRole("profesor"),
-  cycleWriteGuard(cycleIdFromGradeParam, { allowRecovery: false }),
   obtenerCalificacionesPorMateria
 );
 
@@ -57,6 +56,7 @@ router.put(
   "/:id",
   checkAuth,
   checkRole("profesor"),
+  cycleWriteGuard(cycleIdFromGradeParam, { allowRecovery: false }),
   [
     body("nota", "La nota es obligatoria").notEmpty().isFloat({ min: 1, max: 10 }),
     validateFields,

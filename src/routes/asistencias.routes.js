@@ -11,6 +11,7 @@ import {
   obtenerAsistenciasPorClaseYFecha,
   obtenerAsistenciasPorAlumno,
   getReporteAsistencias,
+  getReporteAsistenciasMensual,
   getMisAsistencias,
   obtenerAsistenciaGeneral,
   registrarAsistenciaGeneral,
@@ -40,6 +41,7 @@ router.get('/alumno/:alumnoId', checkAuth, checkRole(['admin']), obtenerAsistenc
 
 // Reporte detallado (agregado)
 router.get('/reporte-detallado', checkAuth, checkRole(['admin', 'profesor']), getReporteAsistencias);
+router.get('/reporte-mensual', checkAuth, checkRole('admin'), getReporteAsistenciasMensual);
 
 
 export default router;
