@@ -47,6 +47,23 @@ test("translates MariaDB regular-expression predicates", () => {
   );
 });
 
+test("translates GROUP_CONCAT, null-safe equality, and backticks for PostgreSQL", () => {
+  assert.equal(
+    translatePostgresSql(
+      "SELECT GROUP_CONCAT(DISTINCT p.nombre ORDER BY p.nombre SEPARATOR ', ') FROM users p",
+    ),
+    "SELECT STRING_AGG(DISTINCT p.nombre, ', ' ORDER BY p.nombre) FROM users p",
+  );
+  assert.equal(
+    translatePostgresSql("SELECT id FROM materias WHERE division <=> :division"),
+    "SELECT id FROM materias WHERE division IS NOT DISTINCT FROM :division",
+  );
+  assert.equal(
+    translatePostgresSql("UPDATE users SET `isActive` = :isActive WHERE id = UNHEX(:id)"),
+    'UPDATE users SET "isActive" = :isActive WHERE id = decode(replace(:id, \'-\', \'\'), \'hex\')',
+  );
+});
+
 test("translates MariaDB table definitions and retains secondary indexes", () => {
   const { sql, indexes } = translatePostgresDdl(`
     CREATE TABLE IF NOT EXISTS demo (

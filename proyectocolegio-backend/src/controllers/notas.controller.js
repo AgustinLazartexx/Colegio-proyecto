@@ -198,7 +198,7 @@ export const guardarNota = async (req, res) => {
       const calculadas = calcularNotas(valores);
       await executeSql(
         `UPDATE school_notas_trimestrales
-         SET \`${field}\` = :nota, promedio_ponderado = :promedio,
+         SET ${field} = :nota, promedio_ponderado = :promedio,
              nota_final_trimestre = :notaFinal, actualizado_por = UNHEX(:userId)
          WHERE id = UNHEX(:notaId)`,
         {

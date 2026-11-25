@@ -82,7 +82,10 @@ module.exports = {
     }
 
     const classIndexes = await queryInterface.showIndex("clases");
-    if (!classIndexes.some((index) => index.name === "uq_clase_materia_horario")) {
+    if (
+      !classIndexes.some((index) => index.name === "uq_clase_materia_horario") &&
+      !classIndexes.some((index) => index.name === "uq_clase_ciclo_materia_horario")
+    ) {
       await queryInterface.addIndex(
         "clases",
         ["materia_id", "diaSemana", "horaInicio", "anio", "division"],

@@ -195,7 +195,7 @@ export const getUsers = async (req, res) => {
       return res.status(400).json({ msg: "Filtro de estado de usuario inválido." });
     }
     filters.push("users.isActive = :isActive");
-    replacements.isActive = ["true", "1"].includes(String(isActive)) ? 1 : 0;
+    replacements.isActive = ["true", "1"].includes(String(isActive));
   }
   if (cicloLectivoId) {
     if (!validId(cicloLectivoId)) {
@@ -320,7 +320,7 @@ export const updateUser = async (req, res) => {
   }
 
   try {
-    const assignments = Object.keys(updates).map((field) => `\`${field}\` = :${field}`);
+    const assignments = Object.keys(updates).map((field) => `${field} = :${field}`);
     const [result] = await sequelize.query(
       `UPDATE users SET ${assignments.join(", ")} WHERE id = UNHEX(:id)`,
       { replacements: { ...updates, id } },

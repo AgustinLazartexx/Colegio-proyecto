@@ -21,9 +21,18 @@ if (DB_DIALECT === 'postgres' && !process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL es obligatoria cuando DB_DIALECT=postgres.');
 }
 
+const postgresDialectOptions =
+  DB_DIALECT === 'postgres' &&
+  process.env.DATABASE_URL &&
+  !/sslmode=/i.test(process.env.DATABASE_URL) &&
+  process.env.NODE_ENV === 'production'
+    ? { ssl: { require: true, rejectUnauthorized: false } }
+    : undefined;
+
 const sequelize = DB_DIALECT === 'postgres'
   ? new Sequelize(process.env.DATABASE_URL, {
       dialect: 'postgres',
+      ...(postgresDialectOptions ? { dialectOptions: postgresDialectOptions } : {}),
       logging,
       pool: { max: 5, min: 0, acquire: 30000, idle: 10000 },
     })
@@ -57,6 +66,18 @@ if (DB_DIALECT === 'postgres') {
     const result = await executeQuery(sql, options);
     for (const indexSql of indexes) {
       await executeQuery(indexSql, options);
+    }
+    if (
+      !options?.type &&
+      Array.isArray(result) &&
+      result.length === 2 &&
+      result[1] &&
+      typeof result[1].rowCount === 'number' &&
+      result[0] &&
+      typeof result[0] === 'object' &&
+      !('affectedRows' in result[0])
+    ) {
+      result[0].affectedRows = result[1].rowCount;
     }
     return result;
   };

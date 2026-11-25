@@ -72,7 +72,9 @@ export const crearMateria = async (req, res) => {
 
     const [existing] = await sequelize.query(
       `SELECT HEX(id) AS id FROM materias
-       WHERE nombre = :nombre AND anio = :anio AND division <=> :division LIMIT 1`,
+       WHERE nombre = :nombre AND anio = :anio
+         AND (division = :division OR (division IS NULL AND :division IS NULL))
+       LIMIT 1`,
       {
         replacements: {
           nombre: normalizedName,

@@ -42,3 +42,30 @@ test("keeps foreign-key support indexes before replacing legacy unique indexes",
       < position("remove", "school_notas_trimestrales", "uq_nota_trimestral_materia_alumno"),
   );
 });
+
+test("drops legacy unique constraints before indexes on PostgreSQL", async () => {
+  const queries = [];
+  const queryInterface = {
+    sequelize: {
+      getDialect: () => "postgres",
+      query: async (sql) => {
+        queries.push(sql);
+      },
+    },
+    describeTable: async () => ({ ciclo_lectivo_id: {}, nivel: {} }),
+    showIndex: async (table) => {
+      if (table === "clases") return [{ name: "uq_clase_materia_horario" }];
+      if (table === "school_notas_trimestrales") return [{ name: "uq_nota_trimestral_materia_alumno" }];
+      return [];
+    },
+    addIndex: async () => {},
+    removeIndex: async () => {
+      throw new Error("removeIndex must not be called for unique constraints on postgres");
+    },
+  };
+
+  await migration.up(queryInterface, {});
+
+  assert.ok(queries.some((sql) => sql.includes('ALTER TABLE clases DROP CONSTRAINT IF EXISTS "uq_clase_materia_horario"')));
+  assert.ok(queries.some((sql) => sql.includes('ALTER TABLE school_notas_trimestrales DROP CONSTRAINT IF EXISTS "uq_nota_trimestral_materia_alumno"')));
+});

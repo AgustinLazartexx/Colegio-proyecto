@@ -129,12 +129,23 @@ module.exports = {
       "UPDATE clases SET nivel = anio WHERE nivel IS NULL AND anio BETWEEN 1 AND 6",
     );
 
+    const dropLegacyUnique = async (table, name) => {
+      if (dialect === "postgres") {
+        await queryInterface.sequelize.query(
+          `ALTER TABLE ${table} DROP CONSTRAINT IF EXISTS "${name}"`,
+        );
+        await queryInterface.sequelize.query(`DROP INDEX IF EXISTS "${name}"`);
+        return;
+      }
+      await queryInterface.removeIndex(table, name);
+    };
+
     const classIndexes = await queryInterface.showIndex("clases");
     if (!classIndexes.some((index) => index.name === "idx_clases_materia")) {
       await queryInterface.addIndex("clases", ["materia_id"], { name: "idx_clases_materia" });
     }
     if (classIndexes.some((index) => index.name === "uq_clase_materia_horario")) {
-      await queryInterface.removeIndex("clases", "uq_clase_materia_horario");
+      await dropLegacyUnique("clases", "uq_clase_materia_horario");
     }
     const refreshedClassIndexes = await queryInterface.showIndex("clases");
     if (!refreshedClassIndexes.some((index) => index.name === "uq_clase_ciclo_materia_horario")) {
@@ -154,7 +165,7 @@ module.exports = {
       );
     }
     if (gradeIndexes.some((index) => index.name === "uq_nota_trimestral_materia_alumno")) {
-      await queryInterface.removeIndex("school_notas_trimestrales", "uq_nota_trimestral_materia_alumno");
+      await dropLegacyUnique("school_notas_trimestrales", "uq_nota_trimestral_materia_alumno");
     }
     const refreshedGradeIndexes = await queryInterface.showIndex("school_notas_trimestrales");
     if (!refreshedGradeIndexes.some((index) => index.name === "uq_nota_trimestral_ciclo_materia_alumno")) {

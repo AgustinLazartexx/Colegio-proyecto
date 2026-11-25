@@ -23,11 +23,18 @@ export const translatePostgresSql = (input) => {
   let sql = String(input);
 
   sql = sql
+    .replace(/`([a-zA-Z_]\w*)`/g, '"$1"')
     .replace(/UNHEX\s*\(\s*REPLACE\s*\(\s*UUID\s*\(\s*\)\s*,\s*'-'\s*,\s*''\s*\)\s*\)/gi,
       "decode(replace(gen_random_uuid()::text, '-', ''), 'hex')")
     .replace(/UNHEX\s*\(\s*(:[a-zA-Z]\w*)\s*\)/gi, "decode(replace($1, '-', ''), 'hex')")
     .replace(/HEX\s*\(\s*([a-zA-Z_][\w.]*)\s*\)/gi, "UPPER(encode($1, 'hex'))")
     .replace(/TIME_FORMAT\s*\(\s*([^,]+),\s*'%H:%i'\s*\)/gi, "to_char($1, 'HH24:MI')")
+    .replace(
+      /GROUP_CONCAT\s*\(\s*(DISTINCT\s+)?([^)]+?)\s+ORDER\s+BY\s+([^)]+?)\s+SEPARATOR\s+('[^']*')\s*\)/gi,
+      (_match, distinct, expr, orderBy, separator) =>
+        `STRING_AGG(${distinct ?? ""}${expr.trim()}, ${separator} ORDER BY ${orderBy.trim()})`,
+    )
+    .replace(/<=>/g, "IS NOT DISTINCT FROM")
     .replace(/\bIFNULL\s*\(/gi, "COALESCE(")
     .replace(/\bREGEXP\b/gi, "~");
 
