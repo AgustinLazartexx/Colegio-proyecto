@@ -30,7 +30,8 @@ export default api;
 // ==========================================
 //       FUNCIONES DE USUARIOS
 // ==========================================
-export const getAdminStats = () => api.get('/admin/stats');
+export const getAdminStats = (cicloLectivoId) =>
+  api.get('/admin/stats', { params: cicloLectivoId ? { cicloLectivoId } : {} });
 export const getUsuarios = (filtros = {}) => api.get('/usuarios', { params: filtros });
 export const crearUsuario = (userData) => api.post('/usuarios/admin/crear', userData);
 export const actualizarUsuario = (id, userData) => api.put(`/usuarios/${id}`, userData);
@@ -57,39 +58,59 @@ export const setClaseActive = (id, isActive) => api.put(`/clases/${id}/estado`, 
 // Admin: Todas las clases
 export const getTodasLasClases = (params = {}) => api.get('/clases', { params });
 
+// Ciclos lectivos
+export const getCiclos = () => api.get('/ciclos');
+export const getCicloActivo = () => api.get('/ciclos/activo');
+export const crearCiclo = (data) => api.post('/ciclos', data);
+export const cambiarEstadoCiclo = (id, estado) => api.patch(`/ciclos/${id}/estado`, { estado });
+export const getPreviewCierreCiclo = (id) => api.get(`/ciclos/${id}/preview-cierre`);
+export const cerrarCiclo = (id, ajustes) => api.post(`/ciclos/${id}/cerrar`, { ajustes });
+export const clonarClasesCiclo = (id) => api.post(`/ciclos/${id}/clonar-clases`);
+export const importarAlumnosCiclo = (id) => api.post(`/ciclos/${id}/importar-alumnos`);
+export const getRecuperacionesMateria = (cicloId, materiaId) =>
+  api.get(`/ciclos/${cicloId}/recuperaciones/${materiaId}`);
+export const cargarNotaRecuperacion = (cicloId, materiaId, alumnoId, notaRecuperacion) =>
+  api.patch(`/ciclos/${cicloId}/recuperaciones/${materiaId}/${alumnoId}`, { notaRecuperacion });
+export const getMisMateriasPrevias = () => api.get('/ciclos/previas/mias');
+export const getPreviasAlumno = (alumnoId) => api.get(`/ciclos/previas/${alumnoId}`);
+export const getBoletinAlumno = (alumnoId, cicloLectivoId) =>
+  api.get(`/notas/alumno/${alumnoId}`, { params: cicloLectivoId ? { cicloLectivoId } : {} });
+export const getAsistenciasAlumno = (alumnoId, cicloLectivoId) =>
+  api.get(`/asistencias/alumno/${alumnoId}`, { params: cicloLectivoId ? { cicloLectivoId } : {} });
+
 // Profesor: Solo mis clases
-export const getMisClases = () => api.get('/clases/misclases');
+export const getMisClases = (params = {}) => api.get('/clases/misclases', { params });
 
 // Detalle y Alumnos de CLASE
 export const getClaseById = (id) => api.get(`/clases/${id}`);
 export const getAlumnosDeClase = (claseId) => api.get(`/clases/${claseId}/alumnos`);
-export const getMisClasesAlumno = () => api.get('/clases/alumno/mis-clases');
+export const cambiarEstadoAlumnoDeClase = (claseId, alumnoId, isActive) =>
+  api.put(`/clases/${claseId}/alumnos/${alumnoId}/estado`, { isActive });
+export const getMisClasesAlumno = (cicloLectivoId) =>
+  api.get('/clases/alumno/mis-clases', { params: cicloLectivoId ? { cicloLectivoId } : {} });
 
 // ==========================================
 //    FUNCIONES "VIEJAS" O DE MATERIAS 
 //    (Necesarias para CargarNotas.jsx)
 // ==========================================
-export const getAlumnosDeMateria = (materiaId) => {
-  return api.get(`/materias/${materiaId}/alumnos`);
+export const getAlumnosDeMateria = (materiaId, cicloLectivoId) => {
+  return api.get(`/materias/${materiaId}/alumnos`, {
+    params: cicloLectivoId ? { cicloLectivoId } : {},
+  });
 };
 
-export const getNotasDeMateria = (materiaId, trimestre) => {
+export const getNotasDeMateria = (materiaId, trimestre, cicloLectivoId) => {
   return api.get(`/notas/materia/${materiaId}`, {
-    params: { trimestre }
+    params: { trimestre, ...(cicloLectivoId ? { cicloLectivoId } : {}) }
   });
 };
 
 // ==========================================
 //       GESTIÓN ALUMNOS (Admin)
 // ==========================================
-export const getAlumnosPorCurso = (anio, division) => {
-    const params = { rol: 'alumno' };
-    if (anio) params.anio = anio;
-    if (division) params.division = division;
-    return api.get('/usuarios', { params }); 
-};
+export const getAlumnosPorCurso = (anio, division, cicloLectivoId) =>
+  api.get('/alumnos', { params: { anio, division, cicloLectivoId } });
 export const asignarAlumnoAClase = (claseId, alumnoId) => api.post(`/clases/${claseId}/alumnos`, { alumnoId });
-export const desasignarAlumnoDeClase = (claseId, alumnoId) => api.delete(`/clases/${claseId}/alumnos/${alumnoId}`);
 
 // ==========================================
 //       ASISTENCIA
@@ -98,20 +119,22 @@ export const registrarAsistencias = (data) => api.post('/asistencias', data);
 // Esta función puede usarse para consultar si ya se tomó asistencia hoy
 export const obtenerAsistenciaFecha = (claseId, fecha) => api.get('/asistencias', { params: { claseId, fecha } });
 export const obtenerAsistenciasPorClaseYFecha = (claseId, fecha) => api.get('/asistencias', { params: { claseId, fecha } });
-export const getReporteAsistencias = (claseId, fecha) => api.get('/asistencias/reporte-detallado', { params: { claseId, fecha } });
-export const getMisAsistenciasAlumno = () => api.get('/asistencias/alumno/mis-asistencias');
+export const getReporteAsistencias = (claseId, fecha, cicloLectivoId) =>
+  api.get('/asistencias/reporte-detallado', { params: { claseId, fecha, cicloLectivoId } });
+export const getReporteAsistenciasMensual = (claseId, mes, cicloLectivoId) =>
+  api.get('/asistencias/reporte-mensual', { params: { claseId, mes, cicloLectivoId } });
+export const getMisAsistenciasAlumno = (cicloLectivoId) =>
+  api.get('/asistencias/alumno/mis-asistencias', { params: cicloLectivoId ? { cicloLectivoId } : {} });
 export const getAsistenciaGeneral = (anio, division, fecha) => api.get('/asistencias/general', { params: { anio, division, fecha } });
 export const registrarAsistenciaGeneral = (data) => api.post('/asistencias/general', data);
-export const compararAsistencias = (anio, division, fecha) => api.get('/asistencias/comparacion', { params: { anio, division, fecha } });
+export const compararAsistencias = (anio, division, fecha, cicloLectivoId) =>
+  api.get('/asistencias/comparacion', { params: { anio, division, fecha, cicloLectivoId } });
 
 // ==========================================
 //       NOTAS Y TAREAS
 // ==========================================
-export const getNotasPorClase = (claseId) => api.get(`/notas/clase/${claseId}`);
-export const crearNota = (data) => api.post('/notas', data);
-export const updateNota = (id, data) => api.put(`/notas/${id}`, data);
-export const deleteNota = (id) => api.delete(`/notas/${id}`);
-export const getAuditoriaNotas = () => api.get('/notas/auditoria');
+export const getAuditoriaNotas = (cicloLectivoId) =>
+  api.get('/notas/auditoria', { params: cicloLectivoId ? { cicloLectivoId } : {} });
 export const guardarNota = (data) => api.post('/notas/guardar-una', data);
 
 export const crearTarea = (data) => api.post('/tareas', data);
@@ -121,7 +144,8 @@ export const eliminarTarea = (id) => api.delete(`/tareas/${id}`);
 export const getEntregasTarea = (tareaId) => api.get(`/entregas/tarea/${tareaId}`);
 export const calificarEntrega = (id, data) => api.put(`/entregas/${id}/calificar`, data);
 // --- NUEVO: Para que el alumno vea su boletín ---
-export const getMisNotasAlumno = () => api.get('/notas/mias');
+export const getMisNotasAlumno = (cicloLectivoId) =>
+  api.get('/notas/mias', { params: cicloLectivoId ? { cicloLectivoId } : {} });
 
 // ==========================================
 //       ANUNCIOS
@@ -136,7 +160,8 @@ export const getAnunciosAlumno = () => api.get('/anuncios/alumno/mis-anuncios');
 // ==========================================
 //       GESTIÓN DE CUOTAS (FINANZAS)
 // ==========================================
-export const getCuotasDeAlumno = (alumnoId) => api.get(`/cuotas/alumno/${alumnoId}`);
+export const getCuotasDeAlumno = (alumnoId, params = {}) => api.get(`/cuotas/alumno/${alumnoId}`, { params });
+export const getCuotasAdministracion = (params = {}) => api.get('/cuotas/admin/listado', { params });
 export const generarCuota = (data) => api.post('/cuotas/generar', data);
 export const registrarPagoCuota = (cuotaId, metodoPago) => api.put(`/cuotas/pagar/${cuotaId}`, { metodoPago });
 export const marcarCuotaVencida = (cuotaId) => api.put(`/cuotas/vencer/${cuotaId}`);

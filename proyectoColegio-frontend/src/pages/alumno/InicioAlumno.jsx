@@ -101,16 +101,16 @@ const InicioAlumno = () => {
     : "—";
 
   const metrics = [
-    { label: "Materias", value: new Set(clases.map((clase) => clase.materia?._id).filter(Boolean)).size, icon: BookOpen, color: "bg-blue-600" },
+    { label: "Materias", value: new Set(clases.map((clase) => clase.materia?._id).filter(Boolean)).size, icon: BookOpen, color: "bg-secondary" },
     { label: "Tareas", value: tareas.length, icon: ClipboardList, color: "bg-amber-500" },
-    { label: "Promedio", value: promedio, icon: Award, color: "bg-violet-600" },
+    { label: "Promedio", value: promedio, icon: Award, color: "bg-blue-700" },
     { label: "Asistencia", value: asistencia ? `${asistencia.porcentaje}%` : "—", icon: CheckCircle2, color: "bg-emerald-600" },
   ];
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-7">
-      <header className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-700 via-indigo-700 to-violet-800 p-6 text-white shadow-xl sm:p-9">
-        <div className="absolute -right-10 -top-16 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
+      <header className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-900 p-6 text-white shadow-xl sm:p-9">
+        <div className="absolute -right-10 -top-16 h-56 w-56 rounded-full bg-blue-300/10 blur-3xl" />
         <div className="relative flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
           <div>
             <p className="mb-3 text-xs font-bold uppercase tracking-[0.2em] text-blue-100">Tu espacio académico</p>
@@ -119,7 +119,7 @@ const InicioAlumno = () => {
             </h1>
             <p className="mt-2 text-sm capitalize text-blue-100 sm:text-base">{fechaHoy}</p>
           </div>
-          <Link to="/alumno/materias" className="inline-flex items-center justify-center gap-2 self-start rounded-xl bg-white px-4 py-3 text-sm font-semibold text-blue-800 shadow-sm transition hover:bg-blue-50 sm:self-auto">
+          <Link to="/alumno/materias" className="inline-flex items-center justify-center gap-2 self-start rounded-xl bg-white px-4 py-3 text-sm font-semibold text-navy shadow-sm transition hover:bg-blue-50 sm:self-auto">
             Ver mis materias <ArrowRight size={16} />
           </Link>
         </div>
@@ -191,10 +191,10 @@ const InicioAlumno = () => {
           <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <p className="text-xs font-bold uppercase tracking-widest text-violet-600">Comunicados</p>
+                <p className="text-xs font-bold uppercase tracking-widest text-secondary">Comunicados</p>
                 <h2 className="mt-1 text-xl font-bold text-slate-900">Últimos anuncios</h2>
               </div>
-              <Bell size={20} className="text-violet-600" />
+              <Bell size={20} className="text-secondary" />
             </div>
             {loading ? (
               <div className="h-24 animate-pulse rounded-xl bg-slate-50" />
@@ -232,8 +232,8 @@ const InicioAlumno = () => {
 
 const QuickLink = ({ to, icon, label }) => (
   <Link to={to} className="group flex min-h-20 flex-col justify-between rounded-xl border border-slate-100 p-3 transition hover:border-blue-200 hover:bg-blue-50/50">
-    <span className="text-slate-400 transition group-hover:text-blue-700">{icon}</span>
-    <span className="mt-3 text-sm font-semibold text-slate-700 group-hover:text-blue-800">{label}</span>
+    <span className="text-slate-400 transition group-hover:text-secondary">{icon}</span>
+    <span className="mt-3 text-sm font-semibold text-slate-700 group-hover:text-navy">{label}</span>
   </Link>
 );
 

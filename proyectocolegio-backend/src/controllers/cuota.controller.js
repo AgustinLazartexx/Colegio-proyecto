@@ -6,8 +6,14 @@ import {
   queryRows,
   sequelize,
 } from "../services/relationalData.service.js";
+import {
+  cycleDateOnly,
+  getActiveCycle,
+  getCycleById,
+} from "../services/cycleAccess.service.js";
 
 const cuotaSelect = `SELECT HEX(id) AS _id, HEX(alumno_id) AS alumno,
+  HEX(ciclo_lectivo_id) AS cicloLectivoId,
   mes, anio, monto, estado, fecha_vencimiento AS fechaVencimiento,
   fecha_pago AS fechaPago, metodo_pago AS metodoPago, createdAt, updatedAt
   FROM school_cuotas`;
@@ -39,15 +45,24 @@ export const generarCuota = async (req, res) => {
     return res.status(400).json({ msg: "Alumno, período, monto y vencimiento deben ser válidos." });
   }
   try {
+    const cycle = req.cicloLectivo ?? (req.body.cicloLectivoId
+      ? await getCycleById(req.body.cicloLectivoId)
+      : await getActiveCycle());
+    if (dueDate < cycleDateOnly(cycle.fechaInicio) || dueDate > cycleDateOnly(cycle.fechaCierre)) {
+      return res.status(400).json({ msg: "La fecha de vencimiento debe pertenecer al ciclo lectivo seleccionado." });
+    }
     const alumno = await queryRows(
       "SELECT HEX(id) AS id FROM users WHERE id = UNHEX(:id) AND rol = 'alumno' LIMIT 1",
       { id: databaseId(alumnoId) },
     );
     if (!alumno.length) return res.status(404).json({ msg: "Alumno no encontrado." });
     await executeSql(
-      `INSERT INTO school_cuotas (id, alumno_id, mes, anio, monto, fecha_vencimiento)
-       VALUES (UNHEX(REPLACE(UUID(), '-', '')), UNHEX(:alumnoId), :mes, :anio, :monto, :fechaVencimiento)`,
+      `INSERT INTO school_cuotas
+         (id, ciclo_lectivo_id, alumno_id, mes, anio, monto, fecha_vencimiento)
+       VALUES (UNHEX(REPLACE(UUID(), '-', '')), UNHEX(:cicloId), UNHEX(:alumnoId),
+         :mes, :anio, :monto, :fechaVencimiento)`,
       {
+        cicloId: databaseId(cycle.id),
         alumnoId: databaseId(alumnoId),
         mes: monthNum,
         anio: yearNum,
@@ -61,6 +76,7 @@ export const generarCuota = async (req, res) => {
     );
     return res.status(201).json({ msg: "Cuota generada exitosamente.", cuota });
   } catch (error) {
+    if (error.status) return res.status(error.status).json({ msg: error.message });
     if (error.original?.code === "ER_DUP_ENTRY" || error.parent?.code === "ER_DUP_ENTRY") {
       return res.status(409).json({ msg: "Ya existe una cuota para este alumno en ese mes y año." });
     }
@@ -142,25 +158,74 @@ export const getCuotasPorAlumno = async (req, res) => {
   const { id } = req.params;
   if (!isDatabaseId(id)) return res.status(400).json({ msg: "ID de alumno inválido." });
   try {
+    const cycle = req.query.cicloLectivoId
+      ? await getCycleById(req.query.cicloLectivoId)
+      : await getActiveCycle();
     const rows = await queryRows(
-      `${cuotaSelect} WHERE alumno_id = UNHEX(:alumnoId) ORDER BY anio DESC, mes DESC`,
-      { alumnoId: databaseId(id) },
+      `${cuotaSelect} WHERE alumno_id = UNHEX(:alumnoId)
+       AND ciclo_lectivo_id = UNHEX(:cycleId) ORDER BY anio DESC, mes DESC`,
+      { alumnoId: databaseId(id), cycleId: databaseId(cycle.id) },
     );
     return res.json(rows);
   } catch (error) {
+    if (error.status) return res.status(error.status).json({ msg: error.message });
     console.error("Error consultando cuotas del alumno:", error);
     return res.status(500).json({ msg: "Error al obtener cuotas." });
   }
 };
 
+export const listarCuotasAdmin = async (req, res) => {
+  const { cicloLectivoId, estado = "vencido" } = req.query;
+  if (!isDatabaseId(cicloLectivoId)) {
+    return res.status(400).json({ msg: "ID de ciclo lectivo inválido." });
+  }
+  if (!["pendiente", "vencido", "pagado", "todos"].includes(estado)) {
+    return res.status(400).json({ msg: "Estado de cuota inválido." });
+  }
+
+  try {
+    const cycle = await getCycleById(cicloLectivoId);
+    const rows = await queryRows(
+      `SELECT HEX(u.id) AS alumnoId, u.nombre, u.dni,
+              MAX(i.nivel) AS nivel, MAX(i.division) AS division,
+              COUNT(c.id) AS cantidadCuotas, SUM(c.monto) AS montoTotal,
+              MIN(c.fecha_vencimiento) AS vencimientoMasAntiguo
+       FROM school_cuotas c
+       JOIN users u ON u.id = c.alumno_id
+       LEFT JOIN inscripciones_ciclo i
+         ON i.alumno_id = c.alumno_id AND i.ciclo_lectivo_id = c.ciclo_lectivo_id
+       WHERE c.ciclo_lectivo_id = UNHEX(:cycleId)
+         AND (:estado = 'todos' OR c.estado = :estado)
+       GROUP BY u.id, u.nombre, u.dni
+       ORDER BY montoTotal DESC, u.nombre`,
+      { cycleId: databaseId(cycle.id), estado },
+    );
+    return res.json(rows.map((row) => ({
+      ...row,
+      nivel: row.nivel === null ? null : Number(row.nivel),
+      cantidadCuotas: Number(row.cantidadCuotas),
+      montoTotal: Number(row.montoTotal),
+    })));
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ msg: error.message });
+    console.error("Error listando cuotas de administración:", error);
+    return res.status(500).json({ msg: "Error al obtener el listado de cuotas." });
+  }
+};
+
 export const getMisCuotas = async (req, res) => {
   try {
+    const cycle = req.query.cicloLectivoId
+      ? await getCycleById(req.query.cicloLectivoId)
+      : await getActiveCycle();
     const rows = await queryRows(
-      `${cuotaSelect} WHERE alumno_id = UNHEX(:alumnoId) ORDER BY anio DESC, mes DESC`,
-      { alumnoId: databaseId(req.user.id) },
+      `${cuotaSelect} WHERE alumno_id = UNHEX(:alumnoId)
+       AND ciclo_lectivo_id = UNHEX(:cycleId) ORDER BY anio DESC, mes DESC`,
+      { alumnoId: databaseId(req.user.id), cycleId: databaseId(cycle.id) },
     );
     return res.json(rows);
   } catch (error) {
+    if (error.status) return res.status(error.status).json({ msg: error.message });
     console.error("Error consultando tus cuotas:", error);
     return res.status(500).json({ msg: "Error al obtener mis cuotas." });
   }

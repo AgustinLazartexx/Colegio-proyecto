@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Users, BookOpen, X, Plus, Trash2, Search, CheckCircle, AlertCircle } from 'lucide-react';
+import { Users, BookOpen, X, Plus, PauseCircle, RotateCcw, Search, CheckCircle, AlertCircle, FileDown } from 'lucide-react';
+import { useParams } from 'react-router-dom';
 import Swal from 'sweetalert2';
+import CycleSelector, { CycleStatusNotice } from '../../components/admin/CycleSelector';
+import { useAcademicCycles } from '../../hooks/useAcademicCycles';
+import ModalExportarPlanilla from '../../components/ModalExportarPlanilla';
+import { crearNominaClase } from '../../utils/exportadores/planillasAcademicas.js';
 
 // Importamos las funciones REALES de tu api.js
 import { 
@@ -8,19 +13,22 @@ import {
   getAlumnosPorCurso,     // Trae todos los alumnos de un año/división (para llenar "disponibles")
   getAlumnosDeClase,      // Trae los inscritos en una materia específica
   asignarAlumnoAClase,    // POST para inscribir
-  desasignarAlumnoDeClase // DELETE para quitar
+  cambiarEstadoAlumnoDeClase
 } from '../../api/api';
 
 // ----------------------------------------------------------------------
 // 1. COMPONENTE MODAL (El popup para agregar/quitar alumnos)
 // ----------------------------------------------------------------------
 
-const ModalGestionAlumnos = ({ clase, isOpen, onClose, onUpdateSuccess }) => {
+const ModalGestionAlumnos = ({ clase, isOpen, onClose, onUpdateSuccess, cycleId, cycleAnio, readOnly }) => {
   const [inscritos, setInscritos] = useState([]);
+  const [suspendidos, setSuspendidos] = useState([]);
   const [disponibles, setDisponibles] = useState([]); 
   const [loading, setLoading] = useState(false);
   const [busqueda, setBusqueda] = useState('');
   const [error, setError] = useState(null);
+  const [nominaAbierta, setNominaAbierta] = useState(false);
+  const [documentoNomina, setDocumentoNomina] = useState(null);
 
   const cargarListas = useCallback(async () => {
     setLoading(true);
@@ -35,13 +43,14 @@ const ModalGestionAlumnos = ({ clase, isOpen, onClose, onUpdateSuccess }) => {
 
       // B. Obtener TODOS los alumnos del curso (Año y División de la materia)
       // Esto nos sirve para saber a quiénes podemos agregar
-      const resCurso = await getAlumnosPorCurso(clase.anio, clase.division);
+      const resCurso = await getAlumnosPorCurso(clase.anio, clase.division, cycleId);
       const dataCurso = resCurso.data || resCurso;
 
-      // Guardamos inscritos
-      setInscritos(Array.isArray(dataInscritos) ? dataInscritos : []);
+      const inscripciones = Array.isArray(dataInscritos) ? dataInscritos : [];
+      setInscritos(inscripciones.filter(a => a.isActive));
+      setSuspendidos(inscripciones.filter(a => !a.isActive));
 
-      // C. Calcular Disponibles: (Total del curso - Los que ya están inscritos)
+      // C. Evitar duplicados, incluidas las inscripciones suspendidas.
       if (Array.isArray(dataCurso) && Array.isArray(dataInscritos)) {
           const inscritosIds = new Set(dataInscritos.map(a => String(a._id || a.id)));
           const disponiblesCalculados = dataCurso.filter(a => !inscritosIds.has(String(a._id || a.id)));
@@ -56,7 +65,7 @@ const ModalGestionAlumnos = ({ clase, isOpen, onClose, onUpdateSuccess }) => {
     } finally {
       setLoading(false);
     }
-  }, [clase]);
+  }, [clase, cycleId]);
 
   // Cargar datos cada vez que se abre el modal con una clase nueva
   useEffect(() => {
@@ -68,14 +77,21 @@ const ModalGestionAlumnos = ({ clase, isOpen, onClose, onUpdateSuccess }) => {
       setBusqueda('');
       setError(null);
       setInscritos([]);
+      setSuspendidos([]);
       setDisponibles([]);
     };
   }, [isOpen, clase, cargarListas]);
 
+  useEffect(() => {
+    setNominaAbierta(false);
+    setDocumentoNomina(null);
+  }, [isOpen, clase?._id, clase?.id]);
+
   const handleAsignar = async (alumno) => {
+    if (readOnly) return;
     try {
       // 1. Actualización Optimista (Visualmente instantáneo)
-      setInscritos([...inscritos, alumno]);
+      setInscritos([...inscritos, { ...alumno, isActive: true }]);
       setDisponibles(disponibles.filter(a => a._id !== alumno._id));
       
       // 2. Llamada a la API
@@ -98,34 +114,54 @@ const ModalGestionAlumnos = ({ clase, isOpen, onClose, onUpdateSuccess }) => {
     }
   };
 
-  const handleDesasignar = async (alumno) => {
-    // Confirmación antes de borrar
+  const handleSuspender = async (alumno) => {
+    if (readOnly) return;
     const result = await Swal.fire({
-        title: '¿Quitar alumno?',
-        text: `¿Estás seguro de quitar a ${alumno.nombre} de ${clase.materia?.nombre}?`,
+        title: '¿Suspender inscripción?',
+        text: `La inscripción de ${alumno.nombre} en ${clase.materia?.nombre} se conservará, pero dejará de estar activa.`,
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#d33',
         cancelButtonColor: '#3085d6',
-        confirmButtonText: 'Sí, quitar',
+        confirmButtonText: 'Sí, suspender',
         cancelButtonText: 'Cancelar'
     });
 
     if (!result.isConfirmed) return;
 
     try {
-      // Optimistic UI
-      setDisponibles([...disponibles, alumno].sort((a,b) => a.apellido.localeCompare(b.apellido)));
-      setInscritos(inscritos.filter(a => a._id !== alumno._id));
-      
       const claseId = clase._id || clase.id;
-      await desasignarAlumnoDeClase(claseId, alumno._id);
-      
+      await cambiarEstadoAlumnoDeClase(claseId, alumno._id, false);
+      setInscritos(inscritos.filter(a => a._id !== alumno._id));
+      setSuspendidos([...suspendidos, { ...alumno, isActive: false }]);
       if (onUpdateSuccess) onUpdateSuccess();
+      Swal.fire({
+        toast: true, position: 'top-end', showConfirmButton: false, timer: 1800,
+        icon: 'success', title: 'Inscripción suspendida'
+      });
 
     } catch (err) {
       console.error(err);
-      Swal.fire('Error', 'No se pudo quitar al alumno', 'error');
+      Swal.fire('Error', 'No se pudo suspender la inscripción', 'error');
+      cargarListas();
+    }
+  };
+
+  const handleReactivar = async (alumno) => {
+    if (readOnly) return;
+    try {
+      const claseId = clase._id || clase.id;
+      await cambiarEstadoAlumnoDeClase(claseId, alumno._id, true);
+      setSuspendidos(suspendidos.filter(a => a._id !== alumno._id));
+      setInscritos([...inscritos, { ...alumno, isActive: true }]);
+      if (onUpdateSuccess) onUpdateSuccess();
+      Swal.fire({
+        toast: true, position: 'top-end', showConfirmButton: false, timer: 1800,
+        icon: 'success', title: 'Inscripción reactivada'
+      });
+    } catch (err) {
+      console.error(err);
+      Swal.fire('Error', 'No se pudo reactivar la inscripción', 'error');
       cargarListas();
     }
   };
@@ -138,9 +174,22 @@ const ModalGestionAlumnos = ({ clase, isOpen, onClose, onUpdateSuccess }) => {
     (a.email && a.email.toLowerCase().includes(busquedaLower))
   );
 
+  const abrirNomina = () => {
+    setDocumentoNomina(crearNominaClase({
+      clase,
+      ciclo: { anio: cycleAnio },
+      alumnos: [
+        ...inscritos.map((alumno) => ({ ...alumno, isActive: true })),
+        ...suspendidos.map((alumno) => ({ ...alumno, isActive: false })),
+      ],
+    }));
+    setNominaAbierta(true);
+  };
+
   if (!isOpen) return null;
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm p-4 transition-opacity animate-in fade-in duration-200">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden transform transition-all scale-100">
         
@@ -156,10 +205,26 @@ const ModalGestionAlumnos = ({ clase, isOpen, onClose, onUpdateSuccess }) => {
               <span className="bg-blue-700 px-2 py-0.5 rounded">Div: "{clase.division}"</span>
             </p>
           </div>
-          <button onClick={onClose} className="bg-blue-700 hover:bg-blue-500 p-2 rounded-full transition-colors">
-            <X size={20} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={abrirNomina}
+              disabled={loading || inscritos.length + suspendidos.length === 0}
+              className="inline-flex items-center gap-2 rounded-lg bg-white/15 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/25 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <FileDown size={16} aria-hidden="true" />
+              Exportar nómina
+            </button>
+            <button onClick={onClose} className="bg-blue-700 hover:bg-blue-500 p-2 rounded-full transition-colors" aria-label="Cerrar gestión de alumnos">
+              <X size={20} />
+            </button>
+          </div>
         </div>
+        {readOnly && (
+          <div className="border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900">
+            Modo Solo Lectura: las inscripciones de este ciclo no se pueden modificar.
+          </div>
+        )}
 
         {/* Cuerpo del Modal */}
         <div className="flex-1 overflow-hidden bg-gray-100 p-4">
@@ -205,12 +270,13 @@ const ModalGestionAlumnos = ({ clase, isOpen, onClose, onUpdateSuccess }) => {
                             {disponiblesFiltrados.map(alumno => (
                                 <div key={alumno._id} className="flex items-center justify-between p-2 bg-white border border-gray-100 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-all group">
                                     <div className="truncate mr-2">
-                                        <p className="font-semibold text-gray-800 text-sm truncate">{alumno.apellido}, {alumno.nombre}</p>
+                                        <p className="font-semibold text-gray-800 text-sm truncate">{alumno.apellido ? `${alumno.apellido}, ${alumno.nombre}` : alumno.nombre}</p>
                                         <p className="text-xs text-gray-500 truncate">{alumno.email}</p>
                                     </div>
                                     <button 
                                         onClick={() => handleAsignar(alumno)}
-                                        className="bg-blue-100 text-blue-600 p-1.5 rounded-full hover:bg-blue-600 hover:text-white transition-colors flex-shrink-0"
+                                        disabled={readOnly}
+                                        className="bg-blue-100 text-blue-600 p-1.5 rounded-full hover:bg-blue-600 hover:text-white transition-colors flex-shrink-0 disabled:cursor-not-allowed disabled:opacity-40"
                                         title="Inscribir"
                                     >
                                         <Plus size={18} />
@@ -243,20 +309,49 @@ const ModalGestionAlumnos = ({ clase, isOpen, onClose, onUpdateSuccess }) => {
                                     <div className="flex items-center gap-2 truncate mr-2">
                                         <CheckCircle size={14} className="text-green-600 flex-shrink-0" />
                                         <div className="truncate">
-                                            <p className="font-semibold text-gray-800 text-sm truncate">{alumno.apellido}, {alumno.nombre}</p>
+                                            <p className="font-semibold text-gray-800 text-sm truncate">{alumno.apellido ? `${alumno.apellido}, ${alumno.nombre}` : alumno.nombre}</p>
                                             <p className="text-xs text-gray-500 truncate">{alumno.email}</p>
                                         </div>
                                     </div>
                                     <button 
-                                        onClick={() => handleDesasignar(alumno)}
-                                        className="text-gray-400 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-full transition-colors flex-shrink-0"
-                                        title="Quitar"
+                                        onClick={() => handleSuspender(alumno)}
+                                        disabled={readOnly}
+                                        className="text-gray-400 hover:text-amber-600 hover:bg-amber-50 p-1.5 rounded-full transition-colors flex-shrink-0 disabled:cursor-not-allowed disabled:opacity-40"
+                                        title="Suspender inscripción"
                                     >
-                                        <Trash2 size={16} />
+                                        <PauseCircle size={16} />
                                     </button>
                                 </div>
                             ))}
-                            {inscritos.length === 0 && (
+                            {suspendidos.length > 0 && (
+                                <div className="pt-3">
+                                    <h4 className="px-2 pb-2 text-xs font-bold uppercase tracking-wide text-amber-700">
+                                        Inscripciones suspendidas ({suspendidos.length})
+                                    </h4>
+                                    {suspendidos.map(alumno => {
+                                        const puedeReactivar = alumno.alumnoActivo &&
+                                          Number(alumno.anio) === Number(clase.anio) &&
+                                          alumno.division === clase.division;
+                                        return (
+                                            <div key={alumno._id} className="mb-2 flex items-center justify-between rounded-lg border border-amber-100 bg-amber-50 p-2">
+                                                <div className="truncate mr-2">
+                                                    <p className="font-semibold text-gray-800 text-sm truncate">{alumno.apellido ? `${alumno.apellido}, ${alumno.nombre}` : alumno.nombre}</p>
+                                                    <p className="text-xs text-amber-700 truncate">{alumno.email} · Suspendido</p>
+                                                </div>
+                                                <button
+                                                    onClick={() => handleReactivar(alumno)}
+                                                    disabled={readOnly || !puedeReactivar}
+                                                    className="flex-shrink-0 rounded-full p-1.5 text-amber-700 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                                    title={puedeReactivar ? "Reactivar inscripción" : "El alumno debe estar activo y pertenecer al mismo curso"}
+                                                >
+                                                    <RotateCcw size={16} />
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                            {inscritos.length === 0 && suspendidos.length === 0 && (
                                 <div className="flex flex-col items-center justify-center h-full text-gray-400">
                                     <p className="text-sm">Lista vacía.</p>
                                 </div>
@@ -279,6 +374,12 @@ const ModalGestionAlumnos = ({ clase, isOpen, onClose, onUpdateSuccess }) => {
         </div>
       </div>
     </div>
+    <ModalExportarPlanilla
+      abierto={nominaAbierta}
+      onCerrar={() => setNominaAbierta(false)}
+      documento={documentoNomina}
+    />
+    </>
   );
 };
 
@@ -287,6 +388,8 @@ const ModalGestionAlumnos = ({ clase, isOpen, onClose, onUpdateSuccess }) => {
 // ----------------------------------------------------------------------
 
 const AdminGestionAlumnosClase = () => {
+  const { claseId: routeClaseId } = useParams();
+  const { cycles, cycleId, setCycleId, selectedCycle, loadingCycles } = useAcademicCycles();
   const [anioSeleccionado, setAnioSeleccionado] = useState('1');
   const [divisionSeleccionada, setDivisionSeleccionada] = useState('A');
   const [clasesFiltradas, setClasesFiltradas] = useState([]);
@@ -295,28 +398,30 @@ const AdminGestionAlumnosClase = () => {
   const [claseParaEditar, setClaseParaEditar] = useState(null);
 
   // A. Cargar TODAS las clases al montar el componente
-  useEffect(() => {
-    const fetchClases = async () => {
-      setLoading(true);
-      try {
-        const res = await getTodasLasClases();
-        // Aseguramos extraer el array correcto sea cual sea la respuesta {data: []} o []
-        const data = res.data?.clases || res.data || res; 
-        if(Array.isArray(data)) {
-            setTodasLasClases(data);
-        } else {
-            console.error("Formato de clases inesperado:", res);
-            setTodasLasClases([]);
-        }
-      } catch (error) {
-        console.error("Error cargando clases:", error);
-        Swal.fire("Error", "No se pudieron cargar las clases del sistema.", "error");
-      } finally {
-        setLoading(false);
+  const fetchClases = useCallback(async ({ silent = false } = {}) => {
+    if (!cycleId) return;
+    if (!silent) setLoading(true);
+    try {
+      const res = await getTodasLasClases({ cicloLectivoId: cycleId });
+      // Aseguramos extraer el array correcto sea cual sea la respuesta {data: []} o []
+      const data = res.data?.clases || res.data || res; 
+      if(Array.isArray(data)) {
+          setTodasLasClases(data);
+      } else {
+          console.error("Formato de clases inesperado:", res);
+          setTodasLasClases([]);
       }
-    };
+    } catch (error) {
+      console.error("Error cargando clases:", error);
+      Swal.fire("Error", "No se pudieron cargar las clases del sistema.", "error");
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }, [cycleId]);
+
+  useEffect(() => {
     fetchClases();
-  }, []);
+  }, [fetchClases]);
 
   // B. Filtrar localmente cuando cambia el año, la división o la data
   useEffect(() => {
@@ -331,16 +436,32 @@ const AdminGestionAlumnosClase = () => {
     }
   }, [anioSeleccionado, divisionSeleccionada, todasLasClases]);
 
+  useEffect(() => {
+    if (!routeClaseId || loading || !todasLasClases.length) return;
+    const clase = todasLasClases.find((item) => String(item._id || item.id) === routeClaseId);
+    if (!clase) return;
+
+    setAnioSeleccionado(String(clase.nivel ?? clase.anio));
+    setDivisionSeleccionada(String(clase.division || "A").toUpperCase());
+    setClaseParaEditar(clase);
+  }, [loading, routeClaseId, todasLasClases]);
+
+  useEffect(() => {
+    setClaseParaEditar(null);
+  }, [cycleId]);
+
+  const readOnly = selectedCycle?.estado === "CERRADO";
+
 
   // Helper para obtener nombre del profesor con seguridad
   const getProfesorNombre = (clase) => {
       // Caso 1: Array de objetos poblados
       if (clase.profesores && clase.profesores.length > 0 && clase.profesores[0].nombre) {
-          return `${clase.profesores[0].nombre} ${clase.profesores[0].apellido}`;
+          return [clase.profesores[0].nombre, clase.profesores[0].apellido].filter(Boolean).join(" ");
       }
       // Caso 2: Objeto único (legacy)
       if (clase.profesor && clase.profesor.nombre) {
-          return `${clase.profesor.nombre} ${clase.profesor.apellido}`;
+          return [clase.profesor.nombre, clase.profesor.apellido].filter(Boolean).join(" ");
       }
       return "Sin asignar";
   };
@@ -382,6 +503,10 @@ const AdminGestionAlumnosClase = () => {
                     </select>
                 </div>
             </div>
+            <div className="mb-6 grid gap-3 md:grid-cols-[minmax(240px,1fr)_2fr] md:items-end">
+              <CycleSelector cycles={cycles} value={cycleId} onChange={setCycleId} disabled={loadingCycles} />
+              <CycleStatusNotice cycle={selectedCycle} />
+            </div>
         </div>
 
         {/* Grid de Clases */}
@@ -409,7 +534,7 @@ const AdminGestionAlumnosClase = () => {
                                     {/* Contador de alumnos (si existe en el objeto clase) */}
                                     <div className="flex items-center text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
                                         <Users size={12} className="mr-1" />
-                                        {clase.alumnos ? clase.alumnos.length : 0}
+                                        {clase.alumnosCount ?? (clase.alumnos ? clase.alumnos.length : 0)}
                                     </div>
                                 </div>
                                 
@@ -455,11 +580,10 @@ const AdminGestionAlumnosClase = () => {
         clase={claseParaEditar} 
         isOpen={!!claseParaEditar} 
         onClose={() => setClaseParaEditar(null)}
-        // Al cerrar o actualizar, podemos recargar las clases para actualizar contadores si fuera necesario
-        onUpdateSuccess={() => {
-            // Opcional: Si quieres que el contador de la tarjeta (ej: "25 alumnos") se actualice en tiempo real al cerrar el modal
-            // podrías llamar a fetchClases() de nuevo aquí.
-        }} 
+        cycleId={cycleId}
+        cycleAnio={selectedCycle?.anio}
+        readOnly={readOnly}
+        onUpdateSuccess={() => fetchClases({ silent: true })} 
       />
 
     </div>

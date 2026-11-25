@@ -1,19 +1,34 @@
-// src/layouts/DashboardLayout.jsx
-import { useState } from 'react';
-import Sidebar from '../components/Sidebar';
+import { useState } from "react";
+import { Outlet } from "react-router-dom";
+import AdminTopbar from "../components/admin/AdminTopbar";
+import SidebarAdmin from "../components/sidebar/SidebarAdmin";
 
-const DashboardLayout = ({ children }) => {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+const DashboardLayout = () => {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <div className="flex min-h-screen bg-gray-100">
-      {/* Pasamos el estado al Sidebar */}
-      <Sidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
+    <div className="flex min-h-screen bg-canvas font-sans text-navy">
+      {mobileMenuOpen && (
+        <button
+          type="button"
+          aria-label="Cerrar menú de administración"
+          className="fixed inset-0 z-30 bg-navy/40 backdrop-blur-[2px] md:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
 
-      {/* El margen izquierdo (ml) cambia dinámicamente */}
-      <div className={`flex-1 transition-all duration-300 ${isSidebarOpen ? 'ml-64' : 'ml-20'}`}>
-        <main className="p-6">
-          {children}
+      <SidebarAdmin
+        isOpen={mobileMenuOpen}
+        collapsed={sidebarCollapsed}
+        onToggleCollapsed={() => setSidebarCollapsed((collapsed) => !collapsed)}
+        onNavigate={() => setMobileMenuOpen(false)}
+      />
+
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
+        <AdminTopbar onMenuClick={() => setMobileMenuOpen((open) => !open)} />
+        <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">
+          <Outlet />
         </main>
       </div>
     </div>

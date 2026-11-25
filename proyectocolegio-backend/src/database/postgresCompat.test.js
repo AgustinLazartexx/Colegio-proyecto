@@ -115,6 +115,27 @@ test("adds mustChangePassword to existing user tables", async () => {
   assert.ok(addedColumns.includes("mustChangePassword"));
 });
 
+test("adds active status to class enrollments idempotently", async () => {
+  const migration = require("../database/migrations/20261021-18-add-active-status-to-class-enrollments.cjs");
+  let hasIsActive = false;
+  let addedColumn;
+  const queryInterface = {
+    describeTable: async () => (hasIsActive ? { isActive: {} } : {}),
+    addColumn: async (table, column, options) => {
+      hasIsActive = true;
+      addedColumn = { table, column, options };
+    },
+  };
+
+  await migration.up(queryInterface, Sequelize);
+  await migration.up(queryInterface, Sequelize);
+
+  assert.equal(addedColumn.table, "clase_alumnos");
+  assert.equal(addedColumn.column, "isActive");
+  assert.equal(addedColumn.options.allowNull, false);
+  assert.equal(addedColumn.options.defaultValue, true);
+});
+
 test("translates the production schema migrations without MariaDB-only DDL", async () => {
   const migrationFiles = [
     "../database/migrations/20261015-00-create-core-schema.cjs",
@@ -122,6 +143,8 @@ test("translates the production schema migrations without MariaDB-only DDL", asy
     "../database/migrations/20261015-13-create-academic-relations.cjs",
     "../database/migrations/20261015-14-create-relational-school-modules.cjs",
     "../database/migrations/20261015-15-create-general-attendance.cjs",
+    "../database/migrations/20261021-18-add-active-status-to-class-enrollments.cjs",
+    "../database/migrations/20261123-19-create-academic-cycles.cjs",
   ];
   const translations = [];
   const queryInterface = {
@@ -129,6 +152,7 @@ test("translates the production schema migrations without MariaDB-only DDL", asy
       query: async (sql) => {
         translations.push(translatePostgresDdl(sql));
       },
+      getDialect: () => "postgres",
     },
     describeTable: async () => ({
       mustChangePassword: {},
@@ -143,13 +167,15 @@ test("translates the production schema migrations without MariaDB-only DDL", asy
     }),
     showIndex: async () => [],
     addIndex: async () => {},
+    addColumn: async () => {},
+    removeIndex: async () => {},
   };
 
   for (const file of migrationFiles) {
     await require(file).up(queryInterface, Sequelize);
   }
 
-  assert.equal(translations.length, 14);
+  assert.equal(translations.length, 25);
   for (const { sql, indexes } of translations) {
     assert.doesNotMatch(sql, /\bBINARY\s*\(|\bENUM\s*\(|\bTINYINT\b|\bDATETIME\b|ENGINE\s*=/i);
     assert.doesNotMatch(sql, /ON UPDATE CURRENT_TIMESTAMP/i);

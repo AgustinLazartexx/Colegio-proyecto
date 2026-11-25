@@ -10,6 +10,62 @@ const demoSeedEnabled = process.env.DEMO_SEED_ENABLED === "true";
 
 const toBytes = (uuid) => Buffer.from(uuid.replaceAll("-", ""), "hex");
 
+const currentAcademicCycle = () => {
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const currentYear = Number(todayIso.slice(0, 4));
+  const year = todayIso < `${currentYear}-03-02` ? currentYear - 1 : currentYear;
+  return {
+    year,
+    name: `Ciclo Lectivo ${year}`,
+    startDate: `${year}-03-02`,
+    endDate: `${year + 1}-03-02`,
+  };
+};
+
+const cycleBackfillTables = [
+  "clases",
+  "school_notas_trimestrales",
+  "school_calificaciones",
+  "school_tareas",
+  "school_asistencia_general",
+  "school_cuotas",
+];
+
+const ensureActiveCycle = async (transaction) => {
+  const existingActive = await sequelize.query(
+    `SELECT HEX(id) AS id FROM ciclos_lectivos
+     WHERE estado IN ('ACTIVO', 'RECUPERACION')
+     ORDER BY anio DESC LIMIT 1`,
+    { type: QueryTypes.SELECT, transaction },
+  );
+  if (existingActive.length) return existingActive[0].id;
+
+  const cycle = currentAcademicCycle();
+  await sequelize.query(
+    `INSERT INTO ciclos_lectivos
+       (id, anio, nombre, fecha_inicio, fecha_cierre, estado, slot_activo)
+     VALUES (:id, :anio, :nombre, :fechaInicio, :fechaCierre, 'ACTIVO', 1)
+     ON CONFLICT (anio) DO NOTHING`,
+    {
+      replacements: {
+        id: toBytes("00000000-0000-4000-8000-000000000001"),
+        anio: cycle.year,
+        nombre: cycle.name,
+        fechaInicio: cycle.startDate,
+        fechaCierre: cycle.endDate,
+      },
+      transaction,
+    },
+  );
+
+  const [row] = await sequelize.query(
+    "SELECT HEX(id) AS id FROM ciclos_lectivos WHERE anio = :anio LIMIT 1",
+    { replacements: { anio: cycle.year }, type: QueryTypes.SELECT, transaction },
+  );
+  if (!row) throw new Error("No se pudo recuperar el ciclo lectivo demo.");
+  return row.id;
+};
+
 const createUser = async (transaction, id, user, passwordHash) => {
   await sequelize.query(
     `INSERT INTO users
@@ -69,6 +125,21 @@ try {
 
   await sequelize.authenticate();
   await sequelize.transaction(async (transaction) => {
+    const cycleId = await ensureActiveCycle(transaction);
+
+    await insertRecord(
+      transaction,
+      "UPDATE clases SET nivel = anio WHERE nivel IS NULL AND anio BETWEEN 1 AND 6",
+      {},
+    );
+    for (const table of cycleBackfillTables) {
+      await insertRecord(
+        transaction,
+        `UPDATE ${table} SET ciclo_lectivo_id = UNHEX(:cycleId) WHERE ciclo_lectivo_id IS NULL`,
+        { cycleId },
+      );
+    }
+
     const adminId = await createUser(
       transaction,
       "10000000-0000-4000-8000-000000000001",
@@ -116,12 +187,26 @@ try {
       const stableId = student.email === "alumna@colegio.test"
         ? "10000000-0000-4000-8000-000000000003"
         : "10000000-0000-4000-8000-000000000004";
-      studentIds.push(await createUser(
+      const studentId = await createUser(
         transaction,
         stableId,
         student,
         await bcrypt.hash(userPassword, 12),
-      ));
+      );
+      studentIds.push(studentId);
+
+      await insertRecord(
+        transaction,
+        `INSERT INTO inscripciones_ciclo
+           (id, alumno_id, ciclo_lectivo_id, nivel, division, estado_academico, cantidad_desaprobadas)
+         VALUES (:id, UNHEX(:studentId), UNHEX(:cycleId), 1, 'A', 'CURSANDO', 0)
+         ON CONFLICT (alumno_id, ciclo_lectivo_id) DO NOTHING`,
+        {
+          id: toBytes(randomUUID()),
+          studentId,
+          cycleId,
+        },
+      );
     }
 
     const subjects = [];
@@ -150,11 +235,12 @@ try {
       await insertRecord(
         transaction,
         `INSERT INTO clases
-           (id, materia_id, diaSemana, horaInicio, horaFin, duracion, aula, anio, division)
-         VALUES (:id, UNHEX(:materiaId), :diaSemana, :horaInicio, :horaFin, 60, :aula, 1, 'A')
-         ON CONFLICT (materia_id, diaSemana, horaInicio, anio, division) DO NOTHING`,
+           (id, ciclo_lectivo_id, materia_id, diaSemana, horaInicio, horaFin, duracion, aula, anio, nivel, division)
+         VALUES (:id, UNHEX(:cycleId), UNHEX(:materiaId), :diaSemana, :horaInicio, :horaFin, 60, :aula, 1, 1, 'A')
+         ON CONFLICT (ciclo_lectivo_id, materia_id, diaSemana, horaInicio, nivel, division) DO NOTHING`,
         {
           id: toBytes(randomUUID()),
+          cycleId,
           materiaId,
           ...subject,
         },
@@ -163,9 +249,10 @@ try {
       const claseId = await findId(
         transaction,
         `SELECT HEX(id) AS id FROM clases
-         WHERE materia_id = UNHEX(:materiaId) AND diaSemana = :diaSemana
-           AND horaInicio = :horaInicio AND anio = 1 AND division = 'A' LIMIT 1`,
-        { materiaId, diaSemana: subject.diaSemana, horaInicio: subject.horaInicio },
+         WHERE ciclo_lectivo_id = UNHEX(:cycleId) AND materia_id = UNHEX(:materiaId)
+           AND diaSemana = :diaSemana AND horaInicio = :horaInicio
+           AND nivel = 1 AND division = 'A' LIMIT 1`,
+        { cycleId, materiaId, diaSemana: subject.diaSemana, horaInicio: subject.horaInicio },
       );
       subjects.push({ ...subject, materiaId, claseId });
 
@@ -179,8 +266,8 @@ try {
       for (const studentId of studentIds) {
         await insertRecord(
           transaction,
-          `INSERT INTO clase_alumnos (clase_id, alumno_id)
-           VALUES (UNHEX(:claseId), UNHEX(:studentId))
+          `INSERT INTO clase_alumnos (clase_id, alumno_id, isActive)
+           VALUES (UNHEX(:claseId), UNHEX(:studentId), TRUE)
            ON CONFLICT (clase_id, alumno_id) DO NOTHING`,
           { claseId, studentId },
         );
@@ -198,11 +285,12 @@ try {
       await insertRecord(
         transaction,
         `INSERT INTO school_calificaciones
-           (id, materia_id, alumno_id, profesor_id, descripcion, nota)
-         VALUES (:id, UNHEX(:materiaId), UNHEX(:studentId), UNHEX(:teacherId), 'Evaluacion de muestra', :nota)
+           (id, ciclo_lectivo_id, materia_id, alumno_id, profesor_id, descripcion, nota)
+         VALUES (:id, UNHEX(:cycleId), UNHEX(:materiaId), UNHEX(:studentId), UNHEX(:teacherId), 'Evaluacion de muestra', :nota)
          ON CONFLICT (id) DO NOTHING`,
         {
           id: toBytes(gradeId),
+          cycleId,
           materiaId: mathSubject.materiaId,
           studentId,
           teacherId,
@@ -212,15 +300,16 @@ try {
       await insertRecord(
         transaction,
         `INSERT INTO school_notas_trimestrales
-           (id, materia_id, alumno_id, trimestre, orientadora, proceso, integradora,
+           (id, ciclo_lectivo_id, materia_id, alumno_id, trimestre, orientadora, proceso, integradora,
             promedio_ponderado, nota_final_trimestre, observacion)
-         VALUES (:id, UNHEX(:materiaId), UNHEX(:studentId), 1, :nota, :nota, :nota,
+         VALUES (:id, UNHEX(:cycleId), UNHEX(:materiaId), UNHEX(:studentId), 1, :nota, :nota, :nota,
                  :nota, :nota, 'Calificacion ficticia para demostracion')
-         ON CONFLICT (materia_id, alumno_id, trimestre) DO NOTHING`,
+         ON CONFLICT (ciclo_lectivo_id, materia_id, alumno_id, trimestre) DO NOTHING`,
         {
           id: toBytes(index === 0
             ? "30000000-0000-4000-8000-000000000003"
             : "30000000-0000-4000-8000-000000000004"),
+          cycleId,
           materiaId: mathSubject.materiaId,
           studentId,
           nota: grade,
@@ -229,14 +318,15 @@ try {
 
       await insertRecord(
         transaction,
-        `INSERT INTO school_cuotas (id, alumno_id, mes, anio, monto, estado, fecha_vencimiento)
-         VALUES (:id, UNHEX(:studentId), CAST(EXTRACT(MONTH FROM CURRENT_DATE) AS INTEGER),
+        `INSERT INTO school_cuotas (id, ciclo_lectivo_id, alumno_id, mes, anio, monto, estado, fecha_vencimiento)
+         VALUES (:id, UNHEX(:cycleId), UNHEX(:studentId), CAST(EXTRACT(MONTH FROM CURRENT_DATE) AS INTEGER),
                  CAST(EXTRACT(YEAR FROM CURRENT_DATE) AS INTEGER), 12500, 'pendiente', CURRENT_DATE + 10)
          ON CONFLICT (alumno_id, mes, anio) DO NOTHING`,
         {
           id: toBytes(index === 0
             ? "30000000-0000-4000-8000-000000000005"
             : "30000000-0000-4000-8000-000000000006"),
+          cycleId,
           studentId,
         },
       );
@@ -246,11 +336,11 @@ try {
     await insertRecord(
       transaction,
       `INSERT INTO school_tareas
-         (id, titulo, descripcion, fecha_entrega, materia_id, profesor_id)
-       VALUES (:id, 'Actividad de bienvenida', 'Consigna ficticia para recorrer la demo.',
+         (id, ciclo_lectivo_id, titulo, descripcion, fecha_entrega, materia_id, profesor_id)
+       VALUES (:id, UNHEX(:cycleId), 'Actividad de bienvenida', 'Consigna ficticia para recorrer la demo.',
                CURRENT_TIMESTAMP + INTERVAL '7 days', UNHEX(:materiaId), UNHEX(:teacherId))
        ON CONFLICT (id) DO NOTHING`,
-      { id: toBytes(taskId), materiaId: mathSubject.materiaId, teacherId },
+      { id: toBytes(taskId), cycleId, materiaId: mathSubject.materiaId, teacherId },
     );
     await insertRecord(
       transaction,
@@ -299,12 +389,14 @@ try {
       await insertRecord(
         transaction,
         `INSERT INTO school_asistencia_general
-           (id, alumno_id, anio, division, fecha, estado, registrado_por)
-         VALUES (:id, UNHEX(:studentId), 1, 'A', :attendanceDate, :status, UNHEX(:adminId))
+           (id, ciclo_lectivo_id, alumno_id, anio, division, fecha, estado, registrado_por)
+         VALUES (:id, UNHEX(:cycleId), UNHEX(:studentId), 1, 'A', :attendanceDate, :status, UNHEX(:adminId))
          ON CONFLICT (alumno_id, fecha)
-         DO UPDATE SET estado = EXCLUDED.estado, registrado_por = EXCLUDED.registrado_por`,
+         DO UPDATE SET ciclo_lectivo_id = EXCLUDED.ciclo_lectivo_id, estado = EXCLUDED.estado,
+           registrado_por = EXCLUDED.registrado_por`,
         {
           id: toBytes(randomUUID()),
+          cycleId,
           studentId,
           attendanceDate,
           status,

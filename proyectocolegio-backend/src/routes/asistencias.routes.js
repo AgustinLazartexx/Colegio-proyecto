@@ -2,10 +2,16 @@ import { Router } from "express";
 import { checkAuth } from "../middlewares/checkAuth.js";
 import { checkRole } from "../middlewares/checkRole.js";
 import {
+  cycleIdFromBody,
+  cycleIdFromClassBody,
+  cycleWriteGuard,
+} from "../middlewares/cycleWrite.js";
+import {
   registrarAsistencias,
   obtenerAsistenciasPorClaseYFecha,
   obtenerAsistenciasPorAlumno,
   getReporteAsistencias,
+  getReporteAsistenciasMensual,
   getMisAsistencias,
   obtenerAsistenciaGeneral,
   registrarAsistenciaGeneral,
@@ -18,11 +24,11 @@ const router = Router();
 router.get("/alumno/mis-asistencias", checkAuth, getMisAsistencias);
 
 router.get("/general", checkAuth, checkRole("admin"), obtenerAsistenciaGeneral);
-router.post("/general", checkAuth, checkRole("admin"), registrarAsistenciaGeneral);
+router.post("/general", checkAuth, checkRole("admin"), cycleWriteGuard(cycleIdFromBody), registrarAsistenciaGeneral);
 router.get("/comparacion", checkAuth, checkRole("admin"), compararAsistencias);
 
 // Registrar (Tomar) asistencia
-router.post('/', checkAuth, checkRole(['admin', 'profesor']), registrarAsistencias);
+router.post('/', checkAuth, checkRole(['admin', 'profesor']), cycleWriteGuard(cycleIdFromClassBody), registrarAsistencias);
 
 // Consultar asistencia de un día (para profesor/admin)
 router.get('/', checkAuth, checkRole(['admin', 'profesor']), obtenerAsistenciasPorClaseYFecha);
@@ -35,6 +41,7 @@ router.get('/alumno/:alumnoId', checkAuth, checkRole(['admin']), obtenerAsistenc
 
 // Reporte detallado (agregado)
 router.get('/reporte-detallado', checkAuth, checkRole(['admin', 'profesor']), getReporteAsistencias);
+router.get('/reporte-mensual', checkAuth, checkRole('admin'), getReporteAsistenciasMensual);
 
 
 export default router;

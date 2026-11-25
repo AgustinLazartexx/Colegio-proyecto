@@ -10,7 +10,7 @@ const ListaAlumnos = ({ materiaId, onClose }) => {
   useEffect(() => {
     const fetchAlumnos = async () => {
       try {
-        const res = await api.get(`/inscripciones/materia/${materiaId}`);
+        const res = await api.get(`/materias/${materiaId}/alumnos`);
         setAlumnos(res.data);
       } catch (error) {
         console.error("Error al obtener los alumnos:", error);
@@ -45,7 +45,7 @@ const ListaAlumnos = ({ materiaId, onClose }) => {
                 key={alumno._id}
                 className="border p-2 rounded bg-gray-50 flex justify-between items-center"
               >
-                <span>{alumno.nombre} {alumno.apellido}</span>
+                <span>{[alumno.nombre, alumno.apellido].filter(Boolean).join(" ")}</span>
                 <span className="text-sm text-gray-500">{alumno.email}</span>
               </li>
             ))}

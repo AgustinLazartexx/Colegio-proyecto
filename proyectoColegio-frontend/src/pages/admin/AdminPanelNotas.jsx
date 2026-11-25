@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import api from "../../api/api";
+import { getAuditoriaNotas } from "../../api/api";
 import { useAuth } from "../../context/AuthContext";
+import { useAcademicCycles } from "../../hooks/useAcademicCycles";
 import { toast } from "react-toastify";
 import { 
   History, 
@@ -36,26 +37,32 @@ const formatFieldName = (field) => {
 
 const AdminAuditoriaNotas = () => {
   const { token } = useAuth();
+  const { cycleId, loadingCycles } = useAcademicCycles();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (loadingCycles) return;
+    if (!cycleId) {
+      setLogs([]);
+      setLoading(false);
+      return;
+    }
     const fetchAuditoria = async () => {
       setLoading(true);
       try {
-        // Asegúrate de que la URL coincida con tu backend o usa tu instancia de api.js
-        const res = await api.get("/notas/auditoria");
-        setLogs(res.data);
+        const res = await getAuditoriaNotas(cycleId);
+        setLogs(Array.isArray(res.data) ? res.data : []);
       } catch (err) {
         console.error(err);
-        toast.error("Error al cargar el historial de cambios.");
+        toast.error(err.response?.data?.msg || "Error al cargar el historial de cambios.");
       } finally {
         setLoading(false);
       }
     };
 
     fetchAuditoria();
-  }, [token]);
+  }, [token, cycleId, loadingCycles]);
 
   return (
     <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden flex flex-col h-full max-h-[600px]"> 

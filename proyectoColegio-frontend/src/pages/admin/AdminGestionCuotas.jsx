@@ -2,8 +2,19 @@ import React, { useState, useEffect, useCallback } from "react";
 import { X, Plus, DollarSign, CheckCircle, AlertCircle, Calendar } from "lucide-react";
 import { toast } from "react-toastify";
 import { getCuotasDeAlumno, generarCuota, registrarPagoCuota, marcarCuotaVencida } from "../../api/api";
+import CycleSelector, { CycleStatusNotice } from "../../components/admin/CycleSelector";
+import { useAcademicCycles } from "../../hooks/useAcademicCycles";
+
+const formatDate = (value) => {
+  if (!value) return "—";
+  const date = typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? new Date(`${value}T00:00:00`)
+    : new Date(value);
+  return Number.isNaN(date.valueOf()) ? "—" : date.toLocaleDateString("es-AR");
+};
 
 const AdminGestionCuotas = ({ alumno, onClose }) => {
+  const { cycles, cycleId, setCycleId, selectedCycle, loadingCycles } = useAcademicCycles();
   const [cuotas, setCuotas] = useState([]);
   const [loading, setLoading] = useState(true);
   
@@ -16,15 +27,17 @@ const AdminGestionCuotas = ({ alumno, onClose }) => {
   });
 
   const cargarCuotas = useCallback(async () => {
+    if (!cycleId) return;
+    setLoading(true);
     try {
-      const res = await getCuotasDeAlumno(alumno._id);
+      const res = await getCuotasDeAlumno(alumno._id, { cicloLectivoId: cycleId });
       setCuotas(res.data);
     } catch {
       toast.error("Error al cargar historial de cuotas");
     } finally {
       setLoading(false);
     }
-  }, [alumno]);
+  }, [alumno, cycleId]);
 
   useEffect(() => {
     cargarCuotas();
@@ -32,10 +45,11 @@ const AdminGestionCuotas = ({ alumno, onClose }) => {
 
   const handleGenerar = async (e) => {
     e.preventDefault();
+    if (!canEdit) return;
     if (!nuevaCuota.monto || !nuevaCuota.fechaVencimiento) return toast.warning("Complete monto y vencimiento");
 
     try {
-      await generarCuota({ ...nuevaCuota, alumnoId: alumno._id });
+      await generarCuota({ ...nuevaCuota, alumnoId: alumno._id, cicloLectivoId: cycleId });
       toast.success("Cuota generada correctamente");
       cargarCuotas(); // Recargar lista
     } catch (error) {
@@ -44,6 +58,7 @@ const AdminGestionCuotas = ({ alumno, onClose }) => {
   };
 
   const handlePagar = async (cuotaId) => {
+    if (!canEdit) return;
     if (!window.confirm("¿Confirmar recepción del pago?")) return;
     try {
       const res = await registrarPagoCuota(cuotaId, "efectivo"); // Podrías agregar un selector de método
@@ -55,6 +70,7 @@ const AdminGestionCuotas = ({ alumno, onClose }) => {
   };
 
   const handleVencer = async (cuotaId) => {
+      if (!canEdit) return;
       try {
           await marcarCuotaVencida(cuotaId);
           toast.info("Cuota marcada como vencida");
@@ -63,6 +79,8 @@ const AdminGestionCuotas = ({ alumno, onClose }) => {
           toast.error("Error al actualizar");
       }
   };
+
+  const canEdit = ["ACTIVO", "RECUPERACION"].includes(selectedCycle?.estado);
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -81,10 +99,15 @@ const AdminGestionCuotas = ({ alumno, onClose }) => {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 bg-gray-50 flex flex-col md:flex-row gap-6">
+        <div className="flex-1 overflow-y-auto bg-gray-50 p-6">
+          <div className="mb-6 grid gap-2 md:grid-cols-[minmax(220px,1fr)_2fr] md:items-end">
+            <CycleSelector cycles={cycles} value={cycleId} onChange={setCycleId} disabled={loadingCycles} />
+            <CycleStatusNotice cycle={selectedCycle} />
+          </div>
+          <div className="flex flex-col gap-6 md:flex-row">
           
           {/* COLUMNA IZQ: Generar Nueva Cuota */}
-          <div className="md:w-1/3 space-y-6">
+          <div className="space-y-6 md:w-1/3">
             <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-200">
               <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
                 <Plus size={18} className="text-blue-600"/> Nueva Cuota
@@ -131,7 +154,7 @@ const AdminGestionCuotas = ({ alumno, onClose }) => {
                   />
                 </div>
 
-                <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition font-medium text-sm">
+                <button type="submit" disabled={!canEdit} className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition font-medium text-sm disabled:cursor-not-allowed disabled:opacity-50">
                   Generar Cuota
                 </button>
               </form>
@@ -165,7 +188,7 @@ const AdminGestionCuotas = ({ alumno, onClose }) => {
                                         <td className="p-3 font-medium">{c.mes}/{c.anio}</td>
                                         <td className="p-3">${c.monto}</td>
                                         <td className="p-3 text-gray-500">
-                                            {new Date(c.fechaVencimiento).toLocaleDateString()}
+                                            {formatDate(c.fechaVencimiento)}
                                         </td>
                                         <td className="p-3">
                                             <span className={`px-2 py-1 rounded-full text-xs font-bold ${
@@ -180,7 +203,8 @@ const AdminGestionCuotas = ({ alumno, onClose }) => {
                                             {c.estado !== 'pagado' && (
                                                 <button 
                                                     onClick={() => handlePagar(c._id)}
-                                                    className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 text-xs shadow-sm mr-2"
+                                                    disabled={!canEdit}
+                                                    className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 text-xs shadow-sm mr-2 disabled:cursor-not-allowed disabled:opacity-40"
                                                     title="Registrar Pago"
                                                 >
                                                     Cobrar
@@ -189,7 +213,8 @@ const AdminGestionCuotas = ({ alumno, onClose }) => {
                                             {c.estado === 'pendiente' && (
                                                 <button 
                                                     onClick={() => handleVencer(c._id)}
-                                                    className="text-red-400 hover:text-red-600 text-xs"
+                                                    disabled={!canEdit}
+                                                    className="text-red-400 hover:text-red-600 text-xs disabled:cursor-not-allowed disabled:opacity-40"
                                                     title="Forzar Vencimiento"
                                                 >
                                                     <AlertCircle size={16}/>
@@ -203,6 +228,7 @@ const AdminGestionCuotas = ({ alumno, onClose }) => {
                     </div>
                 )}
              </div>
+          </div>
           </div>
         </div>
       </div>

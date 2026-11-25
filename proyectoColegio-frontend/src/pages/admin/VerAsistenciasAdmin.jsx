@@ -10,7 +10,8 @@ import {
   User,
   Clock,
   ClipboardCheck,
-  AlertTriangle
+  AlertTriangle,
+  FileDown,
 } from "lucide-react";
 
 // 1. IMPORTAR LAS FUNCIONES DE TU API
@@ -18,7 +19,12 @@ import {
   compararAsistencias,
   getTodasLasClases,
   getReporteAsistencias,
+  getReporteAsistenciasMensual,
 } from "../../api/api";
+import CycleSelector, { CycleStatusNotice } from "../../components/admin/CycleSelector";
+import { useAcademicCycles } from "../../hooks/useAcademicCycles";
+import ModalExportarPlanilla from "../../components/ModalExportarPlanilla";
+import { crearPlanillaAsistenciaMensual } from "../../utils/exportadores/planillasAcademicas.js";
 
 const getFechaLocal = () => {
   const fecha = new Date();
@@ -29,9 +35,13 @@ const getFechaLocal = () => {
 };
 
 const VerAsistenciasAdmin = () => {
+  const { cycles, cycleId, setCycleId, selectedCycle, loadingCycles } = useAcademicCycles();
   const [asistencias, setAsistencias] = useState([]);
   const [clases, setClases] = useState([]); 
   const [loading, setLoading] = useState(false);
+  const [exportandoMensual, setExportandoMensual] = useState(false);
+  const [modalPlanillaAbierto, setModalPlanillaAbierto] = useState(false);
+  const [documentoPlanilla, setDocumentoPlanilla] = useState(null);
   const [modo, setModo] = useState("materias");
   const [comparacion, setComparacion] = useState(null);
   const [curso, setCurso] = useState({ anio: "", division: "" });
@@ -45,8 +55,9 @@ const VerAsistenciasAdmin = () => {
   useEffect(() => {
     const fetchClases = async () => {
       try {
+        if (!cycleId) return;
         // USAR LA FUNCIÓN DE API.JS
-        const res = await getTodasLasClases(); 
+        const res = await getTodasLasClases({ cicloLectivoId: cycleId });
         setClases(res.data.clases || res.data || []); 
       } catch (err) {
         console.error(err);
@@ -54,7 +65,13 @@ const VerAsistenciasAdmin = () => {
       }
     };
     fetchClases();
-  }, []);
+  }, [cycleId]);
+
+  useEffect(() => {
+    setFiltros((current) => ({ ...current, claseId: "" }));
+    setAsistencias([]);
+    setComparacion(null);
+  }, [cycleId]);
 
   // Buscar reporte
   const fetchReporte = async () => {
@@ -66,7 +83,7 @@ const VerAsistenciasAdmin = () => {
     setLoading(true);
     try {
       // USAR LA NUEVA FUNCIÓN DE API.JS
-      const res = await getReporteAsistencias(filtros.claseId, filtros.fecha);
+      const res = await getReporteAsistencias(filtros.claseId, filtros.fecha, cycleId);
       const registros = Array.isArray(res.data) ? res.data : [];
       setAsistencias(registros);
       if (registros.length === 0) toast.info("No hay asistencias registradas para esa fecha.");
@@ -87,7 +104,7 @@ const VerAsistenciasAdmin = () => {
     setLoading(true);
     setComparacion(null);
     try {
-      const { data } = await compararAsistencias(curso.anio, curso.division, filtros.fecha);
+      const { data } = await compararAsistencias(curso.anio, curso.division, filtros.fecha, cycleId);
       setComparacion(data);
       if (data.alumnos.length === 0) toast.info("No hay alumnos registrados en ese curso.");
     } catch (err) {
@@ -95,6 +112,30 @@ const VerAsistenciasAdmin = () => {
       toast.error(err.response?.data?.msg || "Error al comparar las asistencias");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const exportarAsistenciaMensual = async () => {
+    if (!filtros.claseId || !filtros.fecha || !cycleId) {
+      toast.warn("Selecciona una clase y una fecha para exportar.");
+      return;
+    }
+
+    setExportandoMensual(true);
+    try {
+      const mes = filtros.fecha.slice(0, 7);
+      const { data } = await getReporteAsistenciasMensual(filtros.claseId, mes, cycleId);
+      setDocumentoPlanilla(crearPlanillaAsistenciaMensual({
+        reporte: data,
+        ciclo: selectedCycle || {},
+        mes,
+      }));
+      setModalPlanillaAbierto(true);
+    } catch (error) {
+      console.error("Error preparando la planilla mensual de asistencias:", error);
+      toast.error(error.response?.data?.msg || "No se pudo preparar la planilla mensual.");
+    } finally {
+      setExportandoMensual(false);
     }
   };
   // Helpers visuales
@@ -131,6 +172,10 @@ const VerAsistenciasAdmin = () => {
             <p className="text-gray-500">Elegí una clase y una fecha para consultar la lista de alumnos.</p>
           </div>
         </div>
+        <div className="mb-6 grid gap-3 md:grid-cols-[minmax(240px,1fr)_2fr] md:items-end">
+          <CycleSelector cycles={cycles} value={cycleId} onChange={setCycleId} disabled={loadingCycles} />
+          <CycleStatusNotice cycle={selectedCycle} />
+        </div>
 
         <div className="flex flex-wrap gap-2">
           <button
@@ -157,7 +202,7 @@ const VerAsistenciasAdmin = () => {
             <h2>{modo === "materias" ? "Seleccionar Clase y Fecha" : "Seleccionar Curso y Fecha"}</h2>
           </div>
 
-          <div className={`grid grid-cols-1 gap-4 ${modo === "materias" ? "md:grid-cols-3" : "md:grid-cols-4"}`}>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
             {modo === "materias" ? (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Clase / Materia</label>
@@ -236,7 +281,25 @@ const VerAsistenciasAdmin = () => {
                     {modo === "materias" ? "Ver historial" : "Comparar"}
                 </button>
             </div>
+            {modo === "materias" && (
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  onClick={exportarAsistenciaMensual}
+                  disabled={exportandoMensual || !filtros.claseId || !filtros.fecha}
+                  className="flex h-[42px] w-full items-center justify-center gap-2 rounded-lg border border-blue-200 bg-white px-4 font-bold text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {exportandoMensual ? <Loader2 className="animate-spin" size={18} /> : <FileDown size={18} />}
+                  Exportar mes
+                </button>
+              </div>
+            )}
           </div>
+          <ModalExportarPlanilla
+            abierto={modalPlanillaAbierto}
+            onCerrar={() => setModalPlanillaAbierto(false)}
+            documento={documentoPlanilla}
+          />
         </div>
 
         {modo === "comparacion" ? (

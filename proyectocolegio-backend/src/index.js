@@ -21,6 +21,8 @@ import claseRoutes from "./routes/clase.routes.js";
 import asistenciasRoutes from "./routes/asistencias.routes.js";
 import notasRoutes from "./routes/notas.routes.js";
 import cuotaRoutes from "./routes/cuota.routes.js";
+import cicloRoutes from "./routes/ciclo.routes.js";
+import alumnosRoutes from "./routes/alumnos.routes.js";
 
 dotenv.config();
 
@@ -69,6 +71,8 @@ const startServer = async () => {
     app.use("/api/asistencias", asistenciasRoutes);
     app.use("/api/notas", notasRoutes);
     app.use("/api/cuotas", cuotaRoutes);
+    app.use("/api/ciclos", cicloRoutes);
+    app.use("/api/alumnos", alumnosRoutes);
 
     app.get("/", (req, res) => {
       const database = DB_DIALECT === "postgres" ? "PostgreSQL" : "MariaDB";

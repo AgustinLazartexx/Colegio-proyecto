@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../../context/AuthContext"; 
 import {
   Edit3, Ban, CircleCheck, X, Loader2, AlertCircle, Save, GraduationCap, Plus, Filter, Clock, MapPin, Users, Calendar, Search
 } from "lucide-react";
 import Swal from "sweetalert2"; 
+import CycleSelector, { CycleStatusNotice } from "../../components/admin/CycleSelector";
+import { useAcademicCycles } from "../../hooks/useAcademicCycles";
 
 // IMPORTAMOS DESDE API.JS
 import { 
@@ -28,6 +30,7 @@ const getSelectedOptions = (options) => {
 
 const ClasesAdmin = () => {
   const { token } = useAuth();
+  const { cycles, cycleId, setCycleId, selectedCycle, loadingCycles } = useAcademicCycles();
   const [clases, setClases] = useState([]);
   const [materias, setMaterias] = useState([]);
   const [profesoresList, setProfesoresList] = useState([]);
@@ -48,24 +51,9 @@ const ClasesAdmin = () => {
   const [showModal, setShowModal] = useState(false);
   const [filter, setFilter] = useState({ anio: "", diaSemana: "", division: "", search: "" });
 
-  useEffect(() => {
-    const initData = async () => {
-        if (!token) return;
-        setLoading(true);
-        try {
-            await Promise.all([fetchClases(), fetchAuxiliaryData()]);
-        } catch (error) {
-            console.error(error);
-        } finally {
-            setLoading(false);
-        }
-    };
-    initData();
-  }, [token]); 
-
-  const fetchClases = async () => {
+  const fetchClases = useCallback(async () => {
     try {
-      const res = await getTodasLasClases({ includeSuspended: true });
+      const res = await getTodasLasClases({ includeSuspended: true, cicloLectivoId: cycleId });
       // Aseguramos que sea un array
       const data = Array.isArray(res.data) ? res.data : (res.data.clases || []);
       setClases(data); 
@@ -73,9 +61,9 @@ const ClasesAdmin = () => {
       console.error("Error al cargar las clases:", err);
       Swal.fire("Error", "No se pudieron cargar las clases.", "error");
     }
-  };
+  }, [cycleId]);
 
-  const fetchAuxiliaryData = async () => {
+  const fetchAuxiliaryData = useCallback(async () => {
     try {
       const [resMaterias, resProfesores] = await Promise.all([
         getMaterias(),
@@ -88,7 +76,20 @@ const ClasesAdmin = () => {
     } catch (err) {
       console.error("Error al cargar datos auxiliares:", err);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const initData = async () => {
+      if (!token || !cycleId) return;
+      setLoading(true);
+      try {
+        await Promise.all([fetchClases(), fetchAuxiliaryData()]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    initData();
+  }, [token, cycleId, fetchClases, fetchAuxiliaryData]);
 
   // --- MANEJO DEL FORMULARIO ---
   const handleInputChange = (e) => {
@@ -158,7 +159,8 @@ const ClasesAdmin = () => {
         diaSemana: form.diaSemana,
         horaInicio: form.horaInicio,
         horaFin: form.horaFin,
-        aula: form.aula // Enviamos el aula
+          aula: form.aula, // Enviamos el aula
+          cicloLectivoId: cycleId
     };
 
     setLoadingAction(true);
@@ -182,6 +184,7 @@ const ClasesAdmin = () => {
   };
 
   const handleToggleStatus = async (clase) => {
+    if (selectedCycle?.estado === "CERRADO") return;
     const isActive = !clase.isActive;
     const confirm = await Swal.fire({
       title: isActive ? "¿Reactivar clase?" : "¿Suspender clase?",
@@ -224,6 +227,12 @@ const ClasesAdmin = () => {
   const aniosAcademicos = [1, 2, 3, 4, 5, 6];
   const divisionesEjemplo = ["A", "B", "C", "D"];
   const hasActiveFilters = filter.anio || filter.division || filter.diaSemana || filter.search.trim();
+  const readOnly = selectedCycle?.estado === "CERRADO";
+
+  useEffect(() => {
+    setShowModal(false);
+    setEditingId(null);
+  }, [cycleId]);
 
   return (
      <div className="min-h-screen bg-gray-50 p-6">
@@ -238,9 +247,14 @@ const ClasesAdmin = () => {
              <p className="text-gray-500 mt-1">Configura los horarios, aulas y profesores de cada materia.</p>
            </div>
            
-           <button onClick={abrirModalCrear} className="bg-indigo-600 text-white font-medium py-2.5 px-5 rounded-lg shadow-sm hover:bg-indigo-700 transition flex items-center gap-2">
+           <button onClick={abrirModalCrear} disabled={readOnly || !cycleId} className="bg-indigo-600 text-white font-medium py-2.5 px-5 rounded-lg shadow-sm hover:bg-indigo-700 transition flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50">
              <Plus size={20} /> Asignar Nueva Clase
            </button>
+         </div>
+
+         <div className="grid gap-3 md:grid-cols-[minmax(240px,1fr)_2fr] md:items-end">
+           <CycleSelector cycles={cycles} value={cycleId} onChange={setCycleId} disabled={loadingCycles} />
+           <CycleStatusNotice cycle={selectedCycle} />
          </div>
 
          {/* BARRA DE FILTROS */}
@@ -380,11 +394,12 @@ const ClasesAdmin = () => {
                        {/* COLUMNA 4: ACCIONES */}
                        <td className="px-6 py-4 text-center">
                          <div className="flex justify-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
-                           <button onClick={() => abrirModalEditar(c)} className="p-2 bg-white border border-gray-200 text-indigo-600 rounded-lg hover:bg-indigo-50 hover:border-indigo-200 shadow-sm transition" title="Editar Clase">
+                           <button onClick={() => abrirModalEditar(c)} disabled={readOnly} className="p-2 bg-white border border-gray-200 text-indigo-600 rounded-lg hover:bg-indigo-50 hover:border-indigo-200 shadow-sm transition disabled:cursor-not-allowed disabled:opacity-40" title={readOnly ? "Ciclo cerrado: solo lectura" : "Editar Clase"}>
                              <Edit3 size={16}/>
                            </button>
                            <button
                              onClick={() => handleToggleStatus(c)}
+                             disabled={readOnly}
                              className={`p-2 bg-white border rounded-lg shadow-sm transition ${c.isActive ? "border-amber-200 text-amber-600 hover:bg-amber-50" : "border-emerald-200 text-emerald-600 hover:bg-emerald-50"}`}
                              title={c.isActive ? "Suspender clase" : "Reactivar clase"}
                              aria-label={c.isActive ? "Suspender clase" : "Reactivar clase"}

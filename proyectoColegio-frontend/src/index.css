@@ -11,3 +11,81 @@ html {
     scroll-behavior: auto;
   }
 }
+
+@page planilla-portrait {
+  size: A4 portrait;
+  margin: 0;
+}
+
+@page planilla-landscape {
+  size: A4 landscape;
+  margin: 0;
+}
+
+@media print {
+  body.imprimiendo-planilla,
+  body.imprimiendo-planilla #root {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  body.imprimiendo-planilla * {
+    visibility: hidden !important;
+  }
+
+  body.imprimiendo-planilla .planilla-modal-backdrop {
+    position: static !important;
+    display: block !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+  }
+
+  body.imprimiendo-planilla .planilla-modal-backdrop > section {
+    width: auto !important;
+    max-width: none !important;
+    overflow: visible !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  body.imprimiendo-planilla .planilla-preview-scroll {
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    background: transparent !important;
+  }
+
+  body.imprimiendo-planilla .planilla-print-area,
+  body.imprimiendo-planilla .planilla-print-area * {
+    visibility: visible !important;
+  }
+
+  body.imprimiendo-planilla .planilla-print-area {
+    page: planilla-portrait;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 210mm !important;
+    min-height: 297mm !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 14mm !important;
+    overflow: visible !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  body.imprimiendo-planilla .planilla-print-area[data-orientation="landscape"] {
+    page: planilla-landscape;
+    width: 297mm !important;
+    min-height: 210mm !important;
+  }
+
+  body.imprimiendo-planilla .planilla-no-print {
+    display: none !important;
+  }
+}

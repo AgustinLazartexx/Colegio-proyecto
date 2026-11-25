@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { QueryTypes } from "sequelize";
 import { databaseId, isDatabaseId, sequelize } from "../services/academicData.service.js";
+import { getActiveCycle, getCycleById } from "../services/cycleAccess.service.js";
 
 const materiaSelect = `
   SELECT
@@ -313,26 +314,50 @@ export const verAlumnosMateria = async (req, res) => {
       if (!assigned) return res.status(403).json({ msg: "No tienes asignada esta materia." });
     }
 
+    let cycle = null;
+    if (req.query.cicloLectivoId) {
+      cycle = await getCycleById(req.query.cicloLectivoId);
+    } else {
+      try {
+        cycle = await getActiveCycle();
+      } catch (cycleError) {
+        if (cycleError.status !== 409) throw cycleError;
+      }
+    }
+
+    const classCycleFilter = cycle ? "AND c.ciclo_lectivo_id = UNHEX(:cycleId)" : "";
+    const classReplacements = {
+      id: databaseId(id),
+      ...(cycle ? { cycleId: databaseId(cycle.id) } : {}),
+    };
+
     let students = await sequelize.query(
       `SELECT DISTINCT HEX(u.id) AS _id, u.nombre, u.email, u.dni, u.anio, u.division
        FROM users u
        JOIN clase_alumnos ca ON ca.alumno_id = u.id
        JOIN clases c ON c.id = ca.clase_id
-       WHERE c.materia_id = UNHEX(:id) AND u.rol = 'alumno'
+       WHERE c.materia_id = UNHEX(:id) AND c.isActive = TRUE AND ca.isActive = TRUE
+         ${classCycleFilter}
+         AND u.rol = 'alumno' AND u.isActive = TRUE
        ORDER BY u.nombre`,
-      { replacements: { id: databaseId(id) }, type: QueryTypes.SELECT },
+      { replacements: classReplacements, type: QueryTypes.SELECT },
     );
 
-    if (!students.length) {
+    const [hasClasses] = await sequelize.query(
+      `SELECT 1 AS existsClass FROM clases c WHERE c.materia_id = UNHEX(:id) ${classCycleFilter} LIMIT 1`,
+      { replacements: classReplacements, type: QueryTypes.SELECT },
+    );
+    if (!students.length && !hasClasses) {
       students = await sequelize.query(
         `SELECT HEX(id) AS _id, nombre, email, dni, anio, division
-         FROM users WHERE rol = 'alumno' AND anio = :anio AND division = :division
+         FROM users WHERE rol = 'alumno' AND isActive = TRUE AND anio = :anio AND division = :division
          ORDER BY nombre`,
         { replacements: { anio: materia.anio, division: materia.division }, type: QueryTypes.SELECT },
       );
     }
     return res.json(students);
   } catch (error) {
+    if (error.status) return res.status(error.status).json({ msg: error.message });
     return serverError(res, "Error al obtener alumnos de la materia.", error);
   }
 };

@@ -2,6 +2,7 @@
 import { Router } from "express";
 import { checkAuth } from "../middlewares/checkAuth.js"; // <--- ASEGÚRATE DE TENER LAS LLAVES {}
 import { checkRole } from "../middlewares/checkRole.js"; // <--- ASEGÚRATE DE TENER LAS LLAVES {}
+import { cycleIdFromBody, cycleIdFromNoteBody, cycleWriteGuard } from "../middlewares/cycleWrite.js";
 import {
   guardarNota,
   getNotasPorMateriaTrimestre,
@@ -23,6 +24,7 @@ router.post(
   logNotasRoute,
   checkAuth,
   checkRole("profesor", "admin"), 
+  cycleWriteGuard(cycleIdFromBody, { allowRecovery: false }),
   guardarNota
 );
 
@@ -44,6 +46,14 @@ router.get(
   misNotasAlumno
 );
 
+router.get(
+  "/alumno/:alumnoId",
+  logNotasRoute,
+  checkAuth,
+  checkRole("admin"),
+  misNotasAlumno
+);
+
 // 4. AUDITORÍA (Solo Admin)
 router.get(
   "/auditoria",
@@ -59,6 +69,7 @@ router.post(
     "/cambiar-estado",
     checkAuth,
     checkRole("admin"),
+    cycleWriteGuard(cycleIdFromNoteBody, { allowRecovery: false }),
     cambiarEstadoTrimestre
 );
 

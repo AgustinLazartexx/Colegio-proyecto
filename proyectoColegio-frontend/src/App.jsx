@@ -8,7 +8,6 @@ import "react-toastify/dist/ReactToastify.css";
 import Navbar from "./components/Navbar";
 import PrivateRoute from "./components/PrivateRoute";
 import LoginModal from "./components/LoginModal";
-import RegisterModal from "./components/RegisterModal";
 
 // Páginas principales
 import Home from "./pages/Home";
@@ -45,7 +44,6 @@ import AnunciosAlumno from "./pages/alumno/AnunciosAlumno"; // Importar componen
 // Páginas del admin
 import UsuariosAdmin from "./pages/admin/UsuariosAdmin";
 import MateriasAdmin from "./pages/admin/MateriasAdmin";
-import CrearClases from "./pages/admin/CrearClases";
 import ClasesAdmin from "./pages/admin/ClasesAdmin";
 import DashboardAdmin from "./pages/admin/DashboardAdmin";
 import TomarAsistenciaAdmin from "./pages/admin/TomarAsistenciaAdmin";
@@ -53,11 +51,13 @@ import VerAsistenciasAdmin from "./pages/admin/VerAsistenciasAdmin";
 import AdminAuditoriaNotas from "./pages/admin/AdminPanelNotas";
 import AdminGestionNotas from "./pages/admin/AdminGestionNotas";
 import AdminGestionAlumnosClase from "./pages/admin/AdminGestionAlumnosClase";
+import CiclosLectivosAdmin from "./pages/admin/CiclosLectivosAdmin";
+import CuotasResumenAdmin from "./pages/admin/CuotasResumenAdmin";
+import AlumnosRiesgoAdmin from "./pages/admin/AlumnosRiesgoAdmin";
 
 
 function App() {
   const [showLogin, setShowLogin] = useState(false);
-  const [showRegister, setShowRegister] = useState(false);
   const { authCargando, usuario } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -86,10 +86,9 @@ function App() {
     <>
       <ToastContainer position="top-right" autoClose={3000} />
       <LoginModal isOpen={showLogin} onClose={() => setShowLogin(false)} />
-      <RegisterModal isOpen={showRegister} onClose={() => setShowRegister(false)} />
       
       <Routes>
-        <Route path="/" element={<><Navbar onLoginClick={() => setShowLogin(true)} onRegisterClick={() => setShowRegister(true)} /><Home /></>} />
+        <Route path="/" element={<><Navbar onLoginClick={() => setShowLogin(true)} /><Home /></>} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/unauthorized" element={<Unauthorized />} />
@@ -113,7 +112,7 @@ function App() {
           <Route path="mensajes" element={<Mensajes />} />
           <Route path="tarea/:tareaId/entregas" element={<EntregasTarea />} />
           <Route path="cargar-tarea" element={<CargarTarea />} />
-          <Route path="profesor/ver-alumnos" element={<VerAlumnosMateria />} />
+          <Route path="ver-alumnos" element={<VerAlumnosMateria />} />
           <Route path="verEntregas" element={<VerEntregas />} />
           <Route path="crud-anuncios" element={<CrudAnunciosProfesor />} />
           <Route path="cargar-notas" element={<PaginaSubirNotas />} />
@@ -125,7 +124,10 @@ function App() {
           <Route index element={<DashboardAdmin />} />
           <Route path="Inicio" element={<DashboardAdmin />} />
           <Route path="usuarios" element={<UsuariosAdmin />} />
+          <Route path="cuotas" element={<CuotasResumenAdmin />} />
+          <Route path="riesgo-academico" element={<AlumnosRiesgoAdmin />} />
           <Route path="materias" element={<MateriasAdmin />} />
+          <Route path="ciclos" element={<CiclosLectivosAdmin />} />
           <Route path="CrearClases" element={<ClasesAdmin />} />
           
           <Route path="AsistenciaGestion" element={<TomarAsistenciaAdmin />} />

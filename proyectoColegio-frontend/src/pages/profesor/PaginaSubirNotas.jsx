@@ -1,41 +1,56 @@
 import React, { useEffect, useState } from "react";
-import { useAuth } from "../../context/AuthContext";
 import { toast } from "react-toastify";
 import { GraduationCap, Loader2, Search, BookOpen, Filter, ListChecks } from "lucide-react";
 import CargarNotas from "./CargarNotas";
-import { getMateriasProfesor } from "../../api/api";
+import { getCicloActivo, getMisClases } from "../../api/api";
 
 const PaginaSubirNotas = () => {
   const [materias, setMaterias] = useState([]);
+  const [ciclo, setCiclo] = useState(null);
   const [materiaSeleccionadaId, setMateriaSeleccionadaId] = useState("");
   const [loading, setLoading] = useState(false);
   const [filtros, setFiltros] = useState({ nombre: "", anio: "", division: "" });
-  const { user } = useAuth(); // Asumo que tu contexto devuelve 'user' o 'usuario'
 
-  // Cargar materias del profesor al iniciar
+  // Cargar el ciclo vigente y las clases asignadas al docente
   useEffect(() => {
     const fetchMaterias = async () => {
       setLoading(true);
       try {
-        const res = await getMateriasProfesor();
-        // Manejo flexible por si el backend devuelve array directo o un objeto
-        const lista = Array.isArray(res.data) ? res.data : (res.data.materias || []);
-        
-        setMaterias(lista);
-
+        const { data: activeCycle } = await getCicloActivo();
+        setCiclo(activeCycle);
+        const { data } = await getMisClases({ cicloLectivoId: activeCycle._id });
+        const bySubject = new Map();
+        (data.clases || []).forEach((clase) => {
+          const materiaId = clase.materia?._id || clase.materiaId;
+          if (!materiaId || !clase.materia?.nombre) return;
+          const key = `${materiaId}:${clase.nivel ?? clase.anio}:${clase.division}`;
+          if (!bySubject.has(key)) {
+            bySubject.set(key, {
+              _id: key,
+              materiaId,
+              claseId: clase._id || clase.id,
+              nombre: clase.materia.nombre,
+              anio: clase.nivel ?? clase.anio,
+              division: clase.division,
+              profesorNombre: clase.profesores?.map((profesor) => profesor.nombre).filter(Boolean).join(", ")
+                || clase.profesor?.nombre
+                || "",
+              horaInicio: clase.horaInicio,
+              horaFin: clase.horaFin,
+            });
+          }
+        });
+        setMaterias([...bySubject.values()]);
       } catch (err) {
-        console.error("Error cargando materias:", err);
-        // Solo mostramos error si no es un 404 (que significaría que no tiene materias)
-        if (err.response?.status !== 404) {
-            toast.error("Error al cargar tus materias");
-        }
+        console.error("Error cargando clases del ciclo:", err);
+        toast.error(err.response?.data?.msg || "Error al cargar tus clases.");
       } finally {
         setLoading(false);
       }
     };
 
     fetchMaterias();
-  }, [user]);
+  }, []);
 
   // Buscamos el objeto completo de la materia seleccionada para mostrar info extra
   const materiaActual = materias.find(m => m._id === materiaSeleccionadaId);
@@ -70,6 +85,11 @@ const PaginaSubirNotas = () => {
             </h1>
             <p className="text-gray-500 text-sm mt-1">Filtra tus materias y elige una para cargar notas.</p>
         </div>
+        {ciclo?.estado === "RECUPERACION" && (
+          <div className="mb-6 rounded-lg border border-violet-300 bg-violet-50 px-4 py-3 text-sm font-medium text-violet-900" role="status">
+            Ciclo en recuperación: las notas trimestrales están bloqueadas; solo se puede cargar recuperación anual en materias con puntaje menor a 18.
+          </div>
+        )}
       </div>
 
       {/* Selector de Materia */}
@@ -166,10 +186,18 @@ const PaginaSubirNotas = () => {
       {/* Renderizado de la Planilla */}
       {materiaSeleccionadaId ? (
         <CargarNotas 
-            materiaId={materiaSeleccionadaId} 
+            materiaId={materiaActual?.materiaId}
+            claseId={materiaActual?.claseId}
             materiaNombre={materiaActual?.nombre} // Pasamos el nombre para no buscarlo de nuevo
             anio={materiaActual?.anio}
             division={materiaActual?.division}
+            profesorNombre={materiaActual?.profesorNombre}
+            horaInicio={materiaActual?.horaInicio}
+            horaFin={materiaActual?.horaFin}
+            cicloAnio={ciclo?.anio}
+            cicloLectivoId={ciclo?._id}
+            cicloEstado={ciclo?.estado}
+            readOnly={!["ACTIVO", "RECUPERACION"].includes(ciclo?.estado)}
         />
       ) : (
         <div className="text-center py-12 text-gray-400 border-2 border-dashed border-gray-300 rounded-xl">

@@ -1,16 +1,23 @@
 import React, { useEffect, useState } from "react";
-import SidebarAlumno from "../../components/sidebar/SidebarAlumno";
 import { getMisAsistenciasAlumno } from "../../api/api";
 import { CheckCircle, XCircle, AlertCircle, Calendar } from "lucide-react";
+import CycleSelector, { CycleStatusNotice } from "../../components/admin/CycleSelector";
+import { useAcademicCycles } from "../../hooks/useAcademicCycles";
 
 const Asistencias = () => {
+  const { cycles, cycleId, setCycleId, selectedCycle, loadingCycles } = useAcademicCycles();
   const [datos, setDatos] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchAsistencias = async () => {
+      if (!cycleId) {
+        if (!loadingCycles) setLoading(false);
+        return;
+      }
+      setLoading(true);
       try {
-        const res = await getMisAsistenciasAlumno();
+        const res = await getMisAsistenciasAlumno(cycleId);
         setDatos(res.data);
       } catch (error) {
         console.error("Error cargando asistencias:", error);
@@ -19,7 +26,7 @@ const Asistencias = () => {
       }
     };
     fetchAsistencias();
-  }, []);
+  }, [cycleId, loadingCycles]);
 
   const getStatusColor = (estado) => {
     switch (estado) {
@@ -45,10 +52,14 @@ const Asistencias = () => {
       
       <div className="flex-1 overflow-y-auto p-8">
         <h1 className="text-3xl font-bold text-gray-800 mb-6">Mis Asistencias</h1>
+        <div className="mb-6 grid gap-3 md:grid-cols-[minmax(240px,1fr)_2fr] md:items-end">
+          <CycleSelector cycles={cycles} value={cycleId} onChange={setCycleId} disabled={loadingCycles} />
+          <CycleStatusNotice cycle={selectedCycle} />
+        </div>
 
         {loading ? (
           <p>Cargando registros...</p>
-        ) : !datos || datos.historial.length === 0 ? (
+        ) : !datos || !datos.historial?.length ? (
           <div className="bg-white p-6 rounded shadow text-center text-gray-500">
             No hay registros de asistencia aún.
           </div>

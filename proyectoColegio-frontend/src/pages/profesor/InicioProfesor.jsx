@@ -65,27 +65,27 @@ const InicioProfesor = () => {
     .sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
   const materiasUnicas = new Set(clases.map((clase) => clase.materia?._id).filter(Boolean)).size;
   const metricas = [
-    { label: "Clases de hoy", value: clasesHoy.length, icon: CalendarDays, color: "bg-blue-600" },
-    { label: "Clases asignadas", value: clases.length, icon: BookOpen, color: "bg-indigo-600" },
-    { label: "Materias", value: materiasUnicas, icon: GraduationCap, color: "bg-violet-600" },
+    { label: "Clases de hoy", value: clasesHoy.length, icon: CalendarDays, color: "bg-secondary" },
+    { label: "Clases asignadas", value: clases.length, icon: BookOpen, color: "bg-blue-700" },
+    { label: "Materias", value: materiasUnicas, icon: GraduationCap, color: "bg-blue-600" },
     { label: "Tareas publicadas", value: tareas.length, icon: ClipboardCheck, color: "bg-emerald-600" },
   ];
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-7">
-      <header className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-950 via-indigo-900 to-blue-800 p-6 text-white shadow-xl sm:p-9">
-        <div className="absolute -right-8 -top-16 h-56 w-56 rounded-full bg-cyan-300/10 blur-3xl" />
+      <header className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-900 p-6 text-white shadow-xl sm:p-9">
+        <div className="absolute -right-8 -top-16 h-56 w-56 rounded-full bg-blue-300/10 blur-3xl" />
         <div className="relative flex flex-col justify-between gap-6 sm:flex-row sm:items-end">
           <div>
-            <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-indigo-100">
+            <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-blue-100">
               <GraduationCap size={14} /> Portal docente
             </p>
             <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
               ¡Buen día{usuario?.nombre ? `, ${usuario.nombre.split(" ")[0]}` : ""}!
             </h1>
-            <p className="mt-2 text-sm capitalize text-indigo-100 sm:text-base">{fechaHoy}</p>
+            <p className="mt-2 text-sm capitalize text-blue-100 sm:text-base">{fechaHoy}</p>
           </div>
-          <Link to="/profesor/tomar-asistencia" className="inline-flex items-center justify-center gap-2 self-start rounded-xl bg-white px-4 py-3 text-sm font-semibold text-indigo-900 shadow-sm transition hover:bg-indigo-50 sm:self-auto">
+          <Link to="/profesor/tomar-asistencia" className="inline-flex items-center justify-center gap-2 self-start rounded-xl bg-white px-4 py-3 text-sm font-semibold text-navy shadow-sm transition hover:bg-blue-50 sm:self-auto">
             <CalendarCheck2 size={17} /> Tomar asistencia
           </Link>
         </div>
@@ -117,10 +117,10 @@ const InicioProfesor = () => {
         <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
           <div className="mb-5 flex items-end justify-between gap-4">
             <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-indigo-600">Agenda real</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-secondary">Agenda real</p>
               <h2 className="mt-1 text-xl font-bold text-slate-900">Tus clases de hoy</h2>
             </div>
-            <Link to="/profesor/Clases" className="text-sm font-semibold text-indigo-700 hover:text-indigo-900">Ver horario</Link>
+            <Link to="/profesor/Clases" className="text-sm font-semibold text-secondary hover:text-blue-900">Ver horario</Link>
           </div>
           {loading ? (
             <div className="space-y-3" aria-label="Cargando clases">
@@ -130,13 +130,13 @@ const InicioProfesor = () => {
             <ul className="space-y-3">
               {clasesHoy.map((clase) => (
                 <li key={clase._id} className="flex flex-col gap-3 rounded-xl border border-slate-100 p-4 sm:flex-row sm:items-center">
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700"><BookOpen size={20} /></span>
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-secondary"><BookOpen size={20} /></span>
                   <div className="min-w-0 flex-1">
                     <h3 className="font-semibold text-slate-900">{clase.materia?.nombre || "Clase asignada"}</h3>
                     <p className="mt-1 text-sm text-slate-500">{clase.anio}° {clase.division}</p>
                   </div>
                   <div className="flex items-center gap-1 text-sm font-semibold text-slate-600">
-                    <Clock3 size={15} className="text-indigo-500" />{clase.horaInicio}–{clase.horaFin}
+                    <Clock3 size={15} className="text-secondary" />{clase.horaInicio}–{clase.horaFin}
                   </div>
                 </li>
               ))}
@@ -151,7 +151,7 @@ const InicioProfesor = () => {
         </section>
 
         <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
-          <p className="text-xs font-bold uppercase tracking-widest text-blue-600">Herramientas</p>
+          <p className="text-xs font-bold uppercase tracking-widest text-secondary">Herramientas</p>
           <h2 className="mt-1 text-xl font-bold text-slate-900">Accesos docentes</h2>
           <div className="mt-4 space-y-3">
             <QuickLink to="/profesor/Clases" icon={Users} label="Mis clases" detail="Cursos y alumnos asignados" />
@@ -167,12 +167,12 @@ const InicioProfesor = () => {
 
 const QuickLink = ({ to, icon, label, detail }) => (
   <Link to={to} className="group flex items-center gap-3 rounded-xl border border-slate-100 p-3 transition hover:border-indigo-200 hover:bg-indigo-50/50">
-    <span className="rounded-xl bg-slate-50 p-2.5 text-slate-500 transition group-hover:bg-white group-hover:text-indigo-700">{createElement(icon, { size: 19 })}</span>
+    <span className="rounded-xl bg-slate-50 p-2.5 text-slate-500 transition group-hover:bg-white group-hover:text-secondary">{createElement(icon, { size: 19 })}</span>
     <span className="min-w-0 flex-1">
       <span className="block text-sm font-semibold text-slate-800">{label}</span>
       <span className="mt-0.5 block text-xs text-slate-500">{detail}</span>
     </span>
-    <ArrowRight size={16} className="shrink-0 text-slate-300 transition group-hover:translate-x-1 group-hover:text-indigo-700" />
+    <ArrowRight size={16} className="shrink-0 text-slate-300 transition group-hover:translate-x-1 group-hover:text-secondary" />
   </Link>
 );
 

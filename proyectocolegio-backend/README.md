@@ -38,6 +38,21 @@ API REST construida con Node.js y Express. Los datos relacionales se gestionan c
    ```
 
    Las migraciones son repetibles y no importan datos desde los archivos heredados de MongoDB.
+   Las inscripciones de alumnos a clases conservan su historial y pueden suspenderse o reactivarse; las inscripciones existentes se mantienen activas al migrar.
+
+   La migración académica también crea el esquema de ciclos. Antes de iniciar la API, revisa el backfill del ciclo inicial:
+
+   ```powershell
+   npm.cmd run migrate:initial-cycle -- --anio=2026 --estado=ACTIVO
+   ```
+
+   El comando muestra un resumen sin escribir datos. Si el año y el estado son correctos, aplícalo explícitamente:
+
+   ```powershell
+   npm.cmd run migrate:initial-cycle -- --anio=2026 --estado=ACTIVO --aplicar
+   ```
+
+   El ciclo abarca del 2 de marzo del año indicado al 2 de marzo del año siguiente. El backfill asigna todos los registros SQL existentes a ese único ciclo; respalda la base y confirma ese supuesto antes de usar `--aplicar`. Los estados aceptados son `PLANIFICADO`, `ACTIVO`, `RECUPERACION` y `CERRADO`.
 
 4. Opcionalmente, carga datos ficticios para desarrollo:
 
