@@ -407,8 +407,8 @@ export const cargarNotaRecuperacion = async (req, res) => {
         throw error;
       }
       const current = calculateSubjectResult(row);
-      if (current.incompleta || current.puntajeFinal >= 18) {
-        const error = new Error("La materia requiere tres notas trimestrales completas y un puntaje menor a 18.");
+      if (current.incompleta || current.puntajeFinal >= 6) {
+        const error = new Error("La materia requiere tres notas trimestrales completas y un promedio menor a 6.");
         error.status = 409;
         throw error;
       }

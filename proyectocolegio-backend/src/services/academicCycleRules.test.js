@@ -6,15 +6,14 @@ import {
   suggestedAcademicStatus,
 } from "./academicCycleRules.js";
 
-test("sums the three trimester grades and applies the 18-point passing threshold", () => {
+test("averages the three trimester grades and applies the 6-point passing threshold", () => {
   assert.deepEqual(
     calculateSubjectResult({ trimestre1: 6, trimestre2: 6, trimestre3: 6, notaRecuperacion: null }),
-    { puntajeFinal: 18, estadoMateria: "APROBADA", incompleta: false },
+    { puntajeFinal: 6, estadoMateria: "APROBADA", incompleta: false },
   );
-  assert.equal(
-    calculateSubjectResult({ trimestre1: 5, trimestre2: 6, trimestre3: 6, notaRecuperacion: null }).estadoMateria,
-    "DESAPROBADA",
-  );
+  const failed = calculateSubjectResult({ trimestre1: 5, trimestre2: 6, trimestre3: 6, notaRecuperacion: null });
+  assert.equal(failed.puntajeFinal, 5.67);
+  assert.equal(failed.estadoMateria, "DESAPROBADA");
 });
 
 test("annual recovery passes only at six and incomplete trimester grades are not silently approved", () => {

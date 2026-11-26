@@ -1,6 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { FileSpreadsheet, FileText, Printer, X } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  FileSpreadsheet,
+  FileText,
+  Loader2,
+  Printer,
+  SlidersHorizontal,
+  X,
+} from "lucide-react";
 import { LOGO_COLEGIO_URL } from "../utils/exportadores/logoHelper.js";
 import {
   normalizarDocumento,
@@ -9,8 +18,28 @@ import {
 } from "../utils/exportadores/planillaUtils.js";
 
 const ModalExportarPlanilla = ({ abierto, onCerrar, documento }) => {
-  const [exportando, setExportando] = useState(false);
+  const [exportandoFormato, setExportandoFormato] = useState("");
   const [errorExportacion, setErrorExportacion] = useState("");
+  const [masOpcionesAbierto, setMasOpcionesAbierto] = useState(false);
+
+  // Opciones avanzadas opcionales (colapsadas por defecto en el acordeón)
+  const [orientacionPersonalizada, setOrientacionPersonalizada] = useState("");
+  const [nombrePersonalizado, setNombrePersonalizado] = useState("");
+  const [incluirFirmas, setIncluirFirmas] = useState(true);
+
+  const planillaBase = useMemo(() => {
+    if (!abierto || !documento) return null;
+    return normalizarDocumento(documento);
+  }, [abierto, documento]);
+
+  useEffect(() => {
+    if (!abierto) return;
+    setErrorExportacion("");
+    setMasOpcionesAbierto(false);
+    setOrientacionPersonalizada("");
+    setNombrePersonalizado("");
+    setIncluirFirmas(true);
+  }, [abierto, documento]);
 
   useEffect(() => {
     if (!abierto) return undefined;
@@ -21,12 +50,26 @@ const ModalExportarPlanilla = ({ abierto, onCerrar, documento }) => {
     return () => window.removeEventListener("keydown", cerrarConEscape);
   }, [abierto, onCerrar]);
 
-  if (!abierto) return null;
+  if (!abierto || !planillaBase) return null;
 
-  const planilla = normalizarDocumento(documento);
+  const planilla = normalizarDocumento({
+    ...documento,
+    orientacion: orientacionPersonalizada || planillaBase.orientacion,
+    nombreArchivo: nombrePersonalizado.trim() || planillaBase.nombreArchivo,
+    firmas: incluirFirmas ? planillaBase.firmas : [],
+  });
+
   const columnasVisibles = planilla.columnas.filter((columna) => !columna.soloExcel);
+  const exportando = Boolean(exportandoFormato);
+  const formatoRapidoEditable = planilla.formatosEditables.includes("excel")
+    ? "excel"
+    : planilla.formatosEditables[0] || null;
+  const otrosFormatosEditables = planilla.formatosEditables.filter(
+    (formato) => formato !== formatoRapidoEditable,
+  );
+
   const exportarEditable = async (formato) => {
-    setExportando(true);
+    setExportandoFormato(formato);
     setErrorExportacion("");
     try {
       if (formato === "word") {
@@ -40,12 +83,12 @@ const ModalExportarPlanilla = ({ abierto, onCerrar, documento }) => {
       console.error("No se pudo exportar la planilla editable:", error);
       setErrorExportacion("No se pudo generar el documento editable. Intenta nuevamente.");
     } finally {
-      setExportando(false);
+      setExportandoFormato("");
     }
   };
 
   const exportarPDFActual = async () => {
-    setExportando(true);
+    setExportandoFormato("pdf");
     setErrorExportacion("");
     try {
       const { exportarPDF } = await import("../utils/exportadores/exportarPDF.js");
@@ -54,7 +97,7 @@ const ModalExportarPlanilla = ({ abierto, onCerrar, documento }) => {
       console.error("No se pudo exportar la planilla PDF:", error);
       setErrorExportacion("No se pudo generar el PDF. Intenta nuevamente.");
     } finally {
-      setExportando(false);
+      setExportandoFormato("");
     }
   };
 
@@ -65,7 +108,7 @@ const ModalExportarPlanilla = ({ abierto, onCerrar, documento }) => {
     window.print();
   };
 
-  return createPortal((
+  return createPortal(
     <div
       className="planilla-modal-backdrop fixed inset-0 z-[70] flex items-center justify-center overflow-y-auto bg-navy/50 p-3 backdrop-blur-sm sm:p-6"
       onMouseDown={(event) => {
@@ -78,54 +121,154 @@ const ModalExportarPlanilla = ({ abierto, onCerrar, documento }) => {
         aria-labelledby="modal-exportar-planilla-title"
         className="w-full max-w-6xl overflow-hidden rounded-2xl bg-white shadow-2xl"
       >
-        <div className="planilla-no-print flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 sm:px-6">
-          <div>
-            <h2 id="modal-exportar-planilla-title" className="font-bold text-navy">Vista previa de planilla</h2>
-            <p className="text-xs text-slate-500">Formato A4 · {planilla.orientacion === "landscape" ? "Horizontal" : "Vertical"}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={exportarPDFActual}
-              disabled={exportando}
-              className="inline-flex items-center gap-2 rounded-lg bg-secondary px-3 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-wait disabled:opacity-60"
-            >
-              <FileText size={16} aria-hidden="true" />
-              Descargar PDF
-            </button>
-            {planilla.formatosEditables.map((formato) => (
+        {/* Barra rápida de 1 clic: PDF + Excel (o formato principal) + acordeón "Más opciones" */}
+        <div className="planilla-no-print border-b border-slate-200 px-4 py-3 sm:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h2 id="modal-exportar-planilla-title" className="truncate font-bold text-navy">
+                Exportar planilla
+              </h2>
+              <p className="text-xs text-slate-500">
+                A4 · {planilla.orientacion === "landscape" ? "Horizontal" : "Vertical"} · {planilla.nombreArchivo}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
               <button
-                key={formato}
                 type="button"
-                onClick={() => exportarEditable(formato)}
+                onClick={exportarPDFActual}
                 disabled={exportando}
-                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-navy transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-xl bg-secondary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-800 disabled:cursor-wait disabled:opacity-60"
               >
-                {formato === "word"
-                  ? <FileText size={16} aria-hidden="true" />
-                  : <FileSpreadsheet size={16} aria-hidden="true" />}
-                Descargar editable ({formato === "word" ? "Word" : "Excel"})
+                {exportandoFormato === "pdf" ? (
+                  <Loader2 size={16} className="animate-spin" aria-hidden="true" />
+                ) : (
+                  <FileText size={16} aria-hidden="true" />
+                )}
+                Descargar PDF
               </button>
-            ))}
-            <button
-              type="button"
-              onClick={imprimirPlanilla}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-navy"
-              title="Imprimir"
-              aria-label="Imprimir planilla"
-            >
-              <Printer size={17} aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              onClick={onCerrar}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-red-50 hover:text-accent"
-              title="Cerrar"
-              aria-label="Cerrar vista previa"
-            >
-              <X size={18} aria-hidden="true" />
-            </button>
+
+              {formatoRapidoEditable && (
+                <button
+                  type="button"
+                  onClick={() => exportarEditable(formatoRapidoEditable)}
+                  disabled={exportando}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-semibold text-navy transition hover:border-blue-200 hover:bg-blue-50 hover:text-secondary disabled:cursor-wait disabled:opacity-60"
+                >
+                  {exportandoFormato === formatoRapidoEditable ? (
+                    <Loader2 size={16} className="animate-spin" aria-hidden="true" />
+                  ) : formatoRapidoEditable === "word" ? (
+                    <FileText size={16} aria-hidden="true" />
+                  ) : (
+                    <FileSpreadsheet size={16} aria-hidden="true" />
+                  )}
+                  Descargar {formatoRapidoEditable === "word" ? "Word" : "Excel"}
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setMasOpcionesAbierto((prev) => !prev)}
+                aria-expanded={masOpcionesAbierto}
+                aria-controls="modal-exportar-mas-opciones"
+                className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                  masOpcionesAbierto
+                    ? "border-blue-200 bg-blue-50 text-secondary"
+                    : "border-slate-200 bg-canvas text-slate-600 hover:bg-slate-100 hover:text-navy"
+                }`}
+              >
+                <SlidersHorizontal size={14} aria-hidden="true" />
+                Más opciones
+                {masOpcionesAbierto ? (
+                  <ChevronUp size={14} aria-hidden="true" />
+                ) : (
+                  <ChevronDown size={14} aria-hidden="true" />
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={onCerrar}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 transition hover:bg-red-50 hover:text-accent"
+                title="Cerrar"
+                aria-label="Cerrar vista previa"
+              >
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
           </div>
+
+          {/* Acordeón de opciones avanzadas */}
+          {masOpcionesAbierto && (
+            <div
+              id="modal-exportar-mas-opciones"
+              className="mt-3 grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-canvas p-3.5 sm:grid-cols-2 lg:grid-cols-4"
+            >
+              <div>
+                <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                  Nombre de archivo
+                </label>
+                <input
+                  type="text"
+                  value={nombrePersonalizado}
+                  onChange={(event) => setNombrePersonalizado(event.target.value)}
+                  placeholder={planillaBase.nombreArchivo}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-navy outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                  Orientación de página
+                </label>
+                <select
+                  value={orientacionPersonalizada || planillaBase.orientacion}
+                  onChange={(event) => setOrientacionPersonalizada(event.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-navy outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+                >
+                  <option value="portrait">Vertical (A4)</option>
+                  <option value="landscape">Horizontal (A4)</option>
+                </select>
+              </div>
+
+              {planillaBase.firmas.length > 0 && (
+                <div className="flex items-end">
+                  <label className="flex w-full cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-navy">
+                    <input
+                      type="checkbox"
+                      checked={incluirFirmas}
+                      onChange={(event) => setIncluirFirmas(event.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300 text-secondary focus:ring-blue-200"
+                    />
+                    Incluir espacio de firmas
+                  </label>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-end justify-end gap-2">
+                {otrosFormatosEditables.map((formato) => (
+                  <button
+                    key={formato}
+                    type="button"
+                    onClick={() => exportarEditable(formato)}
+                    disabled={exportando}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-navy transition hover:bg-blue-50 hover:text-secondary disabled:opacity-50"
+                  >
+                    {formato === "word" ? <FileText size={14} /> : <FileSpreadsheet size={14} />}
+                    {formato === "word" ? "Word" : "Excel"}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={imprimirPlanilla}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-navy transition hover:bg-blue-50 hover:text-secondary"
+                >
+                  <Printer size={14} aria-hidden="true" />
+                  Imprimir
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {errorExportacion && (
@@ -178,12 +321,27 @@ const ModalExportarPlanilla = ({ abierto, onCerrar, documento }) => {
                 </thead>
                 <tbody>
                   {planilla.filas.map((fila, rowIndex) => (
-                    <tr key={fila?.id || rowIndex} className={rowIndex % 2 ? "bg-canvas" : "bg-white"}>
-                      {columnasVisibles.map((columna, columnIndex) => (
-                        <td key={`${columna.titulo}-${columnIndex}`} className="border border-slate-300 px-2 py-1.5">
-                          {textoCelda(obtenerValorCelda(fila, columna, columnIndex))}
-                        </td>
-                      ))}
+                    <tr
+                      key={fila?.id || rowIndex}
+                      className={
+                        fila?.esResumen
+                          ? "bg-blue-50/80 font-bold text-navy"
+                          : rowIndex % 2
+                            ? "bg-canvas"
+                            : "bg-white"
+                      }
+                    >
+                      {columnasVisibles.map((columna, columnIndex) => {
+                        const rawVal = obtenerValorCelda(fila, columna, columnIndex);
+                        const cellText = fila?.esResumen && (rawVal === "" || rawVal === null || rawVal === undefined)
+                          ? ""
+                          : textoCelda(rawVal);
+                        return (
+                          <td key={`${columna.titulo}-${columnIndex}`} className="border border-slate-300 px-2 py-1.5">
+                            {cellText}
+                          </td>
+                        );
+                      })}
                     </tr>
                   ))}
                 </tbody>
@@ -244,8 +402,9 @@ const ModalExportarPlanilla = ({ abierto, onCerrar, documento }) => {
           </article>
         </div>
       </section>
-    </div>
-  ), document.body);
+    </div>,
+    document.body,
+  );
 };
 
 export default ModalExportarPlanilla;

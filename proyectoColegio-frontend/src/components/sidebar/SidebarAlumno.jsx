@@ -1,53 +1,40 @@
 import { createElement } from "react";
 import {
-  // --- Íconos seleccionados para cada link ---
-  Home,
+  Award,
   BookOpen,
-  ClipboardList,
+  CalendarCheck,
   FileText,
-  PenSquare,
-  Megaphone,
+  Home,
   Layers,
+  Megaphone,
 } from "lucide-react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 
-// Items de navegación del Alumno
 const navItems = [
-  { to: "/alumno", icon: Home, text: "Inicio" },
-  { to: "/alumno/asistencias", icon: ClipboardList, text: "Mis Asistencias" },
-  { to: "/alumno/materias", icon: BookOpen, text: "Mis Materias" },
+  { to: "/alumno", icon: Home, text: "Inicio", end: true },
+  { to: "/alumno/materias", icon: BookOpen, text: "Mis Materias", key: "subjects" },
   { to: "/alumno/tareas", icon: FileText, text: "Mis Tareas" },
-  { to: "/alumno/inscripcion", icon: PenSquare, text: "Inscripción" },
+  { to: "/alumno/boletin", icon: Award, text: "Mis Notas" },
+  { to: "/alumno/asistencias", icon: CalendarCheck, text: "Mis Asistencias" },
   { to: "/alumno/anuncios", icon: Megaphone, text: "Anuncios" },
-  { to: "/alumno/boletin", icon: ClipboardList, text: "Mis Notas" },
 ];
 
-const NavItem = ({ to, icon, text, onNavigate }) => (
-  <NavLink
-    to={to}
-    end={to === "/alumno"}
-    onClick={onNavigate}
-    className={({ isActive }) =>
-      `group relative flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold transition-colors duration-150 focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-100 ${
-        isActive
-          ? "bg-blue-50 text-secondary ring-1 ring-inset ring-blue-100"
-          : "text-slate-600 hover:bg-canvas hover:text-navy"
-      }`
-    }
-  >
-    {({ isActive }) => (
-      <>
-        {isActive && <span aria-hidden="true" className="absolute inset-y-2 left-0 w-1 rounded-r-full bg-secondary" />}
-        {createElement(icon, { size: 19, "aria-hidden": true, className: "shrink-0" })}
-        <span>{text}</span>
-      </>
-    )}
-  </NavLink>
-);
-
 const SidebarAlumno = ({ isOpen = false, onNavigate = () => {} }) => {
+  const { pathname } = useLocation();
+
+  const isItemActive = (item, isActive) => {
+    if (item.key === "subjects") {
+      return pathname.startsWith("/alumno/materias") || pathname.startsWith("/alumno/inscripcion");
+    }
+    return isActive;
+  };
+
   return (
-    <aside className={`fixed inset-y-0 left-0 z-40 flex h-screen w-72 shrink-0 flex-col border-r border-slate-200 bg-white text-navy shadow-xl shadow-slate-900/10 transition-transform duration-300 md:sticky md:top-0 md:translate-x-0 ${isOpen ? "translate-x-0" : "-translate-x-full"}`}>
+    <aside
+      className={`fixed inset-y-0 left-0 z-40 flex h-screen w-72 shrink-0 flex-col border-r border-slate-200 bg-white text-navy shadow-xl shadow-slate-900/10 transition-transform duration-300 md:sticky md:top-0 md:translate-x-0 ${
+        isOpen ? "translate-x-0" : "-translate-x-full"
+      }`}
+    >
       <div className="flex min-h-[4.5rem] items-center gap-3 border-b border-slate-100 px-4">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-secondary ring-1 ring-blue-100">
           <BookOpen size={22} aria-hidden="true" />
@@ -59,9 +46,40 @@ const SidebarAlumno = ({ isOpen = false, onNavigate = () => {} }) => {
       </div>
 
       <nav aria-label="Navegación del alumno" className="flex-1 space-y-1 overflow-y-auto px-3 py-5">
-        <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Principal</p>
+        <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+          Mi cursada
+        </p>
         {navItems.map((item) => (
-          <NavItem key={item.to} {...item} onNavigate={onNavigate} />
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.end}
+            onClick={onNavigate}
+            className={({ isActive }) => {
+              const active = isItemActive(item, isActive);
+              return `group relative flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold transition-colors duration-150 focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-100 ${
+                active
+                  ? "bg-blue-50 text-secondary ring-1 ring-inset ring-blue-100"
+                  : "text-slate-600 hover:bg-canvas hover:text-navy"
+              }`;
+            }}
+          >
+            {({ isActive }) => {
+              const active = isItemActive(item, isActive);
+              return (
+                <>
+                  {active && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute inset-y-2 left-0 w-1 rounded-r-full bg-secondary"
+                    />
+                  )}
+                  {createElement(item.icon, { size: 19, "aria-hidden": true, className: "shrink-0" })}
+                  <span>{item.text}</span>
+                </>
+              );
+            }}
+          </NavLink>
         ))}
       </nav>
 

@@ -1,18 +1,15 @@
 import { createElement } from "react";
 import {
+  AlertTriangle,
   BookOpen,
   CalendarCheck,
-  CalendarDays,
   CalendarRange,
-  ClipboardList,
-  FileClock,
   FileEdit,
   GraduationCap,
   House,
   Layers,
   PanelLeftClose,
   PanelLeftOpen,
-  PlusSquare,
   ShieldCheck,
   Users,
   Wallet,
@@ -21,31 +18,32 @@ import { NavLink, useLocation } from "react-router-dom";
 
 const navSections = [
   {
-    title: "Principal",
+    title: "General",
     items: [{ to: "/admin", icon: House, text: "Inicio", end: true, key: "dashboard" }],
   },
   {
-    title: "Gestión Académica",
+    title: "Estructura Académica",
     items: [
-      { to: "/admin/CrearClases", icon: GraduationCap, text: "Clases" },
+      { to: "/admin/ciclos", icon: CalendarRange, text: "Ciclos Lectivos" },
       { to: "/admin/materias", icon: BookOpen, text: "Materias" },
-      { to: "/admin/GestionNotas", icon: FileEdit, text: "Notas" },
-      { to: "/admin/AuditoriaNotas", icon: FileClock, text: "Auditoría de notas" },
-      { to: "/admin/AsistenciaGestion", icon: CalendarCheck, text: "Tomar asistencia" },
-      { to: "/admin/VerAsistencias", icon: CalendarDays, text: "Historial de asistencias" },
-      { to: "/admin/clasesAdminAlumnos", icon: PlusSquare, text: "Inscripciones" },
+      { to: "/admin/CrearClases", icon: GraduationCap, text: "Clases", key: "classes" },
     ],
   },
   {
-    title: "Administración",
+    title: "Comunidad",
+    items: [{ to: "/admin/usuarios", icon: Users, text: "Usuarios", key: "users" }],
+  },
+  {
+    title: "Seguimiento Académico",
     items: [
-      { to: "/admin/usuarios", icon: Users, text: "Usuarios", key: "users" },
-      { to: "/admin/cuotas", icon: Wallet, text: "Cuotas", key: "fees" },
+      { to: "/admin/AsistenciaGestion", icon: CalendarCheck, text: "Asistencias", key: "attendance" },
+      { to: "/admin/GestionNotas", icon: FileEdit, text: "Notas", key: "grades" },
+      { to: "/admin/riesgo-academico", icon: AlertTriangle, text: "Alumnos en Riesgo" },
     ],
   },
   {
-    title: "Configuración",
-    items: [{ to: "/admin/ciclos", icon: CalendarRange, text: "Ciclos Lectivos" }],
+    title: "Finanzas",
+    items: [{ to: "/admin/cuotas", icon: Wallet, text: "Cuotas", key: "fees" }],
   },
 ];
 
@@ -56,11 +54,26 @@ const SidebarAdmin = ({
   onNavigate = () => {},
 }) => {
   const { pathname, search } = useLocation();
-  const isQuotaEntry = pathname === "/admin/cuotas" ||
+  const isQuotaEntry =
+    pathname === "/admin/cuotas" ||
     (pathname === "/admin/usuarios" && search.includes("panel=cuotas"));
   const isDashboardRoute = ["/admin", "/admin/Inicio"].includes(pathname);
+  const isClassesRoute =
+    pathname.startsWith("/admin/CrearClases") ||
+    pathname.startsWith("/admin/clases") ||
+    pathname.startsWith("/admin/clasesAdminAlumnos");
+  const isAttendanceRoute =
+    pathname.startsWith("/admin/AsistenciaGestion") ||
+    pathname.startsWith("/admin/VerAsistencias") ||
+    pathname.startsWith("/admin/asistencias");
+  const isGradesRoute =
+    pathname.startsWith("/admin/GestionNotas") || pathname.startsWith("/admin/AuditoriaNotas");
+
   const isItemActive = (item, isActive) => {
     if (item.key === "dashboard") return isDashboardRoute;
+    if (item.key === "classes") return isClassesRoute;
+    if (item.key === "attendance") return isAttendanceRoute;
+    if (item.key === "grades") return isGradesRoute;
     if (item.key === "fees") return isQuotaEntry;
     if (item.key === "users") return isActive && !isQuotaEntry;
     return isActive;
@@ -72,14 +85,18 @@ const SidebarAdmin = ({
         isOpen ? "translate-x-0" : "-translate-x-full"
       } ${collapsed ? "md:w-20" : "md:w-72"}`}
     >
-      <div className={`flex min-h-[4.5rem] items-center justify-between border-b border-slate-100 px-4 ${collapsed ? "md:justify-center md:px-2" : ""}`}>
+      <div
+        className={`flex min-h-[3.75rem] items-center justify-between border-b border-slate-100 px-4 ${
+          collapsed ? "md:justify-center md:px-2" : ""
+        }`}
+      >
         <div className={`flex min-w-0 items-center gap-3 ${collapsed ? "md:justify-center" : ""}`}>
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-secondary ring-1 ring-blue-100">
-            <ShieldCheck size={22} aria-hidden="true" />
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-secondary ring-1 ring-blue-100">
+            <ShieldCheck size={20} aria-hidden="true" />
           </div>
           <div className={collapsed ? "md:hidden" : ""}>
             <p className="text-sm font-extrabold tracking-tight text-navy">Colegio Reina</p>
-            <p className="text-[11px] font-medium text-slate-500">Panel de administración</p>
+            <p className="text-[11px] font-medium text-slate-500">Administración</p>
           </div>
         </div>
         <button
@@ -94,10 +111,18 @@ const SidebarAdmin = ({
         </button>
       </div>
 
-      <nav aria-label="Navegación de administración" className="flex-1 space-y-5 overflow-y-auto px-3 py-5">
-        {navSections.map((section) => (
-          <section key={section.title} aria-label={section.title}>
-            <h2 className={`mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 ${collapsed ? "md:sr-only" : ""}`}>
+      <nav aria-label="Navegación de administración" className="flex-1 space-y-4 overflow-y-auto px-3 py-4">
+        {navSections.map((section, sectionIndex) => (
+          <section
+            key={section.title}
+            aria-label={section.title}
+            className={sectionIndex > 0 ? "border-t border-slate-100 pt-4" : ""}
+          >
+            <h2
+              className={`mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 ${
+                collapsed ? "md:sr-only" : ""
+              }`}
+            >
               {section.title}
             </h2>
             <div className="space-y-1">
@@ -111,7 +136,7 @@ const SidebarAdmin = ({
                   aria-label={item.text}
                   className={({ isActive }) => {
                     const active = isItemActive(item, isActive);
-                    return `group relative flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold transition-colors duration-150 focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-100 ${
+                    return `group relative flex min-h-10 items-center gap-3 rounded-xl px-3 text-sm font-semibold transition-colors duration-150 focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-100 ${
                       collapsed ? "md:justify-center md:px-2" : ""
                     } ${
                       active
@@ -124,9 +149,11 @@ const SidebarAdmin = ({
                     const active = isItemActive(item, isActive);
                     return (
                       <>
-                        {active && <span aria-hidden="true" className="absolute inset-y-2 left-0 w-1 rounded-r-full bg-secondary" />}
+                        {active && (
+                          <span aria-hidden="true" className="absolute inset-y-2 left-0 w-1 rounded-r-full bg-secondary" />
+                        )}
                         {createElement(item.icon, {
-                          size: 19,
+                          size: 18,
                           "aria-hidden": true,
                           className: "shrink-0",
                         })}

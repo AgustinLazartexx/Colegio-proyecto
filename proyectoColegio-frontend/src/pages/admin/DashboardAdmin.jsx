@@ -150,7 +150,7 @@ const DashboardAdmin = () => {
     {
       label: "Alumnos en riesgo",
       value: stats?.alumnosEnRiesgo,
-      detail: "Materias con menos de 18 puntos",
+      detail: "Materias con promedio menor a 6",
       icon: AlertTriangle,
       color: "bg-rose-600",
       to: "/admin/riesgo-academico",

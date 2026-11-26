@@ -56,10 +56,10 @@ const groupReportCards = (notes) => {
   return [...subjects.values()].map((subject) => {
     const [one, two, three] = subject.trimestres;
     const complete = [one, two, three].every((value) => value !== null && value !== undefined);
-    const total = complete ? Number(one) + Number(two) + Number(three) : null;
+    const total = complete ? Number(((Number(one) + Number(two) + Number(three)) / 3).toFixed(2)) : null;
     const state = subject.estadoMateria && subject.estadoMateria !== "CURSANDO"
       ? subject.estadoMateria
-      : total === null ? "CURSANDO" : total >= 18 ? "APROBADA" : "A_RECUPERACION";
+      : total === null ? "CURSANDO" : total >= 6 ? "APROBADA" : "DESAPROBADA";
     return { ...subject, total, state };
   });
 };
@@ -192,7 +192,7 @@ const UserDetailDrawer = ({ usuario, cycleId, selectedCycle, onClose, onEdit, on
               <thead className="bg-canvas text-xs font-bold uppercase text-slate-500">
                 <tr>
                   <th className="px-4 py-3">Materia</th><th className="px-3 py-3">T1</th><th className="px-3 py-3">T2</th>
-                  <th className="px-3 py-3">T3</th><th className="px-3 py-3">Total</th><th className="px-4 py-3">Estado</th>
+                  <th className="px-3 py-3">T3</th><th className="px-3 py-3">Promedio</th><th className="px-4 py-3">Estado</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">

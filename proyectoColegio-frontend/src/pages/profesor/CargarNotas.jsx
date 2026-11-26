@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
-import { Loader2, Save, Check, Frown, AlertCircle, TrendingUp, Award, FileDown } from "lucide-react";
+import { Loader2, Save, Check, Frown, AlertCircle, TrendingUp, Award, FileDown, UserPlus } from "lucide-react";
 import {
   cargarNotaRecuperacion,
   getAsistenciasAlumno,
@@ -132,7 +133,7 @@ const RecuperacionAnualInput = ({
   }, [alumnoId, recuperacion]);
 
   if (puntajeFinal === null) return <span className="text-xs text-gray-400">Notas incompletas</span>;
-  if (puntajeFinal >= 18) return <span className="text-xs font-medium text-emerald-700">No requiere</span>;
+  if (puntajeFinal >= 6) return <span className="text-xs font-medium text-emerald-700">No requiere</span>;
   if (recuperacion !== null && recuperacion !== undefined) {
     return (
       <span className={`rounded-lg px-2 py-1 text-sm font-bold ${estadoMateria === "APROBADA_RECUPERACION" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
@@ -245,7 +246,8 @@ const CargarNotas = ({
         const resAlumnos = claseId
           ? await getAlumnosDeClase(claseId)
           : await getAlumnosDeMateria(materiaId, cicloLectivoId);
-        setAlumnos(resAlumnos.data || []);
+        const listaAlumnos = Array.isArray(resAlumnos.data) ? resAlumnos.data : [];
+        setAlumnos(listaAlumnos.filter((alumno) => alumno.isActive !== false));
 
         const [t1, t2, t3] = await Promise.all([
             getNotasDeMateria(materiaId, "1", cicloLectivoId),
@@ -301,7 +303,16 @@ const CargarNotas = ({
               <Frown className="w-10 h-10 text-gray-400"/>
             </div>
             <h3 className="text-xl font-bold text-gray-900 mb-2">Sin alumnos inscritos</h3>
-            <p className="text-gray-500">No hay alumnos registrados en esta materia actualmente.</p>
+            <p className="text-gray-500">No hay alumnos inscritos en esta clase todavía. Inscribe alumnos para habilitar la planilla de notas.</p>
+            {allowBoletinExport && claseId && (
+              <Link
+                to={`/admin/clases/${claseId}/gestionar`}
+                className="mt-5 inline-flex items-center gap-2 rounded-xl bg-secondary px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-800"
+              >
+                <UserPlus size={16} />
+                Inscribir alumnos en esta clase
+              </Link>
+            )}
         </div>
     );
   }
@@ -314,9 +325,11 @@ const CargarNotas = ({
     if (calificaciones.some((nota) => nota === null || nota === undefined)) {
       return { puntajeFinal: null, estadoMateria: "INCOMPLETA" };
     }
-    const puntajeFinal = calificaciones.reduce((sum, nota) => sum + Number(nota), 0);
+    const puntajeFinal = Number(
+      (calificaciones.reduce((sum, nota) => sum + Number(nota), 0) / 3).toFixed(2),
+    );
     const recuperacion = recuperaciones[alumnoId]?.notaRecuperacion;
-    if (puntajeFinal >= 18) return { puntajeFinal, estadoMateria: "APROBADA" };
+    if (puntajeFinal >= 6) return { puntajeFinal, estadoMateria: "APROBADA" };
     if (recuperacion !== null && recuperacion !== undefined) {
       return {
         puntajeFinal,
@@ -325,7 +338,7 @@ const CargarNotas = ({
     }
     return {
       puntajeFinal,
-      estadoMateria: cicloEstado === "CERRADO" ? "DESAPROBADA" : "A_RECUPERACION",
+      estadoMateria: cicloEstado === "RECUPERACION" ? "A_RECUPERACION" : "DESAPROBADA",
     };
   };
   const estadoClase = (estado) => ({
@@ -450,7 +463,7 @@ const CargarNotas = ({
           <AlertCircle className="w-4 h-4" />
           <span className="font-medium">
             {cicloEstado === "RECUPERACION"
-              ? "La recuperación anual se habilita únicamente con tres notas trimestrales completas y suma menor a 18."
+              ? "La recuperación anual se habilita únicamente con tres notas trimestrales completas y promedio anual menor a 6."
               : <>Ingresa las notas y presiona <Save className="w-3.5 h-3.5 inline" /> para guardar cada calificación.</>}
           </span>
         </div>
@@ -486,7 +499,7 @@ const CargarNotas = ({
                       Nota Final
                     </th>
                     <th className="px-4 py-4 text-center text-xs font-bold text-indigo-700 uppercase tracking-wider bg-indigo-50 border-l-2 border-indigo-200">
-                      Puntaje final anual
+                      Promedio anual
                     </th>
                 </tr>
             </thead>

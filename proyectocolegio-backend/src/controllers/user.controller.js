@@ -34,14 +34,20 @@ const handleDuplicate = (res, error) => {
   return res.status(500).json({ msg: "Error del servidor al gestionar usuarios." });
 };
 
+const cleanDni = (value) => String(value ?? "").replace(/\D/g, "");
+const isValidDni = (value) => /^\d{7,8}$/.test(value);
+
 export const adminCrearUsuario = async (req, res) => {
   const { nombre, email, dni, rol, anio, division } = req.body;
   const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
-  const normalizedDni = typeof dni === "string" ? dni.trim() : "";
+  const normalizedDni = cleanDni(dni);
   const normalizedDivision = typeof division === "string" ? division.trim().toUpperCase() : "";
 
   if (!nombre?.trim() || !normalizedEmail || !normalizedDni || !rol) {
     return res.status(400).json({ msg: "Nombre, email, DNI y rol son obligatorios." });
+  }
+  if (!isValidDni(normalizedDni)) {
+    return res.status(400).json({ msg: "El DNI debe contener entre 7 y 8 dígitos numéricos." });
   }
   if (!["admin", "profesor", "alumno"].includes(rol)) {
     return res.status(400).json({ msg: "Rol inválido." });
@@ -100,6 +106,29 @@ export const adminCrearUsuario = async (req, res) => {
       `SELECT ${userFields} FROM users WHERE email = :email LIMIT 1`,
       { replacements: { email: normalizedEmail }, type: QueryTypes.SELECT },
     );
+
+    if (rol === "alumno" && usuario?._id) {
+      const [activeCycle] = await sequelize.query(
+        "SELECT HEX(id) AS id FROM ciclos_lectivos WHERE estado IN ('ACTIVO', 'RECUPERACION') LIMIT 1",
+        { type: QueryTypes.SELECT },
+      );
+      if (activeCycle?.id) {
+        await sequelize.query(
+          `INSERT IGNORE INTO inscripciones_ciclo
+             (id, alumno_id, ciclo_lectivo_id, nivel, division, estado_academico, cantidad_desaprobadas)
+           VALUES
+             (UNHEX(REPLACE(UUID(), '-', '')), UNHEX(:alumnoId), UNHEX(:cycleId), :nivel, :division, 'CURSANDO', 0)`,
+          {
+            replacements: {
+              alumnoId: usuario._id,
+              cycleId: activeCycle.id,
+              nivel: Number(anio),
+              division: normalizedDivision,
+            },
+          },
+        );
+      }
+    }
 
     return res.status(201).json({
       msg: "Usuario creado exitosamente.",
@@ -304,7 +333,12 @@ export const updateUser = async (req, res) => {
   }
   if (typeof updates.nombre === "string") updates.nombre = updates.nombre.trim();
   if (typeof updates.email === "string") updates.email = updates.email.trim().toLowerCase();
-  if (typeof updates.dni === "string") updates.dni = updates.dni.trim();
+  if (updates.dni !== undefined) {
+    updates.dni = cleanDni(updates.dni);
+    if (!isValidDni(updates.dni)) {
+      return res.status(400).json({ msg: "El DNI debe contener entre 7 y 8 dígitos numéricos." });
+    }
+  }
   if (typeof updates.division === "string") updates.division = updates.division.trim().toUpperCase();
   if (updates.anio !== undefined) updates.anio = Number(updates.anio);
   if (updates.isActive !== undefined) updates.isActive = Boolean(updates.isActive);
@@ -337,6 +371,55 @@ export const updateUser = async (req, res) => {
       `SELECT ${userFields} FROM users WHERE id = UNHEX(:id) LIMIT 1`,
       { replacements: { id }, type: QueryTypes.SELECT },
     );
+
+    if (usuario?.rol === "alumno" && usuario.anio && usuario.division) {
+      const [activeCycle] = await sequelize.query(
+        "SELECT HEX(id) AS id FROM ciclos_lectivos WHERE estado IN ('ACTIVO', 'RECUPERACION') LIMIT 1",
+        { type: QueryTypes.SELECT },
+      );
+      if (activeCycle?.id) {
+        const [existingEnrollment] = await sequelize.query(
+          `SELECT HEX(id) AS id, estado_academico AS estado
+           FROM inscripciones_ciclo
+           WHERE alumno_id = UNHEX(:alumnoId) AND ciclo_lectivo_id = UNHEX(:cycleId)
+           LIMIT 1`,
+          {
+            replacements: { alumnoId: id, cycleId: activeCycle.id },
+            type: QueryTypes.SELECT,
+          },
+        );
+        if (!existingEnrollment) {
+          await sequelize.query(
+            `INSERT IGNORE INTO inscripciones_ciclo
+               (id, alumno_id, ciclo_lectivo_id, nivel, division, estado_academico, cantidad_desaprobadas)
+             VALUES
+               (UNHEX(REPLACE(UUID(), '-', '')), UNHEX(:alumnoId), UNHEX(:cycleId), :nivel, :division, 'CURSANDO', 0)`,
+            {
+              replacements: {
+                alumnoId: id,
+                cycleId: activeCycle.id,
+                nivel: Number(usuario.anio),
+                division: String(usuario.division).trim().toUpperCase(),
+              },
+            },
+          );
+        } else if (existingEnrollment.estado === "CURSANDO") {
+          await sequelize.query(
+            `UPDATE inscripciones_ciclo
+             SET nivel = :nivel, division = :division, updated_at = CURRENT_TIMESTAMP
+             WHERE id = UNHEX(:enrollmentId)`,
+            {
+              replacements: {
+                nivel: Number(usuario.anio),
+                division: String(usuario.division).trim().toUpperCase(),
+                enrollmentId: existingEnrollment.id,
+              },
+            },
+          );
+        }
+      }
+    }
+
     return res.json(usuario);
   } catch (error) {
     return handleDuplicate(res, error);

@@ -4,8 +4,9 @@ export const calculateSubjectResult = ({ trimestre1, trimestre2, trimestre3, not
     return { puntajeFinal: null, estadoMateria: "INCOMPLETA", incompleta: true };
   }
 
-  const puntajeFinal = grades.reduce((sum, grade) => sum + Number(grade), 0);
-  if (puntajeFinal >= 18) return { puntajeFinal, estadoMateria: "APROBADA", incompleta: false };
+  const sum = grades.reduce((acc, grade) => acc + Number(grade), 0);
+  const puntajeFinal = Number((sum / 3).toFixed(2));
+  if (puntajeFinal >= 6) return { puntajeFinal, estadoMateria: "APROBADA", incompleta: false };
   if (notaRecuperacion !== null && notaRecuperacion !== undefined && Number(notaRecuperacion) >= 6) {
     return { puntajeFinal, estadoMateria: "APROBADA_RECUPERACION", incompleta: false };
   }

@@ -80,17 +80,17 @@ export const crearPlanillaNotasCurso = ({
     const t2 = gradeFor(notasData, "2", alumno._id);
     const t3 = gradeFor(notasData, "3", alumno._id);
     const completo = [t1, t2, t3].every((nota) => nota !== null);
-    const puntajeFinal = completo ? t1 + t2 + t3 : null;
+    const puntajeFinal = completo ? Number(((t1 + t2 + t3) / 3).toFixed(2)) : null;
     const recovery = recuperaciones[alumno._id]?.notaRecuperacion;
     const notaRecuperacion = asNumberOrNull(recovery);
     const estado = puntajeFinal === null
       ? "INCOMPLETA"
-      : puntajeFinal >= 18
+      : puntajeFinal >= 6
         ? "APROBADA"
         : recuperaciones[alumno._id]?.estadoMateria
           || (notaRecuperacion !== null
             ? notaRecuperacion >= 6 ? "APROBADA_RECUPERACION" : "DESAPROBADA"
-            : cicloEstado === "CERRADO" ? "DESAPROBADA" : "A_RECUPERACION");
+            : cicloEstado === "RECUPERACION" ? "A_RECUPERACION" : "DESAPROBADA");
 
     return {
       numero: index + 1,
@@ -123,12 +123,12 @@ export const crearPlanillaNotasCurso = ({
       { titulo: "T2", clave: "t2", ancho: 12, alineacion: "center" },
       { titulo: "T3", clave: "t3", ancho: 12, alineacion: "center" },
       {
-        titulo: "Suma",
+        titulo: "Promedio",
         clave: "puntajeFinal",
         ancho: 13,
         alineacion: "center",
-        formula: (rowNumber) => `IF(COUNT(D${rowNumber}:F${rowNumber})<3,"",SUM(D${rowNumber}:F${rowNumber}))`,
-        formatoCondicional: { valor: 18 },
+        formula: (rowNumber) => `IF(COUNT(D${rowNumber}:F${rowNumber})<3,"",AVERAGE(D${rowNumber}:F${rowNumber}))`,
+        formatoCondicional: { valor: 6 },
       },
       { titulo: "Recup.", clave: "recuperacion", ancho: 14, alineacion: "center" },
       { titulo: "Condición", clave: "condicion", ancho: 23 },

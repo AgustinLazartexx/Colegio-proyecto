@@ -10,6 +10,7 @@ import {
   Edit3,
   Filter,
   GraduationCap,
+  Info,
   Loader2,
   Mail,
   Plus,
@@ -100,6 +101,7 @@ const UsuariosAdmin = () => {
   const [editingUserId, setEditingUserId] = useState(null);
   const [savingUser, setSavingUser] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [dniError, setDniError] = useState("");
   const [selectedUser, setSelectedUser] = useState(null);
   const [selectedFeeStudent, setSelectedFeeStudent] = useState(null);
 
@@ -225,6 +227,7 @@ const UsuariosAdmin = () => {
 
   const openNewUserForm = () => {
     setEditingUserId(null);
+    setDniError("");
     setForm({ ...emptyForm, rol: activeRole });
     setShowUserForm(true);
   };
@@ -232,11 +235,12 @@ const UsuariosAdmin = () => {
   const openEditUserForm = (user) => {
     setSelectedUser(null);
     setEditingUserId(user._id);
+    setDniError("");
     setForm({
       nombre: user.nombre || "",
       email: user.email || "",
       rol: user.rol || "alumno",
-      dni: user.dni || "",
+      dni: String(user.dni || "").replace(/\D/g, ""),
       anio: user.anio || "",
       division: user.division || "",
     });
@@ -245,12 +249,19 @@ const UsuariosAdmin = () => {
 
   const handleSaveUser = async (event) => {
     event.preventDefault();
+    const cleanedDni = String(form.dni ?? "").replace(/\D/g, "");
+    if (!/^\d{7,8}$/.test(cleanedDni)) {
+      setDniError("Ingresa un DNI válido de 7 u 8 dígitos (sin puntos ni espacios).");
+      notify("error", "El DNI debe tener entre 7 y 8 dígitos numéricos.");
+      return;
+    }
+    setDniError("");
     setSavingUser(true);
     const payload = {
       nombre: form.nombre.trim(),
       email: form.email.trim(),
       rol: form.rol,
-      dni: form.dni.trim(),
+      dni: cleanedDni,
     };
     if (form.rol === "alumno") {
       payload.anio = Number(form.anio);
@@ -263,7 +274,7 @@ const UsuariosAdmin = () => {
         notify("success", "Los datos del usuario se actualizaron.");
       } else {
         await crearUsuario(payload);
-        notify("success", "El usuario se creó correctamente.");
+        notify("success", "Usuario creado. Su contraseña inicial es su número de DNI.");
       }
       setShowUserForm(false);
       setEditingUserId(null);
@@ -700,14 +711,43 @@ const UsuariosAdmin = () => {
                   <input value={form.nombre} onChange={(event) => setForm((current) => ({ ...current, nombre: event.target.value }))} required className="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50" />
                 </label>
                 <label className="block text-sm font-medium text-slate-700">
-                  DNI
-                  <input value={form.dni} onChange={(event) => setForm((current) => ({ ...current, dni: event.target.value }))} required className="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50" />
+                  DNI <span className="text-red-500">*</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={8}
+                    pattern="\d{7,8}"
+                    placeholder="Ej: 40123456"
+                    value={form.dni}
+                    onChange={(event) => {
+                      const digits = event.target.value.replace(/\D/g, "").slice(0, 8);
+                      setForm((current) => ({ ...current, dni: digits }));
+                      if (dniError && /^\d{7,8}$/.test(digits)) setDniError("");
+                    }}
+                    required
+                    aria-invalid={Boolean(dniError)}
+                    className={`mt-1.5 w-full rounded-xl border px-3 py-2.5 outline-none focus:ring-4 ${
+                      dniError
+                        ? "border-red-300 focus:border-red-400 focus:ring-red-50"
+                        : "border-slate-200 focus:border-blue-300 focus:ring-blue-50"
+                    }`}
+                  />
+                  {dniError && <span className="mt-1 block text-xs font-medium text-red-600">{dniError}</span>}
                 </label>
               </div>
               <label className="block text-sm font-medium text-slate-700">
                 Correo electrónico
                 <input type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} required className="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50" />
               </label>
+
+              {!editingUserId && (
+                <div className="flex items-start gap-2.5 rounded-xl border border-blue-100 bg-blue-50/70 px-3.5 py-3 text-xs text-navy" role="note">
+                  <Info size={16} className="mt-0.5 shrink-0 text-secondary" aria-hidden="true" />
+                  <p>
+                    La contraseña inicial de acceso será el número de DNI del usuario (sin puntos ni espacios).
+                  </p>
+                </div>
+              )}
 
               {form.rol === "alumno" && (
                 <div className="grid gap-4 rounded-xl bg-canvas p-4 sm:grid-cols-2">

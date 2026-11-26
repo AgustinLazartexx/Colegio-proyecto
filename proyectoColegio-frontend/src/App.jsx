@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { ToastContainer } from "react-toastify";
 import { useAuth } from "./context/AuthContext";
 import "react-toastify/dist/ReactToastify.css";
@@ -22,19 +22,14 @@ import AdminDashboard from "./pages/AdminDashboard";
 
 // Páginas del profesor
 import InicioProfesor from "./pages/profesor/InicioProfesor";
-import Clases from "./pages/profesor/Clases"; 
-import Mensajes from "./pages/profesor/Mensajes";
-import EntregasTarea from "./pages/profesor/EntregasTarea";
-import CargarTarea from "./pages/profesor/CargarTarea";
-import VerAlumnosMateria from "./pages/profesor/VerAlumnosMateria";
-import VerEntregas from "./pages/profesor/VerEntregas";
+import Clases from "./pages/profesor/Clases";
+import EspacioMateria from "./pages/profesor/EspacioMateria";
 import CrudAnunciosProfesor from "./pages/profesor/CrudAnunciosProfesor";
 import TomarAsistencia from "./pages/profesor/TomarAsistencia";
 import PaginaSubirNotas from "./pages/profesor/PaginaSubirNotas"; 
 
 // Páginas del alumno
 import InicioAlumno from "./pages/alumno/InicioAlumno";
-import InscripcionMaterias from "./pages/alumno/InscripcionMaterias";
 import Materias from "./pages/alumno/Materias";
 import TareasAlumno from './pages/alumno/TareasAlumno';
 import AsistenciasAlumno from "./pages/alumno/AsistenciasAlumno";
@@ -46,11 +41,8 @@ import UsuariosAdmin from "./pages/admin/UsuariosAdmin";
 import MateriasAdmin from "./pages/admin/MateriasAdmin";
 import ClasesAdmin from "./pages/admin/ClasesAdmin";
 import DashboardAdmin from "./pages/admin/DashboardAdmin";
-import TomarAsistenciaAdmin from "./pages/admin/TomarAsistenciaAdmin";
-import VerAsistenciasAdmin from "./pages/admin/VerAsistenciasAdmin";
-import AdminAuditoriaNotas from "./pages/admin/AdminPanelNotas";
+import AsistenciasAdmin from "./pages/admin/AsistenciasAdmin";
 import AdminGestionNotas from "./pages/admin/AdminGestionNotas";
-import AdminGestionAlumnosClase from "./pages/admin/AdminGestionAlumnosClase";
 import CiclosLectivosAdmin from "./pages/admin/CiclosLectivosAdmin";
 import CuotasResumenAdmin from "./pages/admin/CuotasResumenAdmin";
 import AlumnosRiesgoAdmin from "./pages/admin/AlumnosRiesgoAdmin";
@@ -96,24 +88,26 @@ function App() {
         {/* Rutas ALUMNO */}
         <Route path="/alumno/*" element={<PrivateRoute allowedRoles={["alumno"]}><AlumnoDashboard /></PrivateRoute>}>
           <Route index element={<InicioAlumno />} />
-          <Route path="materias" element={<Materias />} />
-          <Route path="inscripcion" element={<InscripcionMaterias />} />
+          <Route path="materias" element={<Materias defaultTab="materias" />} />
+          <Route path="inscripcion" element={<Materias defaultTab="horario" />} />
           <Route path="tareas" element={<TareasAlumno />} />
           <Route path="asistencias" element={<AsistenciasAlumno />} />
           <Route path="boletin" element={<Boletin />} />
           <Route path="anuncios" element={<AnunciosAlumno />} />
-          
         </Route>
 
         {/* Rutas PROFESOR */}
         <Route path="/profesor/*" element={<PrivateRoute allowedRoles={["profesor"]}><ProfesorDashboard /></PrivateRoute>}>
           <Route index element={<InicioProfesor />} />
           <Route path="Clases" element={<Clases />} />
-          <Route path="mensajes" element={<Mensajes />} />
-          <Route path="tarea/:tareaId/entregas" element={<EntregasTarea />} />
-          <Route path="cargar-tarea" element={<CargarTarea />} />
-          <Route path="ver-alumnos" element={<VerAlumnosMateria />} />
-          <Route path="verEntregas" element={<VerEntregas />} />
+          <Route path="Clases/:claseId" element={<EspacioMateria />} />
+          {/* Rutas legacy redirigidas al flujo unificado por materia */}
+          <Route path="mensajes" element={<Navigate to="/profesor/Clases" replace />} />
+          <Route path="tarea/:tareaId/entregas" element={<Navigate to="/profesor/Clases" replace />} />
+          <Route path="cargar-tarea" element={<Navigate to="/profesor/Clases" replace />} />
+          <Route path="ver-alumnos" element={<Navigate to="/profesor/Clases" replace />} />
+          <Route path="verEntregas" element={<Navigate to="/profesor/Clases" replace />} />
+          {/* Vistas globales preservadas por compatibilidad hasta confirmación de limpieza */}
           <Route path="crud-anuncios" element={<CrudAnunciosProfesor />} />
           <Route path="cargar-notas" element={<PaginaSubirNotas />} />
           <Route path="tomar-asistencia" element={<TomarAsistencia />} />
@@ -128,16 +122,18 @@ function App() {
           <Route path="riesgo-academico" element={<AlumnosRiesgoAdmin />} />
           <Route path="materias" element={<MateriasAdmin />} />
           <Route path="ciclos" element={<CiclosLectivosAdmin />} />
+          {/* Clases e Inscripciones unificadas con SlideOverDrawer */}
           <Route path="CrearClases" element={<ClasesAdmin />} />
-          
-          <Route path="AsistenciaGestion" element={<TomarAsistenciaAdmin />} />
-          <Route path="VerAsistencias" element={<VerAsistenciasAdmin />} />
-          <Route path="AuditoriaNotas" element={<AdminAuditoriaNotas />} />
-          <Route path="GestionNotas" element={<AdminGestionNotas />} />
-
-          {/* === CORRECCIÓN DE LA RUTA === */}
-          <Route path="clasesAdminAlumnos" element={<AdminGestionAlumnosClase />} /> {/* Esta usa el componente visual */}
-          <Route path="clases/:claseId/gestionar" element={<AdminGestionAlumnosClase />} />
+          <Route path="clases" element={<ClasesAdmin />} />
+          <Route path="clasesAdminAlumnos" element={<ClasesAdmin />} />
+          <Route path="clases/:claseId/gestionar" element={<ClasesAdmin />} />
+          {/* Asistencias unificadas (Registrar / Historial) */}
+          <Route path="asistencias" element={<AsistenciasAdmin defaultTab="registrar" />} />
+          <Route path="AsistenciaGestion" element={<AsistenciasAdmin defaultTab="registrar" />} />
+          <Route path="VerAsistencias" element={<AsistenciasAdmin defaultTab="historial" />} />
+          {/* Notas y Auditoría unificadas */}
+          <Route path="GestionNotas" element={<AdminGestionNotas defaultTab="planilla" />} />
+          <Route path="AuditoriaNotas" element={<AdminGestionNotas defaultTab="auditoria" />} />
         </Route>
       </Routes>
     </>

@@ -26,8 +26,8 @@ const drawHeader = (pdf, documento, logo) => {
   pdf.setFontSize(8);
   pdf.text(documento.subtitulo, pageWidth / 2, 18, { align: "center" });
   pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(10);
-  pdf.text(documento.titulo, pageWidth / 2, 26, { align: "center" });
+  pdf.setFontSize(9.5);
+  pdf.text(documento.titulo, pageWidth / 2, 26, { align: "center", maxWidth: pageWidth - 68 });
 
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(7);
@@ -53,18 +53,23 @@ const drawContext = (pdf, contexto, pageWidth) => {
     const x = margin + column * (cellWidth + gap);
     const y = 38 + row * (cellHeight + 2);
     pdf.setFillColor(`#${coloresPlanilla.canvas}`);
-    pdf.roundedRect(x, y, cellWidth, cellHeight, 1, 1, "F");
-    pdf.setFontSize(7);
-    pdf.setTextColor(`#${coloresPlanilla.texto}`);
+    pdf.setDrawColor(`#${coloresPlanilla.borde}`);
+    pdf.setLineWidth(0.2);
+    pdf.roundedRect(x, y, cellWidth, cellHeight, 1, 1, "FD");
+    pdf.setFontSize(7.2);
+    pdf.setTextColor(`#${coloresPlanilla.navy}`);
     pdf.setFont("helvetica", "bold");
     const label = `${item.etiqueta}: `;
-    pdf.text(label, x + 2, y + 4.5);
+    pdf.text(label, x + 2.2, y + 4.6);
     const labelWidth = pdf.getTextWidth(label) + 1;
+    pdf.setTextColor(`#${coloresPlanilla.texto}`);
     pdf.setFont("helvetica", "normal");
-    pdf.text(textoCelda(item.valor), x + 2 + labelWidth, y + 4.5, { maxWidth: cellWidth - labelWidth - 4 });
+    pdf.text(textoCelda(item.valor), x + 2.2 + labelWidth, y + 4.6, {
+      maxWidth: Math.max(10, cellWidth - labelWidth - 4.4),
+    });
   });
 
-  return 38 + rows * (cellHeight + 2) + 2;
+  return 38 + rows * (cellHeight + 2) + 3;
 };
 
 const drawSignatures = (pdf, firmas, startY) => {
@@ -73,31 +78,31 @@ const drawSignatures = (pdf, firmas, startY) => {
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
   const margin = 14;
-  const columns = 3;
+  const columns = Math.min(3, firmas.length);
   const gap = 8;
   const cellWidth = (pageWidth - margin * 2 - gap * (columns - 1)) / columns;
   const rowCount = Math.ceil(firmas.length / columns);
-  const blockHeight = rowCount * 19;
-  let y = startY + 9;
+  const blockHeight = rowCount * 22;
+  let y = startY + 14;
   if (y + blockHeight > pageHeight - 23) {
     pdf.addPage();
-    y = 45;
+    y = 50;
   }
 
   firmas.forEach((firma, index) => {
     const column = index % columns;
     const row = Math.floor(index / columns);
     const x = margin + column * (cellWidth + gap);
-    const lineY = y + row * 19;
+    const lineY = y + row * 22;
     pdf.setDrawColor(`#${coloresPlanilla.borde}`);
     pdf.setLineWidth(0.35);
     for (let point = 0; point < cellWidth; point += 2.2) {
       pdf.line(x + point, lineY, Math.min(x + point + 0.8, x + cellWidth), lineY);
     }
-    pdf.setFont("helvetica", "normal");
-    pdf.setFontSize(7);
-    pdf.setTextColor(`#${coloresPlanilla.texto}`);
-    pdf.text(firma, x + cellWidth / 2, lineY + 4, { align: "center", maxWidth: cellWidth });
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(7.5);
+    pdf.setTextColor(`#${coloresPlanilla.navy}`);
+    pdf.text(firma, x + cellWidth / 2, lineY + 4.5, { align: "center", maxWidth: cellWidth });
   });
 };
 
@@ -112,11 +117,18 @@ export const exportarPDF = async (configuracion) => {
     compress: true,
   });
   const startY = drawContext(pdf, documento.contexto, pdf.internal.pageSize.getWidth());
+  const headFillColor = documento.estiloEncabezadoTabla === "oscuro"
+    ? [16, 35, 63]
+    : [25, 60, 184];
 
   autoTable(pdf, {
     head: [columnas.map((columna) => columna.titulo)],
     body: documento.filas.map((fila) =>
-      columnas.map((columna, index) => textoCelda(obtenerValorCelda(fila, columna, index))),
+      columnas.map((columna, index) => {
+        const value = obtenerValorCelda(fila, columna, index);
+        if (fila?.esResumen && (value === "" || value === null || value === undefined)) return "";
+        return textoCelda(value);
+      }),
     ),
     startY,
     margin: { top: 39, right: 14, bottom: 23, left: 14 },
@@ -124,14 +136,14 @@ export const exportarPDF = async (configuracion) => {
     styles: {
       font: "helvetica",
       fontSize: 8,
-      cellPadding: 2,
+      cellPadding: 2.2,
       textColor: [52, 64, 84],
       lineColor: [215, 223, 234],
       lineWidth: 0.15,
       overflow: "linebreak",
     },
     headStyles: {
-      fillColor: [25, 60, 184],
+      fillColor: headFillColor,
       textColor: [255, 255, 255],
       fontStyle: "bold",
     },
@@ -143,17 +155,25 @@ export const exportarPDF = async (configuracion) => {
         ...(columna.ancho ? { cellWidth: columna.ancho } : {}),
       },
     ])),
+    didParseCell: (data) => {
+      if (data.section === "body" && documento.filas[data.row.index]?.esResumen) {
+        data.cell.styles.fillColor = [235, 242, 255];
+        data.cell.styles.textColor = [16, 35, 63];
+        data.cell.styles.fontStyle = "bold";
+      }
+    },
   });
 
   let contentY = pdf.lastAutoTable?.finalY || startY;
   for (const section of documento.secciones) {
     if (!section.columnas.length && !section.contenido && section.tipo !== "observaciones") continue;
+    const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    if (contentY + 15 > pageHeight - 23) {
+    if (contentY + 18 > pageHeight - 23) {
       pdf.addPage();
       contentY = 43;
     } else {
-      contentY += 5;
+      contentY += 6;
     }
 
     pdf.setFont("helvetica", "bold");
@@ -173,13 +193,13 @@ export const exportarPDF = async (configuracion) => {
         theme: "grid",
         styles: {
           font: "helvetica",
-          fontSize: 7,
+          fontSize: 7.5,
           cellPadding: 1.8,
           textColor: [52, 64, 84],
           lineColor: [215, 223, 234],
           lineWidth: 0.15,
         },
-        headStyles: { fillColor: [25, 60, 184], textColor: [255, 255, 255], fontStyle: "bold" },
+        headStyles: { fillColor: headFillColor, textColor: [255, 255, 255], fontStyle: "bold" },
         alternateRowStyles: { fillColor: [247, 248, 252] },
         columnStyles: Object.fromEntries(section.columnas.map((columna, index) => [
           index,
@@ -189,28 +209,44 @@ export const exportarPDF = async (configuracion) => {
       contentY = pdf.lastAutoTable?.finalY || contentY;
     } else if (section.tipo === "observaciones") {
       const boxHeight = 18;
-      if (contentY + boxHeight > pdf.internal.pageSize.getHeight() - 23) {
+      if (contentY + boxHeight > pageHeight - 23) {
         pdf.addPage();
         contentY = 43;
       }
       pdf.setDrawColor(`#${coloresPlanilla.borde}`);
       pdf.setLineWidth(0.25);
-      pdf.rect(14, contentY, pdf.internal.pageSize.getWidth() - 28, boxHeight);
+      pdf.rect(14, contentY, pageWidth - 28, boxHeight);
       if (section.contenido) {
         pdf.setFont("helvetica", "normal");
         pdf.setFontSize(8);
         pdf.setTextColor(`#${coloresPlanilla.texto}`);
-        pdf.text(section.contenido, 16, contentY + 5, { maxWidth: pdf.internal.pageSize.getWidth() - 32 });
+        pdf.text(section.contenido, 16, contentY + 5, { maxWidth: pageWidth - 32 });
       }
+      contentY += boxHeight;
+    } else if (section.tipo === "parrafo") {
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(8.2);
+      const lines = pdf.splitTextToSize(String(section.contenido || ""), pageWidth - 34);
+      const lineHeight = 4.2;
+      const boxHeight = Math.max(12, lines.length * lineHeight + 6);
+      if (contentY + boxHeight > pageHeight - 23) {
+        pdf.addPage();
+        contentY = 43;
+      }
+      pdf.setFillColor(`#${coloresPlanilla.canvas}`);
+      pdf.setDrawColor(`#${coloresPlanilla.borde}`);
+      pdf.setLineWidth(0.25);
+      pdf.roundedRect(14, contentY, pageWidth - 28, boxHeight, 1.5, 1.5, "FD");
+      pdf.setTextColor(`#${coloresPlanilla.texto}`);
+      pdf.text(lines, 17, contentY + 5.2);
       contentY += boxHeight;
     } else {
       pdf.setFont("helvetica", "normal");
       pdf.setFontSize(8);
+      const lines = pdf.splitTextToSize(String(section.contenido || ""), pageWidth - 28);
       pdf.setTextColor(`#${coloresPlanilla.texto}`);
-      pdf.text(section.contenido, 14, contentY + 3, {
-        maxWidth: pdf.internal.pageSize.getWidth() - 28,
-      });
-      contentY += 7;
+      pdf.text(lines, 14, contentY + 3.5);
+      contentY += Math.max(7, lines.length * 4 + 3);
     }
   }
 

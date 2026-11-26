@@ -87,7 +87,7 @@ const PaginaSubirNotas = () => {
         </div>
         {ciclo?.estado === "RECUPERACION" && (
           <div className="mb-6 rounded-lg border border-violet-300 bg-violet-50 px-4 py-3 text-sm font-medium text-violet-900" role="status">
-            Ciclo en recuperación: las notas trimestrales están bloqueadas; solo se puede cargar recuperación anual en materias con puntaje menor a 18.
+            Ciclo en recuperación: las notas trimestrales están bloqueadas; solo se puede cargar recuperación anual en materias con promedio menor a 6.
           </div>
         )}
       </div>

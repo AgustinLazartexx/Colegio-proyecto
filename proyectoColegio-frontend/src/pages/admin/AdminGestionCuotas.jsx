@@ -1,59 +1,96 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { X, Plus, DollarSign, CheckCircle, AlertCircle, Calendar } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { AlertCircle, CheckCircle2, Loader2, Plus } from "lucide-react";
 import { toast } from "react-toastify";
-import { getCuotasDeAlumno, generarCuota, registrarPagoCuota, marcarCuotaVencida } from "../../api/api";
-import CycleSelector, { CycleStatusNotice } from "../../components/admin/CycleSelector";
+import {
+  generarCuota,
+  getCuotasDeAlumno,
+  marcarCuotaVencida,
+  registrarPagoCuota,
+} from "../../api/api";
+import { CycleStatusNotice } from "../../components/admin/CycleSelector";
+import SlideOverDrawer from "../../components/admin/SlideOverDrawer";
 import { useAcademicCycles } from "../../hooks/useAcademicCycles";
+
+const currency = new Intl.NumberFormat("es-AR", {
+  style: "currency",
+  currency: "ARS",
+  maximumFractionDigits: 2,
+});
 
 const formatDate = (value) => {
   if (!value) return "—";
-  const date = typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
-    ? new Date(`${value}T00:00:00`)
-    : new Date(value);
+  const date =
+    typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
+      ? new Date(`${value}T00:00:00`)
+      : new Date(value);
   return Number.isNaN(date.valueOf()) ? "—" : date.toLocaleDateString("es-AR");
 };
 
 const AdminGestionCuotas = ({ alumno, onClose }) => {
-  const { cycles, cycleId, setCycleId, selectedCycle, loadingCycles } = useAcademicCycles();
+  const { cycleId, selectedCycle } = useAcademicCycles();
   const [cuotas, setCuotas] = useState([]);
   const [loading, setLoading] = useState(true);
-  
-  // Estado para el formulario de nueva cuota
+  const [submitting, setSubmitting] = useState(false);
+
   const [nuevaCuota, setNuevaCuota] = useState({
     mes: new Date().getMonth() + 1,
     anio: new Date().getFullYear(),
     monto: "",
-    fechaVencimiento: ""
+    fechaVencimiento: "",
   });
 
+  const canEdit = ["ACTIVO", "RECUPERACION"].includes(selectedCycle?.estado);
+
   const cargarCuotas = useCallback(async () => {
-    if (!cycleId) return;
+    if (!cycleId || !alumno?._id) {
+      setCuotas([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const res = await getCuotasDeAlumno(alumno._id, { cicloLectivoId: cycleId });
-      setCuotas(res.data);
+      setCuotas(Array.isArray(res.data) ? res.data : []);
     } catch {
       toast.error("Error al cargar historial de cuotas");
     } finally {
       setLoading(false);
     }
-  }, [alumno, cycleId]);
+  }, [alumno?._id, cycleId]);
 
   useEffect(() => {
     cargarCuotas();
   }, [cargarCuotas]);
 
-  const handleGenerar = async (e) => {
-    e.preventDefault();
-    if (!canEdit) return;
-    if (!nuevaCuota.monto || !nuevaCuota.fechaVencimiento) return toast.warning("Complete monto y vencimiento");
+  const resumen = useMemo(() => {
+    return cuotas.reduce(
+      (acc, cuota) => {
+        const key = cuota.estado || "pendiente";
+        if (Object.hasOwn(acc, key)) acc[key] += 1;
+        return acc;
+      },
+      { pendiente: 0, vencido: 0, pagado: 0 },
+    );
+  }, [cuotas]);
 
+  const handleGenerar = async (event) => {
+    event.preventDefault();
+    if (!canEdit) return;
+    if (!nuevaCuota.monto || !nuevaCuota.fechaVencimiento) {
+      toast.warning("Complete monto y vencimiento");
+      return;
+    }
+
+    setSubmitting(true);
     try {
       await generarCuota({ ...nuevaCuota, alumnoId: alumno._id, cicloLectivoId: cycleId });
       toast.success("Cuota generada correctamente");
-      cargarCuotas(); // Recargar lista
+      setNuevaCuota((current) => ({ ...current, monto: "", fechaVencimiento: "" }));
+      cargarCuotas();
     } catch (error) {
       toast.error(error.response?.data?.msg || "Error al generar cuota");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -61,7 +98,7 @@ const AdminGestionCuotas = ({ alumno, onClose }) => {
     if (!canEdit) return;
     if (!window.confirm("¿Confirmar recepción del pago?")) return;
     try {
-      const res = await registrarPagoCuota(cuotaId, "efectivo"); // Podrías agregar un selector de método
+      const res = await registrarPagoCuota(cuotaId, "efectivo");
       toast.success(res.data.msg);
       cargarCuotas();
     } catch {
@@ -70,169 +107,205 @@ const AdminGestionCuotas = ({ alumno, onClose }) => {
   };
 
   const handleVencer = async (cuotaId) => {
-      if (!canEdit) return;
-      try {
-          await marcarCuotaVencida(cuotaId);
-          toast.info("Cuota marcada como vencida");
-          cargarCuotas();
-      } catch {
-          toast.error("Error al actualizar");
-      }
+    if (!canEdit) return;
+    try {
+      await marcarCuotaVencida(cuotaId);
+      toast.info("Cuota marcada como vencida");
+      cargarCuotas();
+    } catch {
+      toast.error("Error al actualizar");
+    }
   };
 
-  const canEdit = ["ACTIVO", "RECUPERACION"].includes(selectedCycle?.estado);
-
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-        
-        {/* HEADER */}
-        <div className="bg-gray-800 text-white p-6 flex justify-between items-center">
-          <div>
-            <h2 className="text-2xl font-bold flex items-center gap-2">
-              <DollarSign className="text-green-400"/> Gestión Financiera
-            </h2>
-            <p className="text-gray-300 mt-1">Alumno: <span className="font-bold text-white">{alumno.nombre}</span></p>
+    <SlideOverDrawer
+      title={`Cuotas · ${alumno?.nombre || "Alumno"}`}
+      description={
+        selectedCycle
+          ? `${selectedCycle.nombre} · ${selectedCycle.estado}`
+          : "Gestión financiera del alumno"
+      }
+      onClose={onClose}
+      width="max-w-2xl"
+    >
+      <div className="space-y-6 p-5 sm:p-7">
+        <CycleStatusNotice cycle={selectedCycle} />
+
+        {/* Resumen rápido del alumno */}
+        <div className="grid grid-cols-3 gap-3">
+          <div className="rounded-2xl border border-red-100 bg-red-50/70 p-3.5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-red-700">Vencidas</p>
+            <p className="mt-1 text-2xl font-bold text-red-800">{loading ? "—" : resumen.vencido}</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white transition">
-            <X size={28} />
-          </button>
+          <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-3.5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">Pendientes</p>
+            <p className="mt-1 text-2xl font-bold text-amber-900">{loading ? "—" : resumen.pendiente}</p>
+          </div>
+          <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3.5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Pagadas</p>
+            <p className="mt-1 text-2xl font-bold text-emerald-800">{loading ? "—" : resumen.pagado}</p>
+          </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto bg-gray-50 p-6">
-          <div className="mb-6 grid gap-2 md:grid-cols-[minmax(220px,1fr)_2fr] md:items-end">
-            <CycleSelector cycles={cycles} value={cycleId} onChange={setCycleId} disabled={loadingCycles} />
-            <CycleStatusNotice cycle={selectedCycle} />
-          </div>
-          <div className="flex flex-col gap-6 md:flex-row">
-          
-          {/* COLUMNA IZQ: Generar Nueva Cuota */}
-          <div className="space-y-6 md:w-1/3">
-            <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-200">
-              <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <Plus size={18} className="text-blue-600"/> Nueva Cuota
-              </h3>
-              <form onSubmit={handleGenerar} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Mes y Año</label>
-                  <div className="flex gap-2">
-                    <input 
-                      type="number" min="1" max="12" 
-                      value={nuevaCuota.mes}
-                      onChange={e => setNuevaCuota({...nuevaCuota, mes: e.target.value})}
-                      className="w-full border rounded p-2 text-sm"
-                      placeholder="Mes"
-                    />
-                    <input 
-                      type="number" min="2020" max="2030" 
-                      value={nuevaCuota.anio}
-                      onChange={e => setNuevaCuota({...nuevaCuota, anio: e.target.value})}
-                      className="w-full border rounded p-2 text-sm"
-                      placeholder="Año"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Monto ($)</label>
-                  <input 
-                    type="number" 
-                    value={nuevaCuota.monto}
-                    onChange={e => setNuevaCuota({...nuevaCuota, monto: e.target.value})}
-                    className="w-full border rounded p-2 text-sm"
-                    placeholder="Ej: 15000"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Vencimiento</label>
-                  <input 
-                    type="date" 
-                    value={nuevaCuota.fechaVencimiento}
-                    onChange={e => setNuevaCuota({...nuevaCuota, fechaVencimiento: e.target.value})}
-                    className="w-full border rounded p-2 text-sm"
-                  />
-                </div>
-
-                <button type="submit" disabled={!canEdit} className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition font-medium text-sm disabled:cursor-not-allowed disabled:opacity-50">
-                  Generar Cuota
-                </button>
-              </form>
+        {/* Formulario inline para generar cuota */}
+        <section className="rounded-2xl border border-slate-200/80 bg-canvas p-4 sm:p-5">
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-navy">
+            <Plus size={16} className="text-secondary" />
+            Generar nueva cuota
+          </h3>
+          <form onSubmit={handleGenerar} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div>
+              <label className="mb-1 block text-[11px] font-bold uppercase text-slate-500">Mes</label>
+              <input
+                type="number"
+                min="1"
+                max="12"
+                value={nuevaCuota.mes}
+                onChange={(event) => setNuevaCuota({ ...nuevaCuota, mes: event.target.value })}
+                disabled={!canEdit}
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50 disabled:bg-slate-100"
+              />
             </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-bold uppercase text-slate-500">Año</label>
+              <input
+                type="number"
+                min="2020"
+                max="2030"
+                value={nuevaCuota.anio}
+                onChange={(event) => setNuevaCuota({ ...nuevaCuota, anio: event.target.value })}
+                disabled={!canEdit}
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50 disabled:bg-slate-100"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-bold uppercase text-slate-500">Monto ($)</label>
+              <input
+                type="number"
+                value={nuevaCuota.monto}
+                onChange={(event) => setNuevaCuota({ ...nuevaCuota, monto: event.target.value })}
+                disabled={!canEdit}
+                placeholder="Ej: 15000"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50 disabled:bg-slate-100"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-bold uppercase text-slate-500">Vencimiento</label>
+              <input
+                type="date"
+                value={nuevaCuota.fechaVencimiento}
+                onChange={(event) =>
+                  setNuevaCuota({ ...nuevaCuota, fechaVencimiento: event.target.value })
+                }
+                disabled={!canEdit}
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50 disabled:bg-slate-100"
+              />
+            </div>
+            <div className="col-span-2 sm:col-span-4 flex justify-end pt-1">
+              <button
+                type="submit"
+                disabled={!canEdit || submitting}
+                className="inline-flex items-center gap-2 rounded-xl bg-secondary px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {submitting ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
+                Generar cuota
+              </button>
+            </div>
+          </form>
+        </section>
+
+        {/* Historial de pagos */}
+        <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white">
+          <div className="border-b border-slate-100 bg-canvas px-4 py-3">
+            <h3 className="text-sm font-bold text-navy">Historial de cuotas ({cuotas.length})</h3>
           </div>
 
-          {/* COLUMNA DER: Historial */}
-          <div className="md:w-2/3">
-             <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                <div className="p-4 border-b border-gray-100 bg-gray-50">
-                    <h3 className="font-bold text-gray-700">Historial de Pagos</h3>
-                </div>
-                
-                {loading ? <p className="p-4 text-center">Cargando...</p> : cuotas.length === 0 ? (
-                    <p className="p-8 text-center text-gray-500">No hay cuotas registradas.</p>
-                ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left text-sm">
-                            <thead className="bg-gray-50 text-gray-500 font-medium">
-                                <tr>
-                                    <th className="p-3">Periodo</th>
-                                    <th className="p-3">Monto</th>
-                                    <th className="p-3">Vencimiento</th>
-                                    <th className="p-3">Estado</th>
-                                    <th className="p-3 text-right">Acción</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {cuotas.map(c => (
-                                    <tr key={c._id} className="hover:bg-gray-50">
-                                        <td className="p-3 font-medium">{c.mes}/{c.anio}</td>
-                                        <td className="p-3">${c.monto}</td>
-                                        <td className="p-3 text-gray-500">
-                                            {formatDate(c.fechaVencimiento)}
-                                        </td>
-                                        <td className="p-3">
-                                            <span className={`px-2 py-1 rounded-full text-xs font-bold ${
-                                                c.estado === 'pagado' ? 'bg-green-100 text-green-700' :
-                                                c.estado === 'vencido' ? 'bg-red-100 text-red-700' :
-                                                'bg-yellow-100 text-yellow-700'
-                                            }`}>
-                                                {c.estado.toUpperCase()}
-                                            </span>
-                                        </td>
-                                        <td className="p-3 text-right">
-                                            {c.estado !== 'pagado' && (
-                                                <button 
-                                                    onClick={() => handlePagar(c._id)}
-                                                    disabled={!canEdit}
-                                                    className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 text-xs shadow-sm mr-2 disabled:cursor-not-allowed disabled:opacity-40"
-                                                    title="Registrar Pago"
-                                                >
-                                                    Cobrar
-                                                </button>
-                                            )}
-                                            {c.estado === 'pendiente' && (
-                                                <button 
-                                                    onClick={() => handleVencer(c._id)}
-                                                    disabled={!canEdit}
-                                                    className="text-red-400 hover:text-red-600 text-xs disabled:cursor-not-allowed disabled:opacity-40"
-                                                    title="Forzar Vencimiento"
-                                                >
-                                                    <AlertCircle size={16}/>
-                                                </button>
-                                            )}
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-             </div>
-          </div>
-          </div>
-        </div>
+          {loading ? (
+            <div className="flex items-center justify-center gap-2 py-10 text-sm text-slate-500">
+              <Loader2 size={18} className="animate-spin text-secondary" />
+              Cargando historial...
+            </div>
+          ) : cuotas.length === 0 ? (
+            <p className="px-4 py-10 text-center text-sm text-slate-500">
+              No hay cuotas registradas para este ciclo.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="border-b border-slate-100 bg-canvas/60 text-xs font-bold uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3">Período</th>
+                    <th className="px-4 py-3">Monto</th>
+                    <th className="px-4 py-3">Vencimiento</th>
+                    <th className="px-4 py-3">Estado</th>
+                    <th className="px-4 py-3 text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {cuotas.map((cuota) => (
+                    <tr key={cuota._id} className="transition hover:bg-blue-50/40">
+                      <td className="px-4 py-3 font-semibold text-navy">
+                        {cuota.mes}/{cuota.anio}
+                      </td>
+                      <td className="px-4 py-3 font-semibold text-slate-800">
+                        {currency.format(Number(cuota.monto || 0))}
+                      </td>
+                      <td className="px-4 py-3 text-slate-500">
+                        {formatDate(cuota.fechaVencimiento)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold uppercase ${
+                            cuota.estado === "pagado"
+                              ? "bg-emerald-50 text-emerald-700"
+                              : cuota.estado === "vencido"
+                                ? "bg-red-50 text-red-700"
+                                : "bg-amber-50 text-amber-800"
+                          }`}
+                        >
+                          {cuota.estado}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="inline-flex items-center gap-1.5">
+                          {cuota.estado !== "pagado" ? (
+                            <button
+                              type="button"
+                              onClick={() => handlePagar(cuota._id)}
+                              disabled={!canEdit}
+                              title="Registrar pago"
+                              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              Cobrar
+                            </button>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
+                              <CheckCircle2 size={14} /> Pagada
+                            </span>
+                          )}
+                          {cuota.estado === "pendiente" && (
+                            <button
+                              type="button"
+                              onClick={() => handleVencer(cuota._id)}
+                              disabled={!canEdit}
+                              title="Marcar como vencida"
+                              aria-label="Marcar cuota como vencida"
+                              className="rounded-lg p-1.5 text-red-500 transition hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              <AlertCircle size={16} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
       </div>
-    </div>
+    </SlideOverDrawer>
   );
 };
 

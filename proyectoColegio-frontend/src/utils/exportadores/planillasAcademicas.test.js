@@ -6,7 +6,7 @@ import {
   crearPlanillaNotasCurso,
 } from "./planillasAcademicas.js";
 
-test("la planilla de notas genera una suma anual solo con los tres trimestres", () => {
+test("la planilla de notas genera un promedio anual solo con los tres trimestres", () => {
   const documento = crearPlanillaNotasCurso({
     alumnos: [{ _id: "alumno-1", nombre: "Ana", apellido: "Pérez" }],
     notasData: {
@@ -19,8 +19,8 @@ test("la planilla de notas genera una suma anual solo con los tres trimestres", 
     materiaNombre: "Matemática",
   });
 
-  assert.equal(documento.filas[0].puntajeFinal, 24);
-  assert.equal(documento.columnas.find(({ clave }) => clave === "puntajeFinal").formula(8), 'IF(COUNT(D8:F8)<3,"",SUM(D8:F8))');
+  assert.equal(documento.filas[0].puntajeFinal, 8);
+  assert.equal(documento.columnas.find(({ clave }) => clave === "puntajeFinal").formula(8), 'IF(COUNT(D8:F8)<3,"",AVERAGE(D8:F8))');
   assert.equal(documento.orientacion, "landscape");
 });
 

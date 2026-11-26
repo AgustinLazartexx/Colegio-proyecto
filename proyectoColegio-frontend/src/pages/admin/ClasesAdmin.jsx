@@ -1,190 +1,207 @@
-import { useCallback, useEffect, useState } from "react";
-import { useAuth } from "../../context/AuthContext"; 
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import {
-  Edit3, Ban, CircleCheck, X, Loader2, AlertCircle, Save, GraduationCap, Plus, Filter, Clock, MapPin, Users, Calendar, Search
+  AlertCircle,
+  Ban,
+  Calendar,
+  CircleCheck,
+  Clock,
+  Edit3,
+  GraduationCap,
+  MapPin,
+  Plus,
+  Search,
+  Users,
 } from "lucide-react";
-import Swal from "sweetalert2"; 
-import CycleSelector, { CycleStatusNotice } from "../../components/admin/CycleSelector";
+import Swal from "sweetalert2";
+import { useAuth } from "../../context/AuthContext";
 import { useAcademicCycles } from "../../hooks/useAcademicCycles";
-
-// IMPORTAMOS DESDE API.JS
-import { 
-  getTodasLasClases, 
-  getMaterias, 
-  getProfesores, 
-  crearClase, 
-  actualizarClase, 
-  setClaseActive
+import { CycleStatusNotice } from "../../components/admin/CycleSelector";
+import DataTable from "../../components/admin/DataTable";
+import FilterChips from "../../components/admin/FilterChips";
+import Toast from "../../components/admin/Toast";
+import ClaseDetailDrawer from "./ClaseDetailDrawer";
+import {
+  getMaterias,
+  getProfesores,
+  getTodasLasClases,
+  setClaseActive,
 } from "../../api/api";
 
-// Helper para obtener valores de select múltiple
-const getSelectedOptions = (options) => {
-  const selectedValues = [];
-  for (let i = 0, l = options.length; i < l; i++) {
-    if (options[i].selected) {
-      selectedValues.push(options[i].value);
-    }
-  }
-  return selectedValues;
-};
+const diasSemana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+const yearOptions = [
+  { value: "", label: "Todos los años" },
+  ...[1, 2, 3, 4, 5, 6].map((anio) => ({ value: String(anio), label: `${anio}°` })),
+];
+const statusOptions = [
+  { value: "all", label: "Todas" },
+  { value: "active", label: "Activas" },
+  { value: "suspended", label: "Suspendidas" },
+];
 
 const ClasesAdmin = () => {
   const { token } = useAuth();
-  const { cycles, cycleId, setCycleId, selectedCycle, loadingCycles } = useAcademicCycles();
+  const { claseId: routeClaseId } = useParams();
+  const navigate = useNavigate();
+  const { cycleId, selectedCycle, loadingCycles } = useAcademicCycles();
+
   const [clases, setClases] = useState([]);
   const [materias, setMaterias] = useState([]);
   const [profesoresList, setProfesoresList] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [loadingAction, setLoadingAction] = useState(false);
-  const [editingId, setEditingId] = useState(null);
-
-  // --- FORMULARIO MEJORADO (Incluye Aula) ---
-  const [form, setForm] = useState({
-    materia: "",
-    profesores: [],
-    diaSemana: "Lunes",
-    horaInicio: "",
-    horaFin: "",
-    aula: "" // Nuevo campo agregado
+  const [filter, setFilter] = useState({
+    anio: "",
+    division: "",
+    diaSemana: "",
+    estado: "all",
+    search: "",
   });
 
-  const [showModal, setShowModal] = useState(false);
-  const [filter, setFilter] = useState({ anio: "", diaSemana: "", division: "", search: "" });
+  // Estado del SlideOverDrawer unificado (crear / detalle con pestañas Alumnos y Datos)
+  const [drawerState, setDrawerState] = useState({
+    open: false,
+    mode: "detail",
+    claseId: null,
+    initialTab: "alumnos",
+  });
 
-  const fetchClases = useCallback(async () => {
+  const [notification, setNotification] = useState(null);
+  const notificationId = useRef(0);
+  const notify = useCallback((type, message) => {
+    notificationId.current += 1;
+    setNotification({ id: notificationId.current, type, message });
+  }, []);
+  const dismissNotification = useCallback(() => setNotification(null), []);
+
+  const fetchClases = useCallback(async ({ silent = false } = {}) => {
+    if (!cycleId) {
+      setClases([]);
+      return;
+    }
+    if (!silent) setLoading(true);
     try {
       const res = await getTodasLasClases({ includeSuspended: true, cicloLectivoId: cycleId });
-      // Aseguramos que sea un array
-      const data = Array.isArray(res.data) ? res.data : (res.data.clases || []);
-      setClases(data); 
-    } catch (err) {
-      console.error("Error al cargar las clases:", err);
-      Swal.fire("Error", "No se pudieron cargar las clases.", "error");
+      const data = Array.isArray(res.data) ? res.data : res.data?.clases || [];
+      setClases(data);
+    } catch (error) {
+      console.error("Error al cargar las clases:", error);
+      notify("error", "No se pudieron cargar las clases del ciclo.");
+    } finally {
+      if (!silent) setLoading(false);
     }
-  }, [cycleId]);
+  }, [cycleId, notify]);
 
   const fetchAuxiliaryData = useCallback(async () => {
     try {
-      const [resMaterias, resProfesores] = await Promise.all([
-        getMaterias(),
-        getProfesores()
-      ]);
+      const [resMaterias, resProfesores] = await Promise.all([getMaterias(), getProfesores()]);
       setMaterias(resMaterias.data || []);
-      
       const listaProfes = resProfesores.data || [];
-      setProfesoresList(listaProfes.filter(u => u.rol === 'profesor')); 
-    } catch (err) {
-      console.error("Error al cargar datos auxiliares:", err);
+      setProfesoresList(listaProfes.filter((user) => user.rol === "profesor"));
+    } catch (error) {
+      console.error("Error al cargar materias o profesores:", error);
     }
   }, []);
 
   useEffect(() => {
-    const initData = async () => {
-      if (!token || !cycleId) return;
+    if (!token || loadingCycles) return;
+    if (!cycleId) {
+      setClases([]);
+      setLoading(false);
+      return;
+    }
+    const init = async () => {
       setLoading(true);
       try {
-        await Promise.all([fetchClases(), fetchAuxiliaryData()]);
+        await Promise.all([fetchClases({ silent: true }), fetchAuxiliaryData()]);
       } finally {
         setLoading(false);
       }
     };
-    initData();
-  }, [token, cycleId, fetchClases, fetchAuxiliaryData]);
+    init();
+  }, [token, cycleId, loadingCycles, fetchClases, fetchAuxiliaryData]);
 
-  // --- MANEJO DEL FORMULARIO ---
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    // Si cambia la materia, podríamos autocompletar algo, pero por ahora solo guardamos ID
-    setForm(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleMultiSelectChange = (e) => {
-    const selectedValues = getSelectedOptions(e.target.options);
-    setForm(prev => ({ ...prev, profesores: selectedValues }));
-  };
-
-  const handleFilterChange = (e) => {
-    const { name, value } = e.target;
-    setFilter((current) => ({ ...current, [name]: value }));
-  };
-
-  const resetForm = () => {
-    setForm({
-      materia: "",
-      profesores: [],
-      diaSemana: "Lunes",
-      horaInicio: "",
-      horaFin: "",
-      aula: ""
+  // Si se accede desde búsqueda rápida (/admin/clases/:claseId/gestionar), abrir drawer en Alumnos
+  useEffect(() => {
+    if (!routeClaseId || loading || !clases.length) return;
+    const match = clases.find((item) => String(item._id || item.id) === String(routeClaseId));
+    if (!match) return;
+    setDrawerState({
+      open: true,
+      mode: "detail",
+      claseId: match._id || match.id,
+      initialTab: "alumnos",
     });
-    setEditingId(null);
-    setShowModal(false);
-  };
+  }, [routeClaseId, loading, clases]);
 
-  const abrirModalEditar = (clase) => {
-    setEditingId(clase._id || clase.id);
-    setForm({
-      materia: clase.materia?._id || clase.materia || "",
-      profesores: (clase.profesores || []).map(p => p._id || p),
-      diaSemana: clase.diaSemana || "Lunes",
-      horaInicio: clase.horaInicio || "",
-      horaFin: clase.horaFin || "",
-      aula: clase.aula || "" // Cargar aula existente
-    });
-    setShowModal(true);
-  };
-
-  const abrirModalCrear = () => {
-    resetForm();
-    setShowModal(true);
-  };
-
-  // --- GUARDAR ---
-  const handleGuardar = async (e) => {
-    e.preventDefault();
-
-    if (!form.materia || form.profesores.length === 0 || !form.horaInicio || !form.horaFin) {
-        Swal.fire("Atención", "Por favor completa los campos obligatorios.", "warning");
-        return;
+  useEffect(() => {
+    if (!routeClaseId) {
+      setDrawerState({ open: false, mode: "detail", claseId: null, initialTab: "alumnos" });
     }
+  }, [cycleId, routeClaseId]);
 
-    const selectedMateria = materias.find(m => m._id === form.materia);
-    if (!selectedMateria) return;
+  const divisionesDisponibles = useMemo(() => {
+    const found = new Set(["A", "B", "C", "D"]);
+    clases.forEach((clase) => {
+      if (clase.division) found.add(String(clase.division).toUpperCase());
+    });
+    return [...found].sort();
+  }, [clases]);
 
-    const payload = {
-        materia: form.materia,
-        profesores: form.profesores,
-        anio: selectedMateria.anio, 
-        division: selectedMateria.division, 
-        diaSemana: form.diaSemana,
-        horaInicio: form.horaInicio,
-        horaFin: form.horaFin,
-          aula: form.aula, // Enviamos el aula
-          cicloLectivoId: cycleId
-    };
+  const clasesFiltradas = useMemo(() => {
+    const query = filter.search.trim().toLowerCase();
+    return clases.filter((clase) => {
+      const matchAnio = !filter.anio || String(clase.anio) === String(filter.anio);
+      const matchDiv =
+        !filter.division || String(clase.division || "").toUpperCase() === filter.division.toUpperCase();
+      const matchDia = !filter.diaSemana || clase.diaSemana === filter.diaSemana;
+      const matchEstado =
+        filter.estado === "all" ||
+        (filter.estado === "active" && clase.isActive) ||
+        (filter.estado === "suspended" && !clase.isActive);
+      const profesorText = (clase.profesores || [])
+        .map((profesor) => `${profesor.nombre || ""} ${profesor.apellido || ""}`)
+        .join(" ");
+      const matchSearch =
+        !query ||
+        [clase.materia?.nombre, clase.aula, profesorText]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(query));
+      return matchAnio && matchDiv && matchDia && matchEstado && matchSearch;
+    });
+  }, [clases, filter]);
 
-    setLoadingAction(true);
-    try {
-      if (editingId) {
-        await actualizarClase(editingId, payload);
-        Swal.fire("¡Actualizado!", "Clase modificada.", "success");
-      } else {
-        await crearClase(payload);
-        Swal.fire("¡Creado!", "Clase registrada.", "success");
-      }
-      resetForm();
-      fetchClases(); 
-    } catch (err) {
-      console.error(err);
-      const msg = err.response?.data?.msg || "Error al guardar.";
-      Swal.fire("Error", msg, "error");
-    } finally {
-      setLoadingAction(false);
+  const activeClase = useMemo(
+    () => clases.find((item) => String(item._id || item.id) === String(drawerState.claseId)) || null,
+    [clases, drawerState.claseId],
+  );
+
+  const readOnly = selectedCycle?.estado === "CERRADO";
+  const hasActiveFilters = Boolean(
+    filter.anio || filter.division || filter.diaSemana || filter.estado !== "all" || filter.search.trim(),
+  );
+
+  const openCreateDrawer = () => {
+    setDrawerState({ open: true, mode: "create", claseId: null, initialTab: "datos" });
+  };
+
+  const openDetailDrawer = (clase, initialTab = "alumnos") => {
+    setDrawerState({
+      open: true,
+      mode: "detail",
+      claseId: clase._id || clase.id,
+      initialTab,
+    });
+  };
+
+  const closeDrawer = () => {
+    setDrawerState({ open: false, mode: "detail", claseId: null, initialTab: "alumnos" });
+    if (routeClaseId) {
+      navigate("/admin/CrearClases", { replace: true });
     }
   };
 
   const handleToggleStatus = async (clase) => {
-    if (selectedCycle?.estado === "CERRADO") return;
+    if (readOnly) return;
     const isActive = !clase.isActive;
     const confirm = await Swal.fire({
       title: isActive ? "¿Reactivar clase?" : "¿Suspender clase?",
@@ -198,309 +215,319 @@ const ClasesAdmin = () => {
       cancelButtonText: "Cancelar",
     });
 
-    if (confirm.isConfirmed) {
-        try {
-          const response = await setClaseActive(clase._id, isActive);
-          setClases(current => current.map(item => item._id === clase._id ? response.data.clase : item));
-          Swal.fire(
-            isActive ? "Clase reactivada" : "Clase suspendida",
-            isActive ? "La clase vuelve a estar disponible." : "La clase se conservó y quedó suspendida.",
-            "success",
-          );
-        } catch (error) {
-          Swal.fire("Error", error.response?.data?.msg || "No se pudo cambiar el estado de la clase.", "error");
-        }
+    if (!confirm.isConfirmed) return;
+    try {
+      const response = await setClaseActive(clase._id, isActive);
+      setClases((current) => current.map((item) => (item._id === clase._id ? response.data.clase : item)));
+      notify("success", isActive ? "Clase reactivada correctamente." : "Clase suspendida correctamente.");
+    } catch (error) {
+      Swal.fire("Error", error.response?.data?.msg || "No se pudo cambiar el estado de la clase.", "error");
     }
   };
 
-  // --- FILTRADO ---
-  const clasesFiltradas = clases.filter(c => {
-      const matchAnio = !filter.anio || String(c.anio) === String(filter.anio);
-      const matchDiv = !filter.division || (c.division && c.division.toUpperCase() === filter.division.toUpperCase());
-      const matchDia = !filter.diaSemana || c.diaSemana === filter.diaSemana;
-      const materiaNombre = c.materia?.nombre || "";
-      const matchSearch = !filter.search || materiaNombre.toLowerCase().includes(filter.search.trim().toLowerCase());
-      return matchAnio && matchDiv && matchDia && matchSearch;
-  });
-
-  const diasSemana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
-  const aniosAcademicos = [1, 2, 3, 4, 5, 6];
-  const divisionesEjemplo = ["A", "B", "C", "D"];
-  const hasActiveFilters = filter.anio || filter.division || filter.diaSemana || filter.search.trim();
-  const readOnly = selectedCycle?.estado === "CERRADO";
-
-  useEffect(() => {
-    setShowModal(false);
-    setEditingId(null);
-  }, [cycleId]);
+  const columns = [
+    {
+      key: "materia",
+      label: "Materia / Curso",
+      render: (clase) => (
+        <button
+          type="button"
+          onClick={() => openDetailDrawer(clase, "alumnos")}
+          className="flex items-start gap-3 text-left group"
+        >
+          <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-secondary">
+            <GraduationCap size={19} />
+          </span>
+          <span className="min-w-0">
+            <span className="block font-bold text-navy group-hover:text-secondary transition-colors">
+              {clase.materia?.nombre || "Sin nombre"}
+            </span>
+            <span className="mt-1 inline-flex items-center gap-1.5">
+              <span className="rounded-md bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-800">
+                {clase.anio}° &quot;{clase.division || "—"}&quot;
+              </span>
+              {clase.aula && (
+                <span className="inline-flex items-center gap-1 rounded-md bg-canvas px-2 py-0.5 text-xs text-slate-600">
+                  <MapPin size={11} />
+                  {clase.aula}
+                </span>
+              )}
+            </span>
+          </span>
+        </button>
+      ),
+    },
+    {
+      key: "horario",
+      label: "Horario",
+      render: (clase) => (
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 font-semibold text-navy">
+            <Calendar size={14} className="text-slate-400" />
+            {clase.diaSemana || "A definir"}
+          </div>
+          <div className="flex items-center gap-1.5 text-xs text-slate-500">
+            <Clock size={13} className="text-slate-400" />
+            {clase.horaInicio && clase.horaFin ? `${clase.horaInicio} - ${clase.horaFin} hs` : "Sin horario"}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "profesores",
+      label: "Docentes",
+      render: (clase) =>
+        clase.profesores && clase.profesores.length > 0 ? (
+          <div className="space-y-1">
+            {clase.profesores.map((profesor, index) => (
+              <div key={profesor._id || index} className="flex items-center gap-2">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-[11px] font-bold text-indigo-700">
+                  {profesor.nombre ? profesor.nombre.charAt(0).toUpperCase() : "?"}
+                </span>
+                <span className="text-sm text-slate-700">
+                  {profesor.nombre} {profesor.apellido || ""}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700">
+            <AlertCircle size={14} /> Sin docente
+          </span>
+        ),
+    },
+    {
+      key: "alumnos",
+      label: "Alumnos / Estado",
+      render: (clase) => {
+        const count = clase.alumnosCount ?? (Array.isArray(clase.alumnos) ? clase.alumnos.length : 0);
+        return (
+          <div className="flex flex-col items-start gap-1.5">
+            <button
+              type="button"
+              onClick={() => openDetailDrawer(clase, "alumnos")}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-canvas px-2.5 py-1 text-xs font-semibold text-navy transition hover:bg-blue-50 hover:text-secondary"
+            >
+              <Users size={13} />
+              {count} inscripto{count === 1 ? "" : "s"}
+            </button>
+            <span
+              className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+                clase.isActive ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800"
+              }`}
+            >
+              {clase.isActive ? "Activa" : "Suspendida"}
+            </span>
+          </div>
+        );
+      },
+    },
+    {
+      key: "acciones",
+      label: "Acciones",
+      headerClassName: "text-right",
+      className: "text-right",
+      render: (clase) => (
+        <div className="flex justify-end gap-1.5">
+          <button
+            type="button"
+            onClick={() => openDetailDrawer(clase, "alumnos")}
+            title="Gestionar alumnos inscriptos"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-secondary transition hover:bg-secondary hover:text-white"
+          >
+            <Users size={14} />
+            Alumnos
+          </button>
+          <button
+            type="button"
+            onClick={() => openDetailDrawer(clase, "datos")}
+            title={readOnly ? "Ver configuración de clase" : "Editar clase"}
+            aria-label={`Editar ${clase.materia?.nombre || "clase"}`}
+            className="rounded-lg p-2 text-slate-600 transition hover:bg-canvas hover:text-navy"
+          >
+            <Edit3 size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={() => handleToggleStatus(clase)}
+            disabled={readOnly}
+            title={clase.isActive ? "Suspender clase" : "Reactivar clase"}
+            aria-label={clase.isActive ? "Suspender clase" : "Reactivar clase"}
+            className={`rounded-lg p-2 transition disabled:cursor-not-allowed disabled:opacity-40 ${
+              clase.isActive
+                ? "text-amber-700 hover:bg-amber-50"
+                : "text-emerald-700 hover:bg-emerald-50"
+            }`}
+          >
+            {clase.isActive ? <Ban size={16} /> : <CircleCheck size={16} />}
+          </button>
+        </div>
+      ),
+    },
+  ];
 
   return (
-     <div className="min-h-screen bg-gray-50 p-6">
-       <div className="max-w-7xl mx-auto space-y-6">
-         
-         {/* HEADER */}
-         <div className="flex flex-col md:flex-row justify-between items-end gap-4">
-           <div>
-             <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-                <Calendar className="text-indigo-600" size={32}/> Gestión de Cronograma
-             </h1>
-             <p className="text-gray-500 mt-1">Configura los horarios, aulas y profesores de cada materia.</p>
-           </div>
-           
-           <button onClick={abrirModalCrear} disabled={readOnly || !cycleId} className="bg-indigo-600 text-white font-medium py-2.5 px-5 rounded-lg shadow-sm hover:bg-indigo-700 transition flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50">
-             <Plus size={20} /> Asignar Nueva Clase
-           </button>
-         </div>
+    <div className="mx-auto w-full max-w-7xl space-y-6">
+      {notification && (
+        <div className="fixed right-4 top-20 z-[80]">
+          <Toast {...notification} onClose={dismissNotification} />
+        </div>
+      )}
 
-         <div className="grid gap-3 md:grid-cols-[minmax(240px,1fr)_2fr] md:items-end">
-           <CycleSelector cycles={cycles} value={cycleId} onChange={setCycleId} disabled={loadingCycles} />
-           <CycleStatusNotice cycle={selectedCycle} />
-         </div>
+      <header className="flex flex-col justify-between gap-4 rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm sm:flex-row sm:items-end sm:p-8">
+        <div>
+          <p className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-xs font-bold uppercase tracking-wider text-secondary">
+            <Calendar size={14} /> Gestión Académica
+          </p>
+          <h1 className="mt-3 text-3xl font-bold tracking-tight text-navy">Clases e inscripciones</h1>
+          <p className="mt-1.5 text-sm text-slate-500">
+            Administra horarios, docentes, aulas y alumnos inscriptos sin salir de esta pantalla.
+          </p>
+        </div>
 
-         {/* BARRA DE FILTROS */}
-         <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
-            <div className="flex flex-col md:flex-row items-center gap-4">
-                <div className="flex items-center gap-2 text-gray-500 min-w-[80px]">
-                    <Filter size={18} /> <span className="text-sm font-medium">Filtrar:</span>
-                </div>
+        <button
+          type="button"
+          onClick={openCreateDrawer}
+          disabled={readOnly || !cycleId}
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-secondary px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Plus size={18} />
+          Nueva clase
+        </button>
+      </header>
 
-                <div className="relative w-full md:flex-1">
-                    <Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input
-                      name="search"
-                      value={filter.search}
-                      onChange={handleFilterChange}
-                      placeholder="Buscar por materia..."
-                      className="w-full p-2 pl-9 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                    />
-                </div>
-                
-                <select name="anio" value={filter.anio} onChange={handleFilterChange} className="p-2 border rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-indigo-500 outline-none w-full md:w-auto">
-                    <option value="">Todos los Años</option>
-                    {aniosAcademicos.map(a => <option key={a} value={a}>{a}° Año</option>)}
-                </select>
+      <CycleStatusNotice cycle={selectedCycle} />
 
-                <select name="division" value={filter.division} onChange={handleFilterChange} className="p-2 border rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-indigo-500 outline-none w-full md:w-auto">
-                    <option value="">Todas las Divisiones</option>
-                    {divisionesEjemplo.map(d => <option key={d} value={d}>División {d}</option>)}
-                </select>
-
-                <select name="diaSemana" value={filter.diaSemana} onChange={handleFilterChange} className="p-2 border rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-indigo-500 outline-none w-full md:w-auto">
-                    <option value="">Todos los Días</option>
-                    {diasSemana.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
-
-                {hasActiveFilters && (
-                    <button onClick={() => setFilter({ anio: "", diaSemana: "", division: "", search: "" })} className="text-red-500 hover:text-red-700 text-sm font-medium ml-auto">
-                        Borrar filtros
-                    </button>
-                )}
-            </div>
-            {hasActiveFilters && (
-              <p className="mt-3 text-sm text-indigo-600 animate-in fade-in duration-300">
-                {clasesFiltradas.length} clase{clasesFiltradas.length === 1 ? "" : "s"} encontrada{clasesFiltradas.length === 1 ? "" : "s"}
-              </p>
-            )}
-         </div>
-
-         {/* TABLA DETALLADA */}
-         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-           {loading ? (
-             <div className="p-12 flex justify-center"><Loader2 size={40} className="animate-spin text-indigo-600" /></div>
-           ) : !hasActiveFilters ? (
-             <div className="p-12 text-center flex flex-col items-center animate-in fade-in zoom-in duration-500">
-               <div className="mb-5 rounded-full bg-gradient-to-br from-indigo-100 to-sky-100 p-5">
-                 <Search size={38} className="text-indigo-500 animate-pulse" />
-               </div>
-               <p className="text-lg font-semibold text-gray-900">Encuentra una clase</p>
-               <p className="mt-2 max-w-md text-sm text-gray-500">Usa el buscador o combina año, división y día para consultar el cronograma.</p>
-             </div>
-           ) : clasesFiltradas.length === 0 ? (
-             <div className="p-12 text-center flex flex-col items-center">
-               <AlertCircle size={48} className="text-gray-300 mb-4" />
-               <p className="text-lg font-medium text-gray-900">No encontramos clases con esos filtros</p>
-               <p className="text-gray-500 text-sm">Prueba con otros criterios o crea una nueva clase.</p>
-             </div>
-           ) : (
-             <div className="overflow-x-auto">
-               <table className="w-full text-left border-collapse">
-                 <thead className="bg-gray-50 border-b border-gray-200 text-xs uppercase text-gray-500 font-semibold tracking-wider">
-                   <tr>
-                     <th className="px-6 py-4">Materia / Curso</th>
-                     <th className="px-6 py-4">Horario y Lugar</th>
-                     <th className="px-6 py-4">Equipo Docente</th>
-                     <th className="px-6 py-4 text-center">Acciones</th>
-                   </tr>
-                 </thead>
-                 <tbody className="divide-y divide-gray-100">
-                   {clasesFiltradas.map((c) => (
-                     <tr key={c._id} className="hover:bg-indigo-50/30 transition group animate-in fade-in slide-in-from-bottom-2 duration-300">
-                       
-                       {/* COLUMNA 1: MATERIA Y CURSO */}
-                       <td className="px-6 py-4">
-                         <div className="flex items-start gap-3">
-                            <div className="bg-indigo-100 text-indigo-600 p-2 rounded-lg mt-1">
-                                <GraduationCap size={20} />
-                            </div>
-                            <div>
-                                <p className="font-bold text-gray-800 text-base">{c.materia?.nombre || "Sin nombre"}</p>
-                                <div className="flex items-center gap-2 mt-1">
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">
-                                        {c.anio}° Año "{c.division}"
-                                    </span>
-                                </div>
-                            </div>
-                         </div>
-                       </td>
-
-                       {/* COLUMNA 2: HORARIO Y AULA */}
-                       <td className="px-6 py-4">
-                         <div className="space-y-1.5">
-                            <div className="flex items-center gap-2 text-gray-700 font-medium">
-                                <Calendar size={16} className="text-gray-400"/> {c.diaSemana}
-                            </div>
-                            <div className="flex items-center gap-2 text-gray-600 text-sm">
-                                <Clock size={16} className="text-gray-400"/> 
-                                {c.horaInicio} - {c.horaFin} hs
-                            </div>
-                            {c.aula ? (
-                                <div className="flex items-center gap-2 text-indigo-600 text-sm bg-indigo-50 w-fit px-2 py-0.5 rounded">
-                                    <MapPin size={14}/> Aula: {c.aula}
-                                </div>
-                            ) : (
-                                <span className="text-gray-400 text-xs italic ml-6">Aula sin asignar</span>
-                            )}
-                         </div>
-                       </td>
-
-                       {/* COLUMNA 3: PROFESORES (AVATARES) */}
-                       <td className="px-6 py-4">
-                         <div className="flex flex-col gap-1">
-                            {c.profesores && c.profesores.length > 0 ? (
-                                c.profesores.map((p, idx) => (
-                                    <div key={idx} className="flex items-center gap-2">
-                                        <div className="w-6 h-6 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-bold border border-purple-200">
-                                            {p.nombre ? p.nombre.charAt(0) : "?"}
-                                        </div>
-                                        <span className="text-sm text-gray-700">{p.nombre} {p.apellido}</span>
-                                    </div>
-                                ))
-                            ) : (
-                                <span className="text-red-400 text-sm flex items-center gap-1"><AlertCircle size={14}/> Sin profesores</span>
-                            )}
-                         </div>
-                       </td>
-
-                       {/* COLUMNA 4: ACCIONES */}
-                       <td className="px-6 py-4 text-center">
-                         <div className="flex justify-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
-                           <button onClick={() => abrirModalEditar(c)} disabled={readOnly} className="p-2 bg-white border border-gray-200 text-indigo-600 rounded-lg hover:bg-indigo-50 hover:border-indigo-200 shadow-sm transition disabled:cursor-not-allowed disabled:opacity-40" title={readOnly ? "Ciclo cerrado: solo lectura" : "Editar Clase"}>
-                             <Edit3 size={16}/>
-                           </button>
-                           <button
-                             onClick={() => handleToggleStatus(c)}
-                             disabled={readOnly}
-                             className={`p-2 bg-white border rounded-lg shadow-sm transition ${c.isActive ? "border-amber-200 text-amber-600 hover:bg-amber-50" : "border-emerald-200 text-emerald-600 hover:bg-emerald-50"}`}
-                             title={c.isActive ? "Suspender clase" : "Reactivar clase"}
-                             aria-label={c.isActive ? "Suspender clase" : "Reactivar clase"}
-                           >
-                             {c.isActive ? <Ban size={16}/> : <CircleCheck size={16}/>}
-                           </button>
-                         </div>
-                         <span className={`mt-2 inline-flex rounded-full px-2 py-1 text-xs font-semibold ${c.isActive ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"}`}>
-                           {c.isActive ? "Activa" : "Suspendida"}
-                         </span>
-                       </td>
-
-                     </tr>
-                   ))}
-                 </tbody>
-               </table>
-             </div>
-           )}
-         </div>
-      
-       {/* MODAL CREAR / EDITAR */}
-       {showModal && (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl p-8 w-full max-w-2xl shadow-2xl relative animate-in fade-in zoom-in duration-200">
-              <div className="flex justify-between items-center mb-6 border-b pb-4">
-                  <h3 className="text-xl font-bold text-gray-900">{editingId ? "Editar Clase" : "Nueva Clase"}</h3>
-                  <button onClick={resetForm} className="text-gray-400 hover:text-gray-600"><X size={24} /></button>
-              </div>
-
-              <form onSubmit={handleGuardar} className="space-y-5">
-                
-                {/* Selección de Materia */}
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">Materia <span className="text-red-500">*</span></label>
-                  <select name="materia" value={form.materia} onChange={handleInputChange} required className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
-                    <option value="">-- Seleccionar Materia --</option>
-                    {materias.map((m) => (
-                      <option key={m._id} value={m._id}>{m.nombre} ({m.anio}° {m.division})</option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">Selecciona la materia para vincular año y división automáticamente.</p>
-                </div>
-
-                {/* Selección de Profesores */}
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">Profesores a cargo <span className="text-red-500">*</span></label>
-                  <div className="relative">
-                      <select name="profesores" multiple value={form.profesores} onChange={handleMultiSelectChange} required className="w-full p-3 border border-gray-300 rounded-lg text-sm h-32 focus:ring-2 focus:ring-indigo-500 outline-none">
-                        {profesoresList.map((p) => (
-                          <option key={p._id} value={p._id}>{p.nombre} {p.apellido} ({p.email})</option>
-                        ))}
-                      </select>
-                      <div className="absolute right-3 top-3 pointer-events-none text-gray-400">
-                          <Users size={16}/>
-                      </div>
-                  </div>
-                  <p className="text-xs text-indigo-600 mt-1 font-medium">💡 Tip: Mantén presionado Ctrl (Windows) o Cmd (Mac) para seleccionar varios profesores.</p>
-                </div>
-
-                {/* Horarios y Aula */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-1">Día de la semana</label>
-                      <select name="diaSemana" value={form.diaSemana} onChange={handleInputChange} className="w-full p-3 border border-gray-300 rounded-lg text-sm">
-                         {diasSemana.map(d => <option key={d} value={d}>{d}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-1">Aula Física</label>
-                        <div className="relative">
-                            <MapPin size={16} className="absolute left-3 top-3.5 text-gray-400"/>
-                            <input type="text" name="aula" value={form.aula} onChange={handleInputChange} placeholder="Ej: Aula 101, Lab 2" className="w-full pl-9 p-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"/>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-1">Hora Inicio</label>
-                      <input type="time" name="horaInicio" value={form.horaInicio} onChange={handleInputChange} required className="w-full p-3 border border-gray-300 rounded-lg text-sm" />
-                  </div>
-                  <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-1">Hora Fin</label>
-                      <input type="time" name="horaFin" value={form.horaFin} onChange={handleInputChange} required className="w-full p-3 border border-gray-300 rounded-lg text-sm" />
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-3 pt-6 border-t">
-                  <button type="button" onClick={resetForm} className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium text-gray-700 text-sm transition">Cancelar</button>
-                  <button type="submit" disabled={loadingAction} className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-sm flex items-center gap-2 shadow-md transition disabled:opacity-50">
-                    {loadingAction ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
-                    {editingId ? "Guardar Cambios" : "Crear Clase"}
-                  </button>
-                </div>
-              </form>
-            </div>
+      <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+        <div className="space-y-4 border-b border-slate-100 p-4 sm:p-5">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <FilterChips
+              label="Filtrar por año"
+              options={yearOptions}
+              value={filter.anio}
+              onChange={(anio) => setFilter((current) => ({ ...current, anio }))}
+            />
+            <FilterChips
+              label="Filtrar por estado"
+              options={statusOptions}
+              value={filter.estado}
+              onChange={(estado) => setFilter((current) => ({ ...current, estado }))}
+            />
           </div>
-       )}
-     </div>
- </div>
- );
+
+          <div className="flex flex-col gap-3 md:flex-row md:items-center">
+            <label className="relative flex-1">
+              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={filter.search}
+                onChange={(event) => setFilter((current) => ({ ...current, search: event.target.value }))}
+                placeholder="Buscar por materia, docente o aula..."
+                className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-3.5 text-sm outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+              />
+            </label>
+
+            <select
+              value={filter.division}
+              onChange={(event) => setFilter((current) => ({ ...current, division: event.target.value }))}
+              aria-label="Filtrar por división"
+              className="rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-navy outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+            >
+              <option value="">Todas las divisiones</option>
+              {divisionesDisponibles.map((division) => (
+                <option key={division} value={division}>
+                  División {division}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={filter.diaSemana}
+              onChange={(event) => setFilter((current) => ({ ...current, diaSemana: event.target.value }))}
+              aria-label="Filtrar por día"
+              className="rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-navy outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+            >
+              <option value="">Todos los días</option>
+              {diasSemana.map((dia) => (
+                <option key={dia} value={dia}>
+                  {dia}
+                </option>
+              ))}
+            </select>
+
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={() => setFilter({ anio: "", division: "", diaSemana: "", estado: "all", search: "" })}
+                className="shrink-0 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 transition hover:bg-canvas hover:text-navy"
+              >
+                Limpiar filtros
+              </button>
+            )}
+          </div>
+
+          {!loading && (
+            <p className="text-xs font-medium text-slate-500">
+              Mostrando {clasesFiltradas.length} de {clases.length} clase{clases.length === 1 ? "" : "s"} del ciclo
+              {selectedCycle ? ` ${selectedCycle.nombre}` : ""}.
+            </p>
+          )}
+        </div>
+
+        <DataTable
+          rows={clasesFiltradas}
+          columns={columns}
+          loading={loading || loadingCycles}
+          emptyState={
+            <div className="mx-auto max-w-sm">
+              <GraduationCap size={36} className="mx-auto text-slate-300" />
+              <p className="mt-3 font-semibold text-navy">
+                {hasActiveFilters ? "No encontramos clases con estos filtros" : "Aún no hay clases en este ciclo"}
+              </p>
+              <p className="mt-1 text-sm text-slate-500">
+                {hasActiveFilters
+                  ? "Prueba ajustando los filtros para ver otros cursos."
+                  : "Crea la primera clase para asignar docentes, horario e inscribir alumnos."}
+              </p>
+              {!readOnly && cycleId && (
+                <button
+                  type="button"
+                  onClick={openCreateDrawer}
+                  className="mt-4 inline-flex items-center gap-2 rounded-xl bg-secondary px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800"
+                >
+                  <Plus size={16} /> Nueva clase
+                </button>
+              )}
+            </div>
+          }
+        />
+      </section>
+
+      {drawerState.open && (
+        <ClaseDetailDrawer
+          clase={drawerState.mode === "create" ? null : activeClase}
+          mode={drawerState.mode}
+          initialTab={drawerState.initialTab}
+          materias={materias}
+          profesoresList={profesoresList}
+          cycleId={cycleId}
+          selectedCycle={selectedCycle}
+          onClose={closeDrawer}
+          onSaved={() => {
+            closeDrawer();
+            fetchClases({ silent: true });
+          }}
+          onAlumnosChanged={() => fetchClases({ silent: true })}
+          onStatusChanged={(updatedClase) => {
+            setClases((current) =>
+              current.map((item) => (item._id === updatedClase._id ? updatedClase : item)),
+            );
+          }}
+          onNotify={notify}
+        />
+      )}
+    </div>
+  );
 };
 
 export default ClasesAdmin;

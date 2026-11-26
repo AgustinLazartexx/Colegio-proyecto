@@ -118,7 +118,7 @@ export const getAdminStats = async (req, res) => {
         notaRecuperacion: row.notaRecuperacion,
       });
       if (
-        result.puntajeFinal >= 18 ||
+        result.puntajeFinal >= 6 ||
         result.puntajeFinal === null ||
         result.estadoMateria === "APROBADA_RECUPERACION"
       ) continue;

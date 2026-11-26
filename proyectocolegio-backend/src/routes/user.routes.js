@@ -49,7 +49,10 @@ router.post(
         // Añadir validaciones de express-validator aquí si prefieres
         body('nombre').notEmpty().withMessage('Nombre requerido'),
         body('email').isEmail().withMessage('Email inválido'),
-        body('dni').notEmpty().withMessage('DNI requerido'),
+        body('dni')
+          .customSanitizer((value) => String(value ?? '').replace(/\D/g, ''))
+          .matches(/^\d{7,8}$/)
+          .withMessage('El DNI es obligatorio y debe tener entre 7 y 8 dígitos'),
         body('rol').isIn(['admin', 'profesor', 'alumno']).withMessage('Rol inválido'),
         // Validaciones condicionales para alumno
         body('anio').if(body('rol').equals('alumno')).notEmpty().isInt({min:1, max:6}).withMessage('Año inválido para alumno'),
@@ -81,7 +84,11 @@ router.put(
     body("anio").optional().isInt({min:1, max:6}),
     body("division").optional().isLength({min:1, max:1}),
     body("isActive").optional().isBoolean(),
-    body("dni").optional().notEmpty(),
+    body("dni")
+      .optional()
+      .customSanitizer((value) => String(value ?? "").replace(/\D/g, ""))
+      .matches(/^\d{7,8}$/)
+      .withMessage("El DNI debe tener entre 7 y 8 dígitos"),
     validateFields,
   ],
   updateUser
